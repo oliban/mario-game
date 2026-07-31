@@ -53,6 +53,15 @@
     box-shadow: 0 0 0 2px #000, 0 0 46px -6px rgba(77,125,255,.45);
     touch-action: none;
   }
+  #overlay {
+    position: absolute;
+    left: 18px;
+    top: 18px;
+    pointer-events: none;
+    z-index: 2;
+    border-radius: 4px;
+  }
+  body.headless #overlay { left: 0; top: 0; }
   #boot {
     position: absolute;
     inset: 18px;
@@ -106,6 +115,9 @@
 <body>
   <div id="stage">
     <canvas id="screen" width="1024" height="960"></canvas>
+    <!-- Painted at display resolution, above the pixel grid. Used by Harry mode so
+         the photo stays sharp instead of being crushed into the 256x240 buffer. -->
+    <canvas id="overlay"></canvas>
     <div id="boot">BOOTING<div class="bar"><i></i></div></div>
   </div>
   <div id="hint">

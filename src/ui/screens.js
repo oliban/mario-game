@@ -21,7 +21,9 @@ import { makeSprite } from '../core/gfx.js';
 import { Rng } from '../core/rng.js';
 import { input, BTN } from '../core/input.js';
 import { SKY } from '../data/palette.js';
+import { t, cycleLang, getLang, LANG_NAMES } from '../i18n.js';
 import { GLYPH, LOGO } from '../data/sprites/font.js';
+import * as bossMod from '../data/sprites/boss.js';
 import {
   hud,
   drawText,
@@ -574,13 +576,14 @@ const TITLE = {
   topY: 212,
 };
 
-export const MENU_ITEMS = ['1 PLAYER GAME', '2 PLAYER GAME', 'OPTIONS'];
-export const MENU_RESULTS = ['start1', 'start2', 'options'];
+export const menuItems = () => [t('onePlayer'), t('twoPlayer'), t('harryMode'), t('options')];
+export const MENU_ITEMS = menuItems();
+export const MENU_RESULTS = ['start1', 'start2', 'harry', 'options'];
 
 export class TitleScreen {
   constructor(opts = {}) {
     this.world = opts.world || null;
-    this.items = MENU_ITEMS.slice();
+    this.items = menuItems();
     this.index = 0;
     this.t = 0;
     this.idle = 0;
@@ -798,7 +801,17 @@ export class TitleScreen {
 
     if (LOGO && LOGO.sprite) LOGO.sprite.draw(ctx, TITLE.logoX, TITLE.logoY);
 
-    drawTextCentered(ctx, 'ORIGINAL HOMAGE 2026', TITLE.copyY);
+    drawTextCentered(ctx, t('subtitle'), TITLE.copyY);
+
+    // The menu sits over live scenery — hills and bushes are close in value to
+    // grey text and swallow it whole. A dim panel behind the block is the whole
+    // fix; without it the front door of the game is unreadable.
+    const panelY = TITLE.menuY - 6;
+    const panelH = this.items.length * TITLE.menuStep + 10;
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    fillRect(ctx, '#000000', 0, panelY, SCREEN_W, panelH);
+    ctx.restore();
 
     for (let i = 0; i < this.items.length; i++) {
       const y = TITLE.menuY + i * TITLE.menuStep;
@@ -955,12 +968,28 @@ export class PauseOverlay {
     dim(ctx, this.amount, top, SCREEN_H - top);
     // Soft breathing pulse done by palette step, so the letters stay solid.
     const pal = PULSE_PALS[(this.t >> 3) % PULSE_PALS.length];
-    drawTextCentered(ctx, 'PAUSE', 112, pal);
+    drawTextCentered(ctx, t('pause'), 112, pal);
     return this;
   }
 }
 
 /* ------------------------------------------------------------- game over */
+
+
+// boss.js exports TOAD as { idle } (or a bare Sprite); resolve either shape.
+function artOf(mod, names) {
+  if (!mod) return null;
+  for (const n of names) {
+    const v = mod[n];
+    if (!v) continue;
+    if (typeof v.draw === 'function' || typeof v.frame === 'function') return v;
+    for (const k of ['idle', 'sprite', 'still', 'anim']) {
+      const c = v[k];
+      if (c && (typeof c.draw === 'function' || typeof c.frame === 'function')) return c;
+    }
+  }
+  return null;
+}
 
 export class GameOverScreen {
   constructor(opts = {}) {
@@ -995,9 +1024,17 @@ export class GameOverScreen {
   draw(ctx) {
     fillRect(ctx, '#000000', 0, 0, SCREEN_W, SCREEN_H);
     if (this.showHud) hud.draw(ctx, this.world);
-    drawTextCentered(ctx, 'GAME OVER', 108);
+
+    // Toad's "the game is yet to be built" line lives on the castle ending, which
+    // is where SMB puts him; a game over is just a game over.
+    const toad = artOf(bossMod, ['TOAD']);
+    const s = toad && (toad.frame ? toad.frame(this.t) : toad);
+    if (s && typeof s.draw === 'function') {
+      s.draw(ctx, (SCREEN_W - s.w) >> 1, 76);
+    }
+    drawTextCentered(ctx, t('gameOver'), 120);
     if (this.t > 110 && this.t % 48 < 30) {
-      drawTextCentered(ctx, 'PUSH START BUTTON', 148, 'gray');
+      drawTextCentered(ctx, t('pushStart'), 150, 'gray');
     }
     return this;
   }
@@ -1099,7 +1136,7 @@ export class LevelCompleteTally {
     fillRect(ctx, '#000000', 0, 0, SCREEN_W, SCREEN_H);
     if (this.showHud) hud.draw(ctx, this.world);
 
-    drawTextCentered(ctx, 'COURSE CLEAR', 72, 'gold');
+    drawTextCentered(ctx, t('courseClear'), 72, 'gold');
     drawTextCentered(ctx, 'WORLD ' + this.label, 90);
 
     if (this.phase !== 'intro') {
@@ -1115,7 +1152,7 @@ export class LevelCompleteTally {
 /* ------------------------------------------------------------ options screen */
 
 const OPT_ROWS = ['video', 'music', 'sfx', 'back'];
-const OPT_LABEL = { video: 'VIDEO', music: 'MUSIC', sfx: 'SOUND', back: 'BACK' };
+const OPT_LABEL = { video: t('video'), music: t('music'), sfx: t('sound'), back: t('back') };
 const OPT_Y = [60, 78, 96, 114];
 const OPT_LABEL_X = 48;
 const OPT_VALUE_X = 144;
@@ -1222,7 +1259,7 @@ export class OptionsScreen {
     }
 
     drawText(ctx, '--------------------------', 24, 136, 'dim');
-    drawTextCentered(ctx, 'CONTROLS', 150, 'gold');
+    drawTextCentered(ctx, t('controls'), 150, 'gold');
     for (let i = 0; i < CONTROL_HELP.length; i++) {
       drawText(ctx, CONTROL_HELP[i], OPT_LABEL_X, 168 + i * 12, 'gray');
     }
@@ -1230,9 +1267,69 @@ export class OptionsScreen {
   }
 }
 
+
+/* ------------------------------------------------- castle end (Toad scene) */
+
+// SMB's castle ending: Toad thanks Mario and points him at the next castle.
+// Here it doubles as the honest end-of-content card, since World 1 is all the
+// game currently has.
+export class CastleEndScreen {
+  constructor(opts = {}) {
+    this.t = 0;
+    this.running = false;
+    this.hold = opts.hold == null ? 420 : opts.hold;
+    this.showHud = opts.showHud !== false;
+    this.world = null;
+    this.lines = null;
+  }
+
+  show(world, opts = {}) {
+    this.world = world || null;
+    this.lines = opts.lines || null;
+    this.t = 0;
+    this.running = true;
+    music('level-complete');
+    return this;
+  }
+
+  get finished() {
+    return !this.running;
+  }
+
+  update() {
+    if (!this.running) return this;
+    this.t++;
+    if (this.t > 90 && (input.pressed(BTN.START) || input.pressed(BTN.JUMP))) this.running = false;
+    if (this.t >= this.hold) this.running = false;
+    return this;
+  }
+
+  draw(ctx) {
+    fillRect(ctx, '#000000', 0, 0, SCREEN_W, SCREEN_H);
+    if (this.showHud) hud.draw(ctx, this.world);
+
+    const toad = artOf(bossMod, ['TOAD']);
+    const s = toad && (toad.frame ? toad.frame(this.t) : toad);
+    if (s && typeof s.draw === 'function') s.draw(ctx, (SCREEN_W - s.w) >> 1, 72);
+
+    const lines = this.lines || [
+      t('thankYou'),
+      'BUT THE GAME IS YET',
+      'TO BE COMPLETELY BUILT',
+    ];
+    for (let i = 0; i < lines.length; i++) {
+      drawTextCentered(ctx, lines[i], 116 + i * 12, i === 0 ? 'gold' : 'white');
+    }
+    if (this.t > 150 && this.t % 48 < 30) {
+      drawTextCentered(ctx, t('pushStart'), 176, 'gray');
+    }
+    return this;
+  }
+}
+
 /* --------------------------------------------------------------- manager */
 
-const BLOCKING = new Set(['title', 'intro', 'options', 'gameover', 'tally', 'pause']);
+const BLOCKING = new Set(['title', 'intro', 'options', 'gameover', 'tally', 'pause', 'castle']);
 
 export class Screens {
   constructor(opts = {}) {
@@ -1241,6 +1338,7 @@ export class Screens {
     this.pause = new PauseOverlay(opts.pause);
     this.gameOver = new GameOverScreen(opts.gameOver);
     this.tally = new LevelCompleteTally(opts.tally);
+    this.castle = new CastleEndScreen(opts.castle);
     this.options = new OptionsScreen({ options });
     this.settings = options;
     this.transition = transition;
@@ -1352,6 +1450,13 @@ export class Screens {
   }
 
   /** Resolves when the game-over hold ends or START is pressed. */
+  /** Resolves when the castle ending is dismissed or its hold expires. */
+  showCastleEnd(world, opts = {}) {
+    this.castle.show(world === undefined ? this.world : world, opts);
+    this.state = 'castle';
+    return this._promise('castle');
+  }
+
   showGameOver(world, opts = {}) {
     this.gameOver.show(world === undefined ? this.world : world);
     if (opts.hold != null) this.gameOver.hold = opts.hold;
@@ -1442,6 +1547,13 @@ export class Screens {
           this._settle('gameover');
         }
         break;
+      case 'castle':
+        this.castle.update();
+        if (this.castle.finished) {
+          this.state = 'none';
+          this._settle('castle');
+        }
+        break;
       case 'tally':
         this.tally.update();
         if (this.tally.finished) {
@@ -1472,6 +1584,9 @@ export class Screens {
         break;
       case 'gameover':
         this.gameOver.draw(ctx);
+        break;
+      case 'castle':
+        this.castle.draw(ctx);
         break;
       case 'tally':
         this.tally.draw(ctx);

@@ -532,8 +532,10 @@ export class BlockSystem {
 
     w.addScore(50, tx * TILE + TILE * 0.5, ty * TILE);
     w.sfx('brick-break');
-    w.freeze(6);
-    w.shake(1.6, 8);
+    // 2 frames, not 6. Six frames of hit-stop is ~100 ms of frozen input, which
+    // reads as a dropped frame rather than impact — SMB itself has none at all.
+    w.freeze(2);
+    w.shake(1.4, 7);
     w.fx('brickShatter', tx * TILE + TILE * 0.5, ty * TILE + TILE * 0.5, w.theme);
     return true;
   }

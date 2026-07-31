@@ -518,6 +518,10 @@ export default class Player extends EntityBase {
     this.state = 'normal';
     this.stateTimer = 0;
     this.animTick = 0;
+    this._cycleRate = null;
+    this._lastFootIdx = -1;
+    this._animIdx = 0;
+    this._animLen = 1;
     this.pose = 'idle';
 
     this.ducking = false;
@@ -543,6 +547,12 @@ export default class Player extends EntityBase {
     this.throwTimer = 0;
     this.fireCooldown = 0;
     this.fireballs = [];
+    // Mario stages his OWN death (the hop, then the fall off the bottom of the
+    // screen) in _updateDying. Entity's default corpse animation would replace
+    // that with the enemy flatten-and-vanish and suppress update() entirely, so
+    // the body just froze in place where it died.
+    this.autoCorpse = false;
+    this.persistent = true;
 
     this.walkPhase = 0;
     this.animPhase = 0;
@@ -1207,7 +1217,8 @@ export default class Player extends EntityBase {
     const ey = entity ? entity.y : this.y + this.h;
     const score = this._awardChain(ex, ey, 'stompChain');
     sfx(this.world, 'stomp', 'squish');
-    callAny(this.world, ['freeze'], 2);
+    // Deliberately no freeze() here — see world._onStompLanded. The stomp was
+    // being frozen twice (3 + 2 frames), which is what desynced chain-stomps.
     fx(this.world, 'enemyPoof', ex, ey);
     return score;
   }
@@ -1548,7 +1559,14 @@ export default class Player extends EntityBase {
         if (!this._down(want)) continue;
         if (midTy !== from.y && midTy !== from.y + 1) continue;
         const mouthX = from.x * TILE;
-        const near = dir === 'right' ? this.x + this.w >= mouthX - 1 : this.x <= mouthX + TILE + 1;
+        // The leading edge has to be AT the mouth, not merely past it. An unbounded
+        // ">= mouthX" matches every tile to the right of the pipe for the rest of the
+        // level, so walking anywhere downstream teleported the player back through it.
+        const lead = dir === 'right' ? this.x + this.w : this.x;
+        const near =
+          dir === 'right'
+            ? lead >= mouthX - 2 && lead <= mouthX + TILE
+            : lead <= mouthX + TILE + 2 && lead >= mouthX;
         if (!near) continue;
         this.enterPipe(wdef, dir);
         return true;
@@ -1722,10 +1740,27 @@ export default class Player extends EntityBase {
       case 'walk': {
         // SMB scales the leg cycle with speed: a full run cycles ~3x a slow walk.
         const t = clamp(Math.abs(this.vx) / P.maxRun, 0, 1);
-        this.walkPhase += this.state === 'normal' ? 0.55 + 1.75 * t : 1.1;
+        // Ease the cycle rate in rather than stepping it, so accelerating out of a
+        // stand ramps the legs up smoothly instead of snapping to run cadence.
+        const target = 0.55 + 1.85 * t * t * (3 - 2 * t);
+        this._cycleRate = this._cycleRate == null ? target : this._cycleRate + (target - this._cycleRate) * 0.25;
+        this.walkPhase += this.state === 'normal' ? this._cycleRate : 1.1;
         // 720720 divides by every frame count 1..16, so wrapping never skips.
         if (this.walkPhase >= 720720) this.walkPhase -= 720720;
         this.animPhase = this.walkPhase;
+
+        // Footfall: a puff of dust each time the cycle returns to a contact pose
+        // at speed. This is what sells weight when running, and it costs nothing
+        // when walking slowly because the threshold gates it out.
+        if (this.grounded && Math.abs(this.vx) > P.maxWalk * 0.8) {
+          const idx = this._animIdx | 0;
+          if (idx !== this._lastFootIdx && idx !== 1) {
+            fx(this.world, 'runDust', this.x + this.w / 2, this.y + this.h, this.facing);
+          }
+          this._lastFootIdx = idx;
+        } else {
+          this._lastFootIdx = -1;
+        }
         break;
       }
       case 'swim':
@@ -1749,6 +1784,10 @@ export default class Player extends EntityBase {
     }
     const anim = pickAnim(set, key);
     if (!anim) return null;
+    // Remember which frame of the cycle we are on. draw() uses it for the step
+    // bob, and _updateAnim uses the change of frame as a footfall trigger.
+    this._animIdx = typeof anim.indexAt === 'function' ? anim.indexAt(this.animPhase | 0) : 0;
+    this._animLen = anim.frames ? anim.frames.length : 1;
     return anim.frame(this.animPhase | 0);
   }
 
@@ -1804,6 +1843,16 @@ export default class Player extends EntityBase {
     let dy = Math.floor(this.y - camY) + (this.h - sprite.h) + (sprite.oy || 0);
     let dw = sprite.w;
     let dh = sprite.h;
+
+    // Step bob. In a real walk cycle the body is highest at the passing pose and
+    // lowest at each footfall, so the contact frames sit one pixel lower. One pixel
+    // is all it takes at this scale — it turns a slide into a walk, and it scales
+    // itself out at low speed so a creeping Mario does not jitter.
+    if (this.grounded && (this.pose === 'walk' || this.pose === 'run')) {
+      const len = this._animLen || 1;
+      const passing = len > 1 && this._animIdx === 1;
+      if (!passing && Math.abs(this.vx) > P.minWalk) dy += 1;
+    }
 
     // Weight: squash on landing, stretch out of the takeoff.
     if (this.landSquash > 0) {

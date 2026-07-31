@@ -15,6 +15,8 @@ import playSfx, { SFX_NAMES, hasSfx } from './audio/sfx.js';
 import { playMusic, stopMusic, pauseMusic, resumeMusic, starMusic, setHurry } from './audio/music.js';
 
 import { getLevel, nextLevel, firstLevel, ORDER } from './data/levels/index.js';
+import { headFor, harryReady } from './data/sprites/harry.js';
+import { t, setHero } from './i18n.js';
 
 const boot = document.getElementById('boot');
 const bootBar = boot && boot.querySelector('.bar i');
@@ -124,6 +126,10 @@ class Game {
     this.loop = null;
     this.levelId = firstLevel ? firstLevel() : ORDER[0];
     this.started = false;
+    this.playerCount = 1;
+    this.harryMode = false;
+    this.turn = 0;
+    this.slots = [this.newSlot(), this.newSlot()];
     this.audioUnlocked = false;
     this.scripted = false;
     this.fatal = null;
@@ -137,6 +143,7 @@ class Game {
 
     progress(0.25, 'ART');
     const baked = bakeAll();
+    await harryReady;
 
     progress(0.5, 'WORLD');
     this.world = new World({
@@ -149,6 +156,9 @@ class Game {
 
     progress(0.7, 'UI');
     screens.attach({ world: this.world, renderer, audio });
+    // The menu delivers its choice through this callback — screens.update() returns
+    // the Screens instance, not the selection.
+    screens.onSelect = (choice) => this.onMenuSelect(choice);
 
     progress(0.85, 'INPUT');
     input.attach(window);
@@ -223,29 +233,114 @@ class Game {
     return true;
   }
 
-  async startGame() {
+  onMenuSelect(choice) {
+    if (choice === 'options') {
+      screens.showOptions();
+      return;
+    }
+    this.harryMode = choice === 'harry';
+    this.startGame(choice === 'start2' ? 2 : 1);
+  }
+
+  // SMB two-player is alternating, not co-op: each player keeps their own score,
+  // coins, lives and level, and the turn passes when the active one dies.
+  newSlot() {
+    return {
+      score: 0,
+      coins: 0,
+      lives: 3,
+      levelId: firstLevel ? firstLevel() : ORDER[0],
+      checkpoint: false,
+      over: false,
+    };
+  }
+
+  saveSlot() {
+    const s = this.slots && this.slots[this.turn];
+    if (!s) return;
+    s.score = this.world.score;
+    s.coins = this.world.coins;
+    s.lives = this.world.lives;
+    s.levelId = this.levelId;
+    s.checkpoint = !!this.world.checkpointReached;
+  }
+
+  playerLabel(i = this.turn) {
+    if (this.playerCount < 2) return null;
+    return i === 0 ? t('player1') : t('player2');
+  }
+
+  // The HUD's left label follows who is actually playing.
+  syncPlayerName() {
+    if (!this.world) return;
+    setHero(this.harryMode ? 'HARRY' : null);
+    if (this.harryMode) this.world.playerName = 'HARRY';
+    else if (this.playerCount > 1) this.world.playerName = this.turn === 0 ? t('mario') : t('luigi');
+    else this.world.playerName = null;
+  }
+
+  async startGame(players = 1) {
+    this.playerCount = players === 2 ? 2 : 1;
+    this.slots = [this.newSlot(), this.newSlot()];
+    this.turn = 0;
     this.started = true;
-    this.world.score = 0;
-    this.world.coins = 0;
-    this.world.lives = 3;
-    await this.loadLevel(firstLevel ? firstLevel() : ORDER[0]);
-    await screens.showIntro(this.world);
+    this.syncPlayerName();
+    await this.enterTurn();
+  }
+
+  // Load the active slot's level and show its intro card.
+  async enterTurn() {
+    this.syncPlayerName();
+    const s = this.slots[this.turn];
+    this.world.score = s.score;
+    this.world.coins = s.coins;
+    this.world.lives = s.lives;
+    await this.loadLevel(s.levelId, null, {
+      resetPlayer: true,
+      fromCheckpoint: s.checkpoint,
+    });
+    await screens.showIntro(this.world, { label: this.playerLabel() });
+  }
+
+  // Hand over to the other player if they still have a game left. Returns false
+  // when nobody else can play, which means a real game over.
+  async passTurn() {
+    if (this.playerCount < 2) return false;
+    const other = this.turn === 0 ? 1 : 0;
+    if (this.slots[other].over) return false;
+    this.turn = other;
+    await this.enterTurn();
+    return true;
   }
 
   onLevelComplete() {
-    const next = nextLevel(this.levelId);
     (async () => {
       try {
         await screens.showTally(this.world);
       } catch (e) {
         /* tally is cosmetic */
       }
+      const next = nextLevel(this.levelId);
+      const s = this.slots[this.turn];
+      // Beating a castle gets the classic Toad scene before anything else.
+      if (this.world.theme === 'castle' || /-4$/.test(String(this.levelId))) {
+        await screens.showCastleEnd(this.world, {
+          lines: next
+            ? [t('thankYou'), t('anotherCastleA'), t('anotherCastleB')]
+            : [t('thankYou'), t('notBuiltA'), t('notBuiltB')],
+        });
+      }
       if (next) {
-        await this.loadLevel(next);
-        await screens.showIntro(this.world);
+        this.saveSlot();
+        s.levelId = next;
+        s.checkpoint = false;
+        await this.loadLevel(next, null, { fromCheckpoint: false });
+        await screens.showIntro(this.world, { label: this.playerLabel() });
       } else {
-        await screens.showGameOver(this.world, { cleared: true });
-        await screens.showTitle();
+        s.over = true;
+        this.saveSlot();
+        if (await this.passTurn()) return;
+        await this.endSession({ cleared: true });
       }
     })();
     return true;
@@ -253,18 +348,52 @@ class Game {
 
   onLifeLost() {
     (async () => {
-      await this.loadLevel(this.levelId, null, { fromCheckpoint: this.world.checkpointReached });
-      await screens.showIntro(this.world);
+      this.saveSlot();
+      // Dying always costs the power-up in SMB — you come back as small Mario.
+      // world._placePlayer only resets the form when resetPlayer is set.
+      if (await this.passTurn()) return;
+      await this.loadLevel(this.levelId, null, {
+        fromCheckpoint: this.world.checkpointReached,
+        resetPlayer: true,
+      });
+      await screens.showIntro(this.world, { label: this.playerLabel() });
     })();
     return true;
   }
 
   onGameOver() {
     (async () => {
-      await screens.showGameOver(this.world);
-      await screens.showTitle();
+      const s = this.slots && this.slots[this.turn];
+      if (s) {
+        s.over = true;
+        this.saveSlot();
+      }
+      try {
+        await screens.showGameOver(this.world);
+      } catch (e) {
+        /* the game-over card is cosmetic; never strand the player on it */
+      }
+      // The other player may still have lives left in a two-player game.
+      if (await this.passTurn()) return;
+      await this.endSession();
     })();
     return true;
+  }
+
+  // Tear the run down BEFORE returning to the title so a new game can never
+  // inherit the level, lives or score of the one that just ended.
+  async endSession() {
+    this.started = false;
+    this.playerCount = 1;
+    this.slots = [this.newSlot(), this.newSlot()];
+    this.turn = 0;
+    this.world.lives = 3;
+    this.world.score = 0;
+    this.world.coins = 0;
+    this.world.checkpointReached = false;
+    await this.loadLevel(firstLevel ? firstLevel() : ORDER[0], null, { resetPlayer: true });
+    this.world.state = 'idle';
+    await screens.showTitle();
   }
 
   update() {
@@ -279,12 +408,7 @@ class Game {
         else resumeMusic();
       }
 
-      const menuResult = screens.update();
-      if (menuResult === 'start1' || menuResult === 'start2') {
-        this.startGame();
-      } else if (menuResult === 'options') {
-        screens.showOptions();
-      }
+      screens.update();
 
       if (!screens.blocksWorld && !screens.paused) {
         this.world.update();
@@ -306,9 +430,49 @@ class Game {
       screens.submit(renderer);
       renderer.flush();
       renderer.present();
+      this.drawHarryOverlay();
     } catch (e) {
       this.crash(e);
     }
+  }
+
+  // Harry's photo is painted on the overlay canvas at DISPLAY resolution, so it
+  // stays sharp instead of being quantised to the 256x240 framebuffer and then
+  // nearest-neighbour upscaled with everything else.
+  drawHarryOverlay() {
+    const cv = document.getElementById('overlay');
+    if (!cv) return;
+    const src = renderer.canvas;
+    if (!src) return;
+
+    if (cv.width !== src.width || cv.height !== src.height) {
+      cv.width = src.width;
+      cv.height = src.height;
+    }
+    cv.style.width = src.style.width;
+    cv.style.height = src.style.height;
+
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!this.harryMode) return;
+
+    const w = this.world;
+    const p = w && w.player;
+    if (!p || p.hidden || p.removed || !w.level || screens.blocksWorld) return;
+    const h = headFor(p);
+    if (!h) return;
+
+    // Game pixels -> display pixels. The framebuffer is SCREEN_W wide, the display
+    // canvas is SCREEN_W * deviceScale, so one game pixel is `k` device pixels.
+    const k = src.width / SCREEN_W;
+    const cam = w.rcam;
+    const gx = p.x + h.dx - cam.x;
+    const gy = p.y + h.dy - cam.y;
+    if (gx + h.w < 0 || gx > SCREEN_W || gy + h.h < 0 || gy > SCREEN_H) return;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(h.img, gx * k, gy * k, h.w * k, h.h * k);
   }
 
   crash(e) {

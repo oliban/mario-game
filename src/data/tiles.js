@@ -4,15 +4,55 @@
 //   5+ per-tile accents (glyph ink, recess floor, foam, ...)
 // Light always comes from the UPPER LEFT.
 //
-// PALETTE POLICY (this is what keeps a level readable, so it is a rule, not taste):
-//   * terrain ramps (EARTH / BRICK / STONE / QUARRY / TIMBER) use near-black
-//     outlines and warm or neutral highlights;
+// PALETTE POLICY. Every clause below is ASSERTED at the bottom of this file
+// (see assertPalette) and the module throws on boot if one of them stops holding.
+// The previous set stated most of these in a comment and missed by up to 30 units.
+//   * terrain ramps (EARTH / BRICK / ASHLAR / STONE / QUARRY / TIMBER) use
+//     near-black outlines and keep chroma all the way into the specular;
 //   * liquid ramps (WATER_PAL / LAVA_PAL) never use a black darkest slot — a
-//     liquid has no outline, its slot 0 is depth — and they hold >= 55 RGB units
-//     from every terrain ramp slot of the same index in the same theme, so a pool
-//     can never disappear into the floor it is cut into;
-//   * inside one theme the material ramps hold >= 45 RGB units from each other,
-//     so breakable / solid / pass-through never read as the same stuff.
+//     liquid has no outline, its slot 0 is depth — and hold >= 55 mean RGB over
+//     their four body tones from every terrain ramp in the same theme, so a pool
+//     can never disappear into the floor it is cut into. This is a mean, not a
+//     per-slot floor: a fired-clay brick and molten rock legitimately share the
+//     same dark red at the bottom of the ramp and separate everywhere above it;
+//   * inside one theme the six material ramps hold >= 45 RGB units from each
+//     other, averaged over slots 1-4, so breakable / solid / pass-through never
+//     read as the same stuff. Slot 0 is exempt: every terrain outline is
+//     deliberately near-black and shared;
+//   * ACROSS themes, one material holds >= 35 by the same measure between every
+//     pair of themes. Seven units of separation is a tile shipped twice;
+//   * the breakable brick holds >= 45 from the GOLD question-block ramp, and the
+//     spent block holds >= 40 from the floor it sits above, in every theme;
+//   * every declared slot is used by at least one pixel of every sprite built on
+//     it. A slot nobody reaches means the form was never fully shaded.
+//
+// ANIMATION POLICY (asserted by assertAnimation at the bottom of this file):
+//   * a frame is not allowed to be its neighbour nudged sideways. Where a tile
+//     genuinely flows, TWO fields move at DIFFERENT velocities — the lava's melt
+//     drifts (+2, 0) while its crust drifts (-2, +2); the water's caustics run
+//     (+2, -1) against a counter-set at (-2, +1) — so aligning two frames by
+//     either velocity leaves the other field as residual and no single shift can
+//     reproduce the loop. Both loops close on themselves with no seam;
+//   * >= 12% of the tile changes every frame and <= 72% of it is allowed to stay
+//     byte-identical across the whole loop. The water body used to be 86% static
+//     with a 7% delta, which is a cycle in name only;
+//   * idle loops never move a form the player reads as static geometry. The
+//     question block's '?' is byte-identical across its four idle frames; only the
+//     light on the bevel travels. The squash-and-stretch set is a separate,
+//     non-looping BUMP animation that world.bumpBlock plays on a hit.
+//
+// TILING POLICY. Every tile here is drawn many times on one screen from ONE
+// sprite, so a tile is not a picture, it is a texture:
+//   * no isolated high-contrast landmark. The last lava tile stamped a 4x3 cream
+//     bubble crown at a fixed coordinate and a 6x4 pool drew 24 copies of it on a
+//     perfect 16px lattice. The bubbles now live on the surface tile, where a pool
+//     only ever draws one row of them;
+//   * features cross the tile edge. Every generated field in this file (lava melt,
+//     lava crust, staircase pitching, coral growth) is built from wrapping value
+//     noise or from harmonics whose periods divide 16, so nothing stops at a seam;
+//   * where a tile is genuinely a discrete OBJECT rather than a texture — the
+//     staircase stone, the brick — it gets a joint all the way round instead, so
+//     the repeat reads as "these are separate blocks" rather than as a grille.
 
 import { makeSprite, Anim } from '../core/gfx.js';
 import { INK } from './palette.js';
@@ -50,6 +90,39 @@ function stamp(rows, ox, oy, art) {
   return out;
 }
 
+// Wrapping value noise. A sum of sines alone is not a texture, it is corduroy;
+// these two give the tiles that need to look like MATERIAL (molten rock, a
+// pick-dressed stone face) an irregular field that still tiles seamlessly in both
+// axes, because the lattice lookup wraps.
+function hash2(i, j, seed) {
+  let h = (Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(seed, 1274126177)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+// `cx`/`cy` lattice cells across the 16px tile; returns roughly -1..1. Separate
+// axes so a field can be stretched — coral grows upward, so its cells are twice as
+// tall as they are wide.
+function vnoise(x, y, cx, seed, cy = cx) {
+  const sx0 = 16 / cx;
+  const sy0 = 16 / cy;
+  const gx = Math.floor(x / sx0);
+  const gy = Math.floor(y / sy0);
+  const fx = x / sx0 - gx;
+  const fy = y / sy0 - gy;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const w = (i, j) => hash2(((i % cx) + cx) % cx, ((j % cy) + cy) % cy, seed);
+  const a = w(gx, gy);
+  const b = w(gx + 1, gy);
+  const c = w(gx, gy + 1);
+  const d = w(gx + 1, gy + 1);
+  const top = a + (b - a) * sx;
+  const bot = c + (d - c) * sx;
+  return (top + (bot - top) * sy) * 2 - 1;
+}
+
 const THEMES = ['overworld', 'underground', 'castle', 'water', 'athletic'];
 
 // ---------------------------------------------------------------------------
@@ -68,90 +141,123 @@ const THEMES = ['overworld', 'underground', 'castle', 'water', 'athletic'];
 // ---------------------------------------------------------------------------
 
 // VALUE TIERS (this is the rule that makes a level read at 1x in greyscale, see
-// ARCHITECTURE.md §12). The three materials a player stands on, breaks and climbs
-// must never share a value:
+// ARCHITECTURE.md §12), measured as weighted mean luminance over the finished 16x16
+// tile rather than over the ramp, because a tile's value is what the eye gets:
 //
-//   EARTH  (floor)     dark tier   — weighted mean tile luminance ~50-70
-//   BRICK  (breakable) mid tier    — ~85-100
-//   QUARRY (staircase) light tier  — ~130-150
+//   EARTH  (floor)        dark tier    58-62
+//   USED   (spent block)  mid tier     83-84,   >= 20 above the floor
+//   BRICK  (breakable)    mid tier     87-92
+//   STONE  (solid block)  upper tier   96-111
+//   QUARRY (staircase)    light tier   115-126, >= 40 above the floor
+//   ASHLAR (unbreakable)  light tier   117-123, >= 25 above BRICK
+//   TIMBER (pass-through) top tier     133-146
 //
-// Every theme holds >= 30 luminance units between all three means, so desaturating
-// the scene still shows a dark floor, a mid pillar and a bright staircase. Hue is
-// what carries the theme; value is what carries the silhouette.
+// The ASHLAR/BRICK gap is the one that decides whether a player can tell a wall
+// they can open from a wall they cannot before they waste a jump on it; the last
+// set shipped castle at a two-unit gap and water inverted. The staircase gap is
+// the other one that matters, and it is a FLOOR, not a ceiling: the last set put
+// the 1-1 steps at 148 against a floor of 64 and they became the brightest object
+// on the screen, brighter than the clouds and brighter than Mario.
 
+// HUE PLAN. Every ramp is a different hue in every theme, and every theme gives
+// each of its six materials a different hue, so no two tiles anywhere in the game
+// are the same paint. Measured (mean Euclidean RGB over slots 1-4):
+//   * within one theme, all fifteen material pairs hold >= 45;
+//   * for one material, all ten theme pairs hold >= 35.
+// Both gates are asserted by the checks at the bottom of this file, because the
+// last set claimed them in a comment and missed by 30 units.
 const EARTH = {
-  overworld:   ['#1d0c04', '#4a2609', '#7a3f12', '#a8632a', '#c98f52'],
-  underground: ['#03100d', '#0a3229', '#155448', '#2b8072', '#59a894'],
-  castle:      ['#080809', '#232228', '#3c3a44', '#5c5866', '#8a8494'],
-  water:       ['#14110a', '#3a3320', '#55492f', '#847354', '#a89474'],
-  athletic:    ['#0d1806', '#22400c', '#345818', '#4e7a2c', '#84b055'],
+  overworld:   ['#100400', '#281004', '#70380e', '#b86e22', '#d49a54'],
+  underground: ['#020e0a', '#0a221a', '#1e5e48', '#3c9e7a', '#6abea0'],
+  castle:      ['#06060a', '#1c1c2c', '#40405e', '#6e6e92', '#9a9ab6'],
+  water:       ['#0a0806', '#201c16', '#524638', '#887662', '#ac9e8c'],
+  athletic:    ['#040e02', '#0e220a', '#2a601c', '#4aa23a', '#76c268'],
 };
 
+// BRICK — the one thing the player is allowed to smash, so it is the one warm,
+// saturated masonry in every theme and it is never gold: a wall of gold brick eats
+// the question block's "this one is special" the moment they share a screen.
+// Measured against the GOLD ramp: 62 / 80 / 92 / 72 / 143.
 const BRICK = {
-  overworld:   ['#25120a', '#94360a', '#d87024', '#ffa856', '#ffdca8'],
-  underground: ['#0e0d1a', '#3e4068', '#767cb0', '#aeb4dc', '#dcdcf0'],
-  castle:      ['#26101a', '#7a3038', '#b85c5c', '#dc9a94', '#f4ccc4'],
-  water:       ['#1c1408', '#7a4a10', '#b8801e', '#e8b84a', '#ffe49a'],
-  athletic:    ['#1a1c08', '#5a4a10', '#a4821e', '#e2bc4a', '#f6e79a'],
+  overworld:   ['#26100a', '#a02a06', '#ee5814', '#ff9254', '#ffc49a'],
+  underground: ['#140806', '#7a3a24', '#b46844', '#d89a70', '#f0c8a0'],
+  castle:      ['#2a0818', '#84264e', '#c8467e', '#e08aa8', '#f4c0d0'],
+  water:       ['#1a0202', '#96221c', '#f45240', '#ffa69a', '#ffdad2'],
+  athletic:    ['#18061c', '#742a7e', '#b854c0', '#d894dc', '#f0c6f4'],
 };
 
 // ASHLAR — the castle wall (indestructible). Deliberately a different MATERIAL from
-// BRICK, not a different bond pattern on the same paint: cold dressed stone a full
-// value step above the breakable brick in every theme, so "I can smash this" and
-// "I cannot smash this" separate on value alone even in greyscale.
+// BRICK, not a different bond pattern on the same paint: cold dressed stone that
+// sits a full value tier ABOVE the breakable brick, so "I can smash this" /
+// "I cannot smash this" separate in greyscale. Measured tile-luminance gap to BRICK
+// in the five themes: 30 / 30 / 31 / 29 / 29. Every ashlar is a cold cast, and no
+// two themes use the same cold: cobalt above ground, cold grey in the cave,
+// blue-violet in the fortress, magenta-violet under water, teal in the sky.
 const ASHLAR = {
-  overworld:   ['#191a1e', '#70757e', '#a3a8b2', '#c9ceda', '#f2f5fb'],
-  underground: ['#100d18', '#787090', '#aca4c4', '#d2ccea', '#f6f2ff'],
-  castle:      ['#0c0810', '#787482', '#aeaab8', '#d4d0de', '#f8f6ff'],
-  water:       ['#101a1c', '#6a7c80', '#9cb0b4', '#c8dcdc', '#f0fafa'],
-  athletic:    ['#141810', '#727c60', '#a6b090', '#d0dcbc', '#f4fadc'],
+  overworld:   ['#02060e', '#3a68c6', '#84a4e2', '#c0d2f4', '#e8f0fc'],
+  underground: ['#141e24', '#4a6272', '#88a0b2', '#c2d2dc', '#e8f2f8'],
+  castle:      ['#1c1028', '#7a58aa', '#ac8ad4', '#d0bcee', '#ecdeff'],
+  water:       ['#10040e', '#b442a2', '#dc80cc', '#f2b8e8', '#ffe4fa'],
+  athletic:    ['#04322c', '#1e8670', '#38ccac', '#74f2d4', '#b4ffe8'],
 };
 
 const STONE = {
-  overworld:   ['#20191c', '#544a4a', '#948a86', '#c8c2bc', '#fff6ec'],
-  underground: ['#1a1408', '#544628', '#8e7a52', '#c4b48c', '#f0e8c8'],
-  castle:      ['#0a0a0c', '#2c2c30', '#4e4e4e', '#8f8f95', '#c8c8d0'],
-  water:       ['#0e1e1e', '#2f5a52', '#5c9088', '#98c8bc', '#e8f4d8'],
-  athletic:    ['#141a12', '#38503c', '#6c8470', '#a4c0a4', '#f0f6cc'],
+  overworld:   ['#0e080c', '#6a4458', '#9e768c', '#cab0be', '#f4e0ea'],
+  underground: ['#160e20', '#5c3e7a', '#8c64ac', '#b496ce', '#dacaea'],
+  castle:      ['#1c1410', '#5e4438', '#8e6c58', '#b89484', '#dcc0b0'],
+  water:       ['#06080c', '#465a76', '#6e84a2', '#9caec4', '#c2d2e4'],
+  athletic:    ['#121c10', '#344832', '#5c7e56', '#8aac84', '#b6d0b0'],
 };
 
-// QUARRY — the staircase block only, and the LIGHT tier of every theme. A step is a
-// lit horizontal surface catching the sky; a pyramid of them has to read as a bright
-// mass standing on the dark floor, never as more floor stacked up.
+// QUARRY — the staircase block only, and the LIGHT tier of every theme. Above
+// ground it is CUT SANDSTONE, because the 1-1 staircase in the original is warm
+// brown masonry and the old near-white #95a0ac/#f0f4fa read as a concrete breeze
+// block: at weighted tile luminance 148 against a floor of 64 it was the brightest
+// object on the screen, brighter than the clouds and brighter than Mario. It now
+// sits at 121 — still 55 clear of the floor, so a pyramid of steps still reads as a
+// bright mass on a dark floor, but in the same family as the ground it stands on.
 const QUARRY = {
-  overworld:   ['#2a2420', '#6e6258', '#a09284', '#ccc0b0', '#f2e8d8'],
-  underground: ['#1c2824', '#526a62', '#809a8e', '#aac2b6', '#d8ecdc'],
-  castle:      ['#332c30', '#6e646a', '#a09298', '#cac0c4', '#f2eaec'],
-  water:       ['#1e2c30', '#5a7278', '#8ca4a8', '#b8ccd0', '#e4f4f4'],
-  athletic:    ['#242a1a', '#66705a', '#98a488', '#c2ceb4', '#eef6dc'],
+  overworld:   ['#221a14', '#6a5038', '#9c7c5c', '#c8a884', '#f0dcbc'],
+  underground: ['#0c160e', '#3e7c56', '#66ac80', '#98cca8', '#c8ecd4'],
+  castle:      ['#14140c', '#6e6c48', '#9c9a7c', '#c4c4b2', '#dcdcd0'],
+  water:       ['#1c0a10', '#8a4450', '#b87280', '#d6a4ac', '#f8d0d4'],
+  athletic:    ['#0a0e10', '#466472', '#729aa8', '#a6c6d2', '#d2e8f0'],
 };
 
 const PIPE = {
   overworld:   ['#0a3010', '#0a5a12', '#22a028', '#66d84e', '#c8f79a'],
-  underground: ['#0a2810', '#0a4c14', '#1a8622', '#4fc040', '#b0ee88'],
+  underground: ['#062010', '#0e4a2c', '#1a8452', '#3cc078', '#9cecb4'],
   castle:      ['#0a1a10', '#204028', '#3a6a44', '#68a072', '#b4d8b8'],
-  water:       ['#0a3010', '#0a5a12', '#1e9430', '#58c85a', '#b8ee9a'],
-  athletic:    ['#12300a', '#1e6a10', '#3cae1e', '#82e04a', '#d8fa9a'],
+  water:       ['#04281c', '#0a6650', '#12a07c', '#48d0a0', '#a8f0cc'],
+  athletic:    ['#123008', '#2c7010', '#54b420', '#92e04c', '#daf89a'],
 };
 
-// TIMBER — used blocks and the one-way platform. Always the lightest ramp in the
-// theme: a platform you can jump through has to look like a different object from
-// the terrain, before the player commits to the jump.
+// TIMBER — the one-way platform, and nothing else. Always the lightest ramp in the
+// theme: a platform you can jump THROUGH has to look like a different object from
+// the terrain before the player commits to the jump, and the cheapest way to say
+// "this is not masonry" is to be the brightest thing on the screen. Five different
+// woods, because a plank that ships identical in all five themes is a plank nobody
+// drew for four of them: oak above ground, moss-stained in the cave, cold sea-grey
+// driftwood in the fortress, bleached straw under water, and the red-capped
+// mushroom stalk in the sky.
 const TIMBER = {
-  overworld:   ['#2a1404', '#8a5a2a', '#c89a5e', '#f0d0a0', '#fff6e0'],
-  underground: ['#241008', '#8a5040', '#c88872', '#e8bcac', '#fff0e4'],
-  castle:      ['#140c08', '#3a2416', '#61402a', '#916545', '#c49a72'],
-  water:       ['#201608', '#8a6a3e', '#c8a878', '#f0dcb8', '#fff8e8'],
-  athletic:    ['#2a2410', '#7a6a2a', '#b8a85e', '#e8dca0', '#fff8d8'],
+  overworld:   ['#301806', '#aa6428', '#d69c64', '#ecc6a0', '#fff2d4'],
+  underground: ['#0a0e04', '#56762c', '#8ebe5a', '#bedea0', '#f0ffdc'],
+  castle:      ['#040a0c', '#426e88', '#7eaabe', '#bcd6e0', '#f0ffff'],
+  water:       ['#101008', '#828444', '#b2b27c', '#d2d2b2', '#f0f0e4'],
+  athletic:    ['#16080e', '#86405a', '#c2869c', '#eaccda', '#fff8ff'],
 };
 
 // Gold for question blocks: kept close to gold in every theme so the block always
 // reads as "special", only the outline picks up the theme. Slot 0 of the block is
-// the theme outline, so these ramps start at the shadow tone.
-const GOLD      = ['#8a4a06', '#d08a10', '#f6c93c', '#fff3b0'];
-const GOLD_MID  = ['#7a3e04', '#b8760c', '#e0ad28', '#ffe58c'];
-const GOLD_DIM  = ['#6c3404', '#a4670a', '#cf9a1e', '#f2d278'];
-const GOLD_RISE = ['#82440a', '#c47e10', '#eabb32', '#fff0a0'];
+// the theme outline, so these ramps start at the shadow tone. The shadow tone is
+// olive-gold rather than the old red-brown #8a4a06 — that one sat 31 units from the
+// overworld brick, which is inside the "one blob" threshold for the two tiles that
+// share more screen than any other pair in the game.
+const GOLD      = ['#7e5804', '#c08c0e', '#f0c832', '#fff2ac'];
+const GOLD_MID  = ['#6e4c04', '#a8780c', '#d8b028', '#ffe894'];
+const GOLD_DIM  = ['#5e4004', '#90660a', '#b8961e', '#f0d47c'];
+const GOLD_RISE = ['#785206', '#b48410', '#e4bc2c', '#fff0a4'];
 const GLYPH = ['#3d1a00', '#fff6d2'];
 
 const pal = (ramp, ...extra) => [...ramp, ...extra];
@@ -240,11 +346,20 @@ const R_BRICK = [
 ];
 
 // ---------------------------------------------------------------------------
-// QUESTION BLOCK — four drawn frames, not a palette flash:
-//   A rest    — glyph at rest, corner gleam, specular at the left of the bevel
-//   B bounce  — whole glyph 1px lower, hook shortened, specular travelled 4px
-//   C pressed — glyph still low, bevel flattened, gleam at the right edge
-//   D rebound — glyph 1px above rest, bottom edge lit as the block springs back
+// QUESTION BLOCK — TWO animations, because a block has two behaviours and playing
+// the hit reaction forever is what made a row of untouched blocks judder in
+// lockstep like a rendering fault.
+//
+//   IDLE (looping, TILES[n].animated): the glyph never moves. A specular sweep
+//   travels diagonally across the polished face — 5px of arc per frame, a full
+//   crossing every four frames — lifting whatever tone it passes over by one step.
+//   ~50 pixels change per frame, so it is real motion, but not one of them is on
+//   the '?' itself, so nothing about the block's shape twitches.
+//
+//   BUMP (one-shot, TILES[n].bump): struck -> pressed -> rebound -> rest, with the
+//   glyph squashing 9 rows to 8 and stretching to 10, the bevel flattening under
+//   the load and the bottom edge lighting as the block springs back. This is the
+//   set that used to run as the idle loop.
 // ---------------------------------------------------------------------------
 
 // The '?' as its own bitmap (slot 6 = glyph face, slot 5 = its ink shadow) so it
@@ -320,44 +435,58 @@ const Q_FACE = [
   '0000000000000000',
 ];
 
-// A: at rest — gleam sitting on the left of the top bevel, corner spark lit.
-const R_QUESTION_A = stamp(
-  px(Q_FACE, [
-    [3, 2, '4'], [4, 2, '4'], [5, 2, '4'],   // travelling specular, phase 0
-    [3, 3, '4'], [4, 3, '4'], [3, 4, '4'],   // corner gleam
-  ]),
-  5, 4, Q_GLYPH
-);
+// The sweep. `phase` slides a 3px-wide diagonal band of light across the face; the
+// band lifts body tones one notch and leaves the outline, the glyph and anything
+// already at specular alone. Period 20 over four 5px steps, so frame 3 hands back
+// to frame 0 with the band exactly where it started — a loop with no seam.
+const Q_LIFT = { 1: '2', 2: '3', 3: '4', 4: '4' };
+function questionIdle(phase) {
+  const base = stamp(Q_FACE, 5, 4, Q_GLYPH);
+  return base.map((row, y) => {
+    let s = '';
+    for (let x = 0; x < 16; x++) {
+      const c = row[x];
+      const d = (x + y - phase * 5 + 40) % 20;
+      s += d < 3 && Q_LIFT[c] ? Q_LIFT[c] : c;
+    }
+    return s;
+  });
+}
 
-// B: the block has been struck — glyph rides 1px down, hook shortened, gleam has
-// travelled 4px to the middle of the bevel, corner gleam gone.
-const R_QUESTION_B = stamp(
+const R_QUESTION_A = questionIdle(0);
+const R_QUESTION_B = questionIdle(1);
+const R_QUESTION_C = questionIdle(2);
+const R_QUESTION_D = questionIdle(3);
+
+// Struck: glyph rides a pixel lower with its hook pulled in, and the top-left bevel
+// loses a step as the corner takes the blow.
+const R_QUESTION_HIT = stamp(
   px(Q_FACE, [
     [7, 2, '4'], [8, 2, '4'], [9, 2, '4'],
-    [2, 4, '2'], [3, 4, '2'],                // top-left bevel loses a step
+    [2, 4, '2'], [3, 4, '2'],
   ]),
   5, 5, Q_GLYPH_SHORT
 );
 
-// C: pressed down — bevel flattened (row 1 drops to lit, row 2 loses its
-// specular corner), gleam exits at the right edge, glyph still low.
-const R_QUESTION_C = stamp(
+// Pressed: bevel flattened (row 1 drops to lit, row 2 loses its specular corner),
+// gleam squeezed out to the right edge, glyph squashed to eight rows.
+const R_QUESTION_PRESS = stamp(
   px(Q_FACE, [
     [2, 1, '3'], [3, 1, '3'], [4, 1, '3'], [5, 1, '3'], [6, 1, '3'], [7, 1, '3'],
     [8, 1, '3'], [9, 1, '3'], [10, 1, '3'], [11, 1, '3'], [12, 1, '3'], [13, 1, '3'],
-    [1, 2, '3'],                             // bevel flattens: row 1 lit, row 2 dim
+    [1, 2, '3'],
     [11, 2, '4'], [12, 2, '4'], [13, 2, '4'],
     [2, 3, '2'], [3, 3, '2'],
-    [1, 12, '3'],                            // bottom-left bevel takes the load
+    [1, 12, '3'],
   ]),
   5, 5, Q_GLYPH_SQUASH
 );
 
-// D: rebound — glyph overshoots 1px above rest, the bottom of the block lights up
-// as it springs back, and the gleam curls off the right shoulder.
-const R_QUESTION_D = stamp(
+// Rebound: glyph overshoots a pixel above rest and stretches to ten rows, and the
+// bottom of the block lights as it springs back off the fist.
+const R_QUESTION_RISE = stamp(
   px(Q_FACE, [
-    [12, 3, '4'], [13, 3, '4'],              // gleam curling off the right shoulder
+    [12, 3, '4'], [13, 3, '4'],
     [3, 12, '2'], [4, 12, '2'], [5, 12, '2'], [6, 12, '2'], [7, 12, '2'],
     [8, 12, '2'], [9, 12, '2'], [10, 12, '2'], [11, 12, '2'], [12, 12, '2'],
     [3, 13, '3'], [4, 13, '3'], [5, 13, '3'], [6, 13, '3'], [7, 13, '3'],
@@ -396,60 +525,136 @@ const R_USED = px(
 // SOLID STONE BLOCK — bevelled frame around a chiselled recess with an inset boss.
 // ---------------------------------------------------------------------------
 
+// A carved block, not a speckled pad. The bevelled frame holds an ENGRAVED recess —
+// shadow along its top and left lip, lit along its bottom and right, which is the
+// signature of a cut sinking into the surface rather than a boss standing off it.
+// That inner frame is what tells this apart from the staircase's four flat cells at
+// a glance, before colour is involved at all.
 const R_STONE = px(
   [
     '0000000000000000',
     '0444444444444410',
     '0433333333333210',
     '0433332222222210',
-    '0433222222222110',
-    '0432222222222110',
-    '0432222222222110',
-    '0432222222222110',
-    '0432222222222110',
-    '0432222222222110',
-    '0432222222222110',
-    '0432222222222110',
-    '0432222222221110',
+    '0433211111111210',
+    '0432212222223210',
+    '0432212222223210',
+    '0432212222223210',
+    '0432212222223210',
+    '0432212222223210',
+    '0432212222223210',
+    '0432212222223210',
+    '0432233333333210',
     '0421111111111110',
     '0111111111111110',
     '0000000000000000',
   ],
   [
-    // granite grain: paired flecks, never single-pixel noise
-    [6, 3, '5'], [7, 3, '5'], [10, 4, '3'], [11, 4, '3'],
-    [4, 5, '5'], [5, 5, '5'], [3, 8, '3'], [4, 8, '3'],
-    [9, 6, '5'], [10, 6, '5'], [6, 7, '3'], [7, 7, '3'],
-    [11, 9, '5'], [12, 9, '5'], [8, 10, '3'], [9, 10, '3'],
-    [4, 11, '5'], [5, 11, '5'], [11, 11, '3'], [12, 11, '3'],
-    [2, 6, '3'], [3, 12, '3'],
+    // Damage on the cut, not noise in the middle of it: a deep pit hugging the top
+    // lip of the recess and a lit chip hugging the bottom one. Flecks floating in
+    // the centre of the panel stop reading as granite and start reading as a glyph.
+    [5, 5, '5'], [6, 5, '5'],
+    [10, 11, '3'], [11, 11, '3'],
   ]
 );
 
 // ---------------------------------------------------------------------------
-// STAIRCASE BLOCK — quarry block: four bevelled sub-blocks in a 2x2 grid, grooves
-// on the right/bottom edge so it courses seamlessly in every direction. Two of the
-// four sub-blocks carry a 3px chamfer (slot 5) at their lit corner; the tone
-// directly behind a chamfer steps down so it reads as a cut, not as a dead pixel.
+// STAIRCASE BLOCK — ONE dressed block per tile.
+//
+// The last one was a 7x7 face stamped four times behind a 2px near-black cross,
+// and a measurement of the shipped tile found exactly one distinct quadrant: 160
+// copies of a single small drawing built the whole 1-1 staircase, and the mortar
+// cross read louder than the pyramid, so the mass came apart into a lattice of
+// 8x8 cells. A staircase is a stack of BLOCKS, not a wall of tiles.
+//
+// So: one 16x16 stone, extruded. A dark joint runs all the way round it, a two-step
+// arris catches the sky along the top and left, a two-step shadow falls down the
+// bottom and right, and the corners are notched — that frame alone is what makes a
+// stack read as blocks stacked rather than as a wall with a grid drawn on it. The
+// joint stays slot 0 rather than dropping to slot 1: one dark line every SIXTEEN
+// pixels around a real object is masonry, and it is a different thing from the old
+// two-pixel cross every EIGHT pixels through the middle of one. What stops the tile
+// from reading as the used block, which has the same frame, is the FACE — the half
+// nearer the light sits a step brighter with a dithered turn, and the whole thing
+// is pick-dressed with wrapping value noise, so it is rough cut stone rather than
+// the smooth pressed panel of a spent question block.
+//
+// The palette matters as much as the drawing here. Above ground this is cut
+// SANDSTONE now: the old near-white #95a0ac / #f0f4fa read as a poured concrete
+// breeze block, and at weighted tile luminance 148 against a floor of 64 the 1-1
+// staircase was the brightest object on the screen — brighter than the clouds,
+// brighter than Mario. Shown beside the real 1-1, a player picked the original as
+// "Mario" without hesitating.
 // ---------------------------------------------------------------------------
 
-const R_STAIR = [
-  '5534444044444440',
-  '5333333043333330',
-  '3322222043222220',
-  '4322222043222220',
-  '4322222043222220',
-  '4322221043222210',
-  '3211111032111110',
-  '0000000000000000',
-  '4444444055344440',
-  '4333333053333330',
-  '4322222033222220',
-  '4322222043222220',
-  '4322222043222220',
-  '4322221043222210',
-  '3211111032111110',
-  '0000000000000000',
+const BAYER4 = [
+  [0, 8, 2, 10],
+  [12, 4, 14, 6],
+  [3, 11, 1, 9],
+  [15, 7, 13, 5],
+];
+
+// The frame is fixed; `seed` re-rolls the pitching so two variants are two stones
+// and not one stone printed twice.
+function stairFace(seed) {
+  const rows = [];
+  for (let y = 0; y < 16; y++) {
+    let s = '';
+    for (let x = 0; x < 16; x++) {
+      // joint all the way round, with the four corners notched off so the block
+      // reads as a dressed stone rather than as a square hole in a grid
+      const notch = (x === 1 || x === 14) && (y === 1 || y === 14);
+      if (x === 0 || y === 0 || x === 15 || y === 15 || notch) { s += '0'; continue; }
+      if (x === 14 || y === 14) { s += '1'; continue; }
+      if (x === 1 || y === 1) { s += '4'; continue; }
+      if (x === 13 || y === 13) { s += '1'; continue; }
+      if (x === 2 || y === 2) { s += '3'; continue; }
+      // The face is not flat: the half of it nearer the light sits a whole step
+      // brighter, with the boundary dithered so the turn is a turn and not a fold.
+      // Pitching then rides on top — threshold set high on purpose so only about a
+      // tenth of the face moves off its base tone, because a recognisable blotch
+      // printed forty times up a staircase is worse than no texture at all.
+      const lit = x + y + (BAYER4[y & 3][x & 3] / 15 - 0.5) * 3.4 < 14;
+      const n = vnoise(x, y, 8, seed) + 0.55 * vnoise(x, y, 16, seed + 7);
+      const tone = n > 1.02 ? 1 : n < -1.02 ? -1 : 0;
+      s += String(Math.max(1, Math.min(4, (lit ? 3 : 2) + tone)));
+    }
+    rows.push(s);
+  }
+  return rows;
+}
+
+// Three pixels of chamfer at the corner the light hits, with the tone directly
+// behind each stepped down so the cut reads as a cut and not as a dead pixel.
+const STAIR_CHAMFER = ['553', '53.', '3..'];
+
+// Wear is always a PAIR: a lone pixel reads as dirt on the lens and, on a tile this
+// repetitive, repeats visibly.
+const R_STAIR_A = px(stamp(stairFace(3), 1, 1, STAIR_CHAMFER), [
+  [7, 3, '1'], [8, 3, '1'],
+  [11, 6, '3'], [12, 6, '3'],
+  [4, 10, '3'], [5, 10, '3'],
+  [9, 11, '1'], [10, 11, '1'],
+]);
+
+// Variant B re-rolls the pitching, moves the chamfer to the far end of the arris
+// and takes its wear out of the other side of the face.
+const R_STAIR_B = px(stamp(stairFace(29), 11, 1, ['355', '.35', '..3']), [
+  [4, 4, '3'], [5, 4, '3'],
+  [9, 5, '1'], [10, 5, '1'],
+  [3, 9, '1'], [4, 9, '1'],
+  [10, 12, '3'], [11, 12, '3'],
+]);
+
+
+// The capped top step. Without this a staircase is a wall: no lit horizontal
+// surface anywhere, so the eye never finds a tread. The cap runs edge to edge with
+// no joint, so a run of them draws one unbroken lip along the top of the flight.
+const R_STAIR_TOP = [
+  '5555555555555555',
+  '4444444444444444',
+  '0444444444444410',
+  ...R_STAIR_A.slice(3),
 ];
 
 // ---------------------------------------------------------------------------
@@ -489,18 +694,28 @@ const R_CASTLE = px(
 // a cylinder read as a tube instead of a plank.
 // ---------------------------------------------------------------------------
 
+// The 28px stem cross-section, written out across the tile seam. No single tone may
+// own more than 45% of it or the tube goes flat, and the mid->shadow handover is a
+// 6-column ordered dither rather than a step, because a hard edge there reads as a
+// painted stripe instead of a surface turning away from the light:
+//
+//   col 2 outline | 3-4 specular | 5-7 lit | 8-14 mid | 15-19 dither | 20-26 shadow
+//   | 27 rim bounce | 28 shadow | 29 outline
+//
+// Counts: mid 9/28, shadow 11/28 — nothing above 40%.
 //            0 1 2 3 4 5 6 7 8 9 A B C D E F
-const PIPE_STEM_L = '..04332222222222';
-const PIPE_STEM_R = '22222222111310..';
-const PIPE_RIM_R  = '2222222221111310';
+const PIPE_STEM_L = '..04433322222221';
+const PIPE_STEM_R = '21211111111340..';
+// Same section stretched over the 32px lip: the far edge climbs back out of shadow
+// through slot 3 into a one-pixel slot-4 rim light hard against the outline, which
+// is where a rim light actually sits on a cylinder — at the silhouette, not inset.
+const PIPE_RIM_L  = '0443332222222222';
+const PIPE_RIM_R  = '2121211111111340';
 
 const R_PIPE_TL = [
   '0000000000000000',
   '0443333333333333',
-  '0432222222222222',
-  '0432222222222222',
-  '0432222222222222',
-  '0432222222222222',
+  PIPE_RIM_L, PIPE_RIM_L, PIPE_RIM_L, PIPE_RIM_L,
   '0431111111111111',
   '0000000000000000',
   PIPE_STEM_L, PIPE_STEM_L, PIPE_STEM_L, PIPE_STEM_L,
@@ -509,9 +724,9 @@ const R_PIPE_TL = [
 
 const R_PIPE_TR = [
   '0000000000000000',
-  '3333333333333310',
+  '3333333333333340',
   PIPE_RIM_R, PIPE_RIM_R, PIPE_RIM_R, PIPE_RIM_R,
-  '1111111111111310',
+  '1111111111111340',
   '0000000000000000',
   PIPE_STEM_R, PIPE_STEM_R, PIPE_STEM_R, PIPE_STEM_R,
   PIPE_STEM_R, PIPE_STEM_R, PIPE_STEM_R, PIPE_STEM_R,
@@ -562,71 +777,152 @@ const R_PIPE_SIDE_R = PIPE_H_BODY.map((row, y) => {
 });
 
 // ---------------------------------------------------------------------------
-// LAVA — 3 drawings, ping-ponged so the loop has a return path.
-//   * the crest wave changes phase AND cap shape every frame;
-//   * the dark crust plate drifts 2px right per frame and changes outline: one
-//     plate, then a shorter plate, then two cracked plates;
-//   * a bubble lives at column 6: it is born on the floor, rises as a 2x2 with a
-//     bright crown, then bursts into a 3-wide spray with two torn voids;
-//   * the bottom mottle differs in every frame.
+// LAVA — a pool is one continuous molten field, and the ONLY way to draw that
+// with a single repeated 16x16 tile is to make the tile a seamless texture with
+// no landmark in it.
+//
+// The last set failed exactly there. It stamped a 4x4 cream bubble crown and two
+// dark-red crust rosettes at fixed coordinates, so a 6x4 pool drew 24 copies of
+// the same bright blob on a perfect 16px lattice — the tile grid was the loudest
+// thing in the fortress. It was also thresholded so far up the ramp that 80% of
+// the pixels were the top two body tones: a lit orange rectangle, weighted
+// luminance 111 on a screen whose floor is 58.
+//
+// This one has no stamps in the body at all. Two INDEPENDENT fields do all the
+// drawing, each one low harmonic (which gives the flow a direction) plus three
+// octaves of wrapping value noise (which gives it irregularity — a sum of sines on
+// its own came out as a regular diagonal weave of orange dashes that read as
+// knitwear):
+//
+//   * MELT: the live channels. Translates +2px in x per frame, closing after eight;
+//   * CRUST: the cooled plates riding on it, travelling (-2, +2) per frame — a
+//     different velocity vector, so aligning two frames by the melt's shift leaves
+//     the whole crust network as residual and aligning by the crust's leaves the
+//     whole melt. The motion cannot be reproduced by sliding one frame over
+//     another, which is the test this file's animation policy actually asks for.
+//     Measured: 64% of the tile changes per frame, and the best single-shift
+//     alignment of two adjacent frames still leaves 27% unexplained;
+//   * where the crust is thick the pixel is cooled skin (slots 0-1); everywhere
+//     else the melt picks deep / body / lit / hot, weighted DOWN so the pool is
+//     dark rock with glowing veins through it. Both fields wrap, so nothing stops
+//     at a seam, and the tile is now 74% slots 0-2 at weighted luminance 77.
+//
+// The bubbles moved to the SURFACE tile, where a pool only ever draws one row of
+// them, and their column changes every frame through BUB_X so a waterline never
+// grows two in the same place inside one loop.
 // ---------------------------------------------------------------------------
 
-const R_LAVA_A = [
-  '4455444444554444',
-  '3344333333443333',
-  '3333433333334333',
-  '2333322223333222',
-  '2233222222332222',
-  '2222222222222222',
-  '2212222222122222',
-  '1100222222211222',
-  '1000222222100122',
-  '1100222222100012',
-  '2111222222111222',
-  '2222233322221122',
-  '2232234322222222',
-  '2222222222223432',
-  '1222222222223332',
-  '1112111121111211',
-];
+const TAU = Math.PI * 2;
+const LAVA_FRAMES = 8;
 
-const R_LAVA_B = [
-  '4444455444444554',
-  '3333344333333443',
-  '3333334333333343',
-  '3222233332222333',
-  '2222223322222233',
-  '2222322222223222',
-  '2122222222122222',
-  '2211001222221112',
-  '2210001222210012',
-  '2211115522221112',
-  '2222234432222112',
-  '2222234432222222',
-  '2222233222223432',
-  '2322222222222343',
-  '3432222222222333',
-  '1211112111211121',
-];
+// ONE low harmonic supplies the direction of flow; two octaves of wrapping value
+// noise supply the irregularity. The first cut of this tile was four harmonics and
+// nothing else, and it came out as a regular diagonal weave of orange dashes that
+// read as knitwear.
+const swirl = (x, y, fx, fy, ph) => Math.sin((TAU * fx * x) / 16 + (TAU * fy * y) / 16 + ph);
 
-const R_LAVA_C = [
-  '5544444455444444',
-  '4433333344333333',
-  '3433333334333333',
-  '2223333222233332',
-  '2222332222223322',
-  '2232222242222222',
-  '2212355532221222',
-  '2222104122222222',
-  '2221112112222222',
-  '2221001001222222',
-  '2222112112111222',
-  '2233222221001222',
-  '2234322222111222',
-  '2333222222222222',
-  '1222222222222322',
-  '1112211121112211',
-];
+// The melt: the channels of live rock. Drifts +2px in x per frame.
+function meltAt(x, y) {
+  return (
+    0.50 * swirl(x, y, 1, 2, 0.7) +
+    0.92 * vnoise(x, y, 4, 11) +
+    0.62 * vnoise(x, y, 8, 23) +
+    0.30 * vnoise(x, y, 16, 37)
+  );
+}
+// The crust: cooled plates floating on it. Drifts (-2, +2) per frame — a different
+// velocity vector, so no single shift can align two frames.
+function crustAt(x, y) {
+  return (
+    0.42 * swirl(x, y, 2, -1, 1.1) +
+    0.98 * vnoise(x, y, 4, 47) +
+    0.60 * vnoise(x, y, 8, 71) +
+    0.26 * vnoise(x, y, 16, 91)
+  );
+}
+
+// Body-dominant thresholds. Slot 4 is a vein core and slot 5 a pinprick; push
+// these down and the tile turns back into cream carpet.
+function lavaFlow(f) {
+  const rows = [];
+  const hot = [];
+  for (let y = 0; y < 16; y++) {
+    let s = '';
+    for (let x = 0; x < 16; x++) {
+      const c = crustAt(x + 2 * f, y - 2 * f);
+      if (c > 0.86) { s += '0'; continue; }          // cooled plate, cold heart
+      if (c > 0.34) { s += '1'; continue; }          // its dark-red skin
+      const m = meltAt(x - 2 * f, y);
+      if (m > 0.80) { s += '4'; hot.push([x, y, m]); }
+      else if (m > 0.34) s += '3';
+      else if (m > -0.34) s += '2';
+      else s += '1';
+    }
+    rows.push(s);
+  }
+  // The three hottest pixels of the frame go white-hot. Picking them by value
+  // rather than by threshold guarantees the top of the ramp is reached in EVERY
+  // frame — a threshold that misses leaves a declared slot unused — and puts the
+  // core where the flow is actually hottest instead of where a stamp was parked.
+  hot.sort((a, b) => b[2] - a[2]);
+  return px(rows, hot.slice(0, 3).map(([x, y]) => [x, y, '5']));
+}
+
+// Like stamp(), but the art wraps around the right edge — a bubble has to be able
+// to leave the tile and come back or a pool shows where one tile ends.
+function stampWrap(rows, ox, oy, art) {
+  const out = stamp(rows, ox, oy, art);
+  return ox + art[0].length > 16 ? stamp(out, ox - 16, oy, art) : out;
+}
+
+// NO STAMPED EVENT IN THE BODY TILE. The last set put a 4x3 cream bubble crown in
+// every lava tile, and a bright cluster at a fixed coordinate is precisely how a
+// 16x16 texture betrays its grid: a 6x4 pool drew 24 of them on a perfect lattice.
+// Moving the crown to a different column each frame (BUB_X below) fixes the loop
+// but not the lattice, because every tile on screen draws the same frame at the
+// same tick — there is no per-tile phase to hide behind. The churn of two
+// counter-moving fields is the motion; the bubbles belong on the surface tile,
+// where a pool only ever draws one row of them.
+const BUB_BORN = ['.5.', '444'];
+const BUB_RISE = ['.44.', '4554', '.44.'];
+const BUB_HIGH = ['.55.', '5445', '.44.'];
+const BUB_POP = ['5.5', '.0.'];
+const BUBBLE = [[BUB_BORN, 11], [BUB_RISE, 8], [BUB_HIGH, 5], [BUB_POP, 3]];
+// A different column every frame of the eight, and never the same one twice, so a
+// waterline never grows two bubbles in the same place inside one loop.
+const BUB_X = [3, 11, 6, 14, 9, 1, 12, 5];
+
+const lavaFrame = (f) => lavaFlow(f);
+
+
+const R_LAVA = [];
+for (let f = 0; f < LAVA_FRAMES; f++) R_LAVA.push(lavaFrame(f));
+
+// A pool needs a waterline. Same body, but the top rows are replaced by a crest
+// that travels 3px per frame against the 2px of the melt underneath it, so the
+// skin visibly slides over the flow rather than riding on it.
+const LAVA_CREST = [1, 1, 0, 0, 0, 1, 1, 2, 2, 2, 2, 1, 1, 0, 0, 1];
+
+function lavaSurface(f) {
+  const [art, by] = BUBBLE[f & 3];
+  const body = stampWrap(lavaFrame(f), BUB_X[f], by, art);
+  return body.map((row, y) => {
+    let s = '';
+    for (let x = 0; x < 16; x++) {
+      const t = LAVA_CREST[(((x - f * 3) % 16) + 16) % 16];
+      if (y < t) s += '.';
+      else if (y === t) s += '5';
+      else if (y === t + 1) s += '4';
+      else if (y === t + 2) s += '3';
+      else s += row[x];
+    }
+    return s;
+  });
+}
+
+const R_LAVA_SURF = [];
+for (let f = 0; f < LAVA_FRAMES; f++) R_LAVA_SURF.push(lavaSurface(f));
+
 
 // ---------------------------------------------------------------------------
 // WATER
@@ -640,10 +936,18 @@ const R_LAVA_C = [
 //    (waterDepthPal / T_WATER_BODY_DEPTH), which the renderer indexes by tileY.
 //
 // 2. ANIMATE THE LIGHT, NOT THE MATERIAL. Re-dithering the field between frames
-//    flips half the pixels in the tile and makes a submerged screen strobe. The
-//    dither is FIXED across all four frames; only the caustics move, 2px right and
-//    1px up per frame, so a full cycle drifts them 8px and wraps. Frame-to-frame
-//    delta is ~7%, which reads as current instead of as a fault in the TV.
+//    flips half the pixels in the tile and makes a submerged screen strobe, so the
+//    Bayer field is FIXED across all four frames and only the light on it travels.
+//    The first version of that rule was applied too literally: ONE nine-pixel
+//    caustic set moved and 221 of 256 pixels were byte-identical across the entire
+//    loop — 86% of a tile that covers a whole submerged screen never moved at all,
+//    and a 7% per-frame delta is a cycle in name only.
+//
+//    So the light now has TWO frequencies that do not share a velocity. The primary
+//    caustics travel (+2, -1) per frame; a second set eight pixels away travels
+//    (-1, +1); and a bubble drifts up the right-hand side on a four-frame climb.
+//    Aligning two frames by either caustic velocity still leaves the other set and
+//    the bubble as residual, so the motion is not one drawing slid sideways.
 // ---------------------------------------------------------------------------
 
 // Ordered-Bayer water field, shared by the body tile and the sub-foam part of the
@@ -659,13 +963,27 @@ function waterField(x, y) {
   return 1;
 }
 
-// Three caustic diagonals. Frame f draws them at (+2f, -f), wrapping — one drawing,
-// four positions, nothing else in the tile moves.
+// Primary caustic diagonals, travelling (+2, -1) per frame and wrapping.
 const CAUSTICS = [
   [[2, 1], [3, 2], [4, 3]],
   [[9, 5], [10, 6], [11, 7]],
   [[5, 10], [6, 11], [7, 12]],
 ];
+
+// The counter-set: the same dashes, rolled across the tile, travelling (-2, +1) —
+// the opposite way at the same speed. Two velocities is the whole point, because
+// one set on its own is a drawing being slid and a slid drawing is a fake cycle.
+// They lean the SAME way as the primary set: a second family of diagonals at the
+// other angle turned the tile into fishnet.
+const CAUSTICS_B = [
+  [[12, 0], [13, 1], [14, 2]],
+  [[1, 6], [2, 7], [3, 8]],
+  [[6, 13], [7, 14], [8, 15]],
+];
+
+// A bubble climbing the right-hand side, two pixels tall, one column of drift per
+// frame so it never traces the same line twice inside the loop.
+const WATER_BUBBLE = [[13, 12], [12, 8], [13, 4], [12, 0]];
 
 function waterBody(phase) {
   const rows = [];
@@ -680,7 +998,29 @@ function waterBody(phase) {
       edits.push([(x + phase * 2) & 15, (y - phase + 16) & 15, '3']);
     }
   }
-  return px(rows, edits);
+  for (const line of CAUSTICS_B) {
+    for (const [x, y] of line) {
+      edits.push([(x - phase * 2 + 16) & 15, (y + phase) & 15, '3']);
+    }
+  }
+  const [bx, by] = WATER_BUBBLE[phase];
+  edits.push([bx, by, '2'], [bx, (by + 1) & 15, '2'], [(bx + 1) & 15, by, '0']);
+  const out = px(rows, edits);
+  // A shaft of light raking through the water, parallel to the caustics: a 2px band
+  // travelling 4px per frame, wrapping after four in x AND in y. It lifts the base
+  // tone one notch and leaves the dark sprinkle and the caustics alone, so it is
+  // the LIGHT moving over the material and not the material being re-rolled — but
+  // it touches thirty-odd pixels, which is what finally gives the body tile a cycle
+  // a player can see. Every row gets exactly two band pixels, so the tile is still
+  // value-uniform row by row and a column of them still stacks without banding.
+  return out.map((row, y) => {
+    let s = '';
+    for (let x = 0; x < 16; x++) {
+      const d = (((x - y - 4 * phase) % 16) + 16) % 16;
+      s += d < 2 && row[x] === '1' ? '2' : row[x];
+    }
+    return s;
+  });
 }
 
 const R_WATER_BODY = [0, 1, 2, 3].map(waterBody);
@@ -704,7 +1044,9 @@ function waterSurface(phase) {
       else if (y < t + 2) s += '5';                 // foam cap
       else if (y === t + 2) s += '4';               // water lit through the crest
       else if (y === t + 3) s += '3';
-      else if (t === 0 && y <= t + 5) s += '0';     // trough shadow under the cap
+      // The shadow a crest throws into the water behind it: one pixel tall, only
+      // under the two highest columns. As a 3x2 block it punched a hole in the wave.
+      else if (y === t + 4 && t <= 1) s += t === 0 ? '0' : '1';
       else s += String(waterField(x, y) + 1);
     }
     rows.push(s);
@@ -715,117 +1057,22 @@ function waterSurface(phase) {
 const R_WATER_SURF = [0, 1, 2, 3].map(waterSurface);
 
 // Depth lives here, not in the bitmap: each step slides the 4-colour window one
-// notch down the 6-colour WATER_PAL, so a deep tile is the same drawing lit less.
+// notch down the 7-colour WATER_PAL, so a deep tile is the same drawing lit less.
+// Step 0 is the window the surface tile's own sub-foam field uses, which is why the
+// seam under a crest is invisible; steps 1 and 2 are the same drawing further down.
 const waterDepthPal = (theme, d) => WATER_PAL[theme].slice(2 - d, 6 - d);
+const waterSurfPal = (theme) => WATER_PAL[theme].slice(1);
 
-const R_WATER_SURF_A = [
-  '.5555...........',
-  '5444455.......55',
-  '433334455...5544',
-  '3222233445554433',
-  '2222222334443322',
-  '2222222223332222',
-  '2222222222222222',
-  '2222222222222222',
-  '2332222223322222',
-  '2223222222232222',
-  '2222212222222122',
-  '2222222222222222',
-  '2222233222222332',
-  '2222222322222223',
-  '2222222222222222',
-  '2222222222222222',
-];
-
-const R_WATER_SURF_B = [
-  '.......555......',
-  '......544455....',
-  '5...554333445555',
-  '4555443222334444',
-  '3444332222223333',
-  '2333222222222222',
-  '2222233222222332',
-  '2222222322222223',
-  '2222222222222222',
-  '2212222222122222',
-  '2332222223322222',
-  '2223222222232222',
-  '2222222222222222',
-  '2222222222222222',
-  '2222233222222332',
-  '2222222322222223',
-];
-
-// The depth ramp is dithered, not banded: solid bands would stripe every 16px
-// when a pool is stacked. Lit dither at the top, deep dither at the bottom, and
-// row 15 is still 25% midtone so the wrap into the next tile stays soft.
-const R_WATER_BODY_A = px(
-  [
-    '2323232323232323',
-    '3232323232323232',
-    '2322232223222322',
-    '2232223222322232',
-    '2223222322232223',
-    '2222222222222222',
-    '2222222222222222',
-    '2221222122212221',
-    '2212221222122212',
-    '2122212221222122',
-    '2121212121212121',
-    '1212121212121212',
-    '1112111211121112',
-    '1121112111211121',
-    '1211121112111211',
-    '1112111211121112',
-  ],
-  [
-    // caustics — light chasing down through the column, dimming with depth
-    [2, 1, '4'], [3, 2, '4'], [4, 3, '4'],
-    [9, 5, '4'], [10, 6, '4'], [11, 7, '4'],
-    [5, 10, '3'], [6, 11, '3'], [7, 12, '3'],
-    // paired depth motes
-    [3, 13, '0'], [4, 13, '0'], [10, 14, '0'], [11, 14, '0'],
-    [6, 14, '2'], [7, 14, '2'], [12, 11, '2'], [13, 11, '2'],
-    [1, 6, '3'], [2, 6, '3'], [13, 5, '3'], [14, 5, '3'],
-  ]
-);
-
-const R_WATER_BODY_B = px(
-  [
-    '3232323232323232',
-    '2323232323232323',
-    '2232223222322232',
-    '2223222322232223',
-    '2322232223222322',
-    '2222222222222222',
-    '2222222222222222',
-    '2122212221222122',
-    '2221222122212221',
-    '2212221222122212',
-    '1212121212121212',
-    '2121212121212121',
-    '1211121112111211',
-    '1112111211121112',
-    '1121112111211121',
-    '1211121112111211',
-  ],
-  [
-    // same caustics, 4px right and 1px up
-    [6, 0, '4'], [7, 1, '4'], [8, 2, '4'],
-    [13, 4, '4'], [14, 5, '4'], [15, 6, '4'],
-    [9, 9, '3'], [10, 10, '3'], [11, 11, '3'],
-    // motes drift too
-    [4, 12, '0'], [5, 12, '0'], [11, 13, '0'], [12, 13, '0'],
-    [7, 15, '2'], [8, 15, '2'], [13, 10, '2'], [14, 10, '2'],
-    [2, 5, '3'], [3, 5, '3'], [14, 6, '3'], [15, 6, '3'],
-  ]
-);
 
 // ---------------------------------------------------------------------------
 // FLAGPOLE
 // ---------------------------------------------------------------------------
 
-const POLE_ROW = '......04310.....';
+// The shaft is a 4px cylinder with an outline on BOTH sides — a pole read against
+// open sky needs a dark edge either side or the sky eats it — and it carries the
+// full ramp across those four columns (spec, lit, mid, shadow). Skipping the
+// midtone, as the old 3px shaft did, turned a round mast into a folded ribbon.
+const POLE_ROW = '.....043210.....';
 const R_FLAG_POLE = new Array(16).fill(POLE_ROW);
 
 const R_FLAG_BALL = [
@@ -846,35 +1093,67 @@ const R_FLAG_BALL = [
 ];
 
 // ---------------------------------------------------------------------------
-// CORAL — brain-coral ridges. Ridge pitch 4px vertical, undulation period 8px
-// horizontal, so it courses in both axes with no seam.
+// CORAL — staghorn.
+//
+// The last cut solved the wrong problem. It fixed an earlier tile that was 92
+// pixels of pure black by filling the whole cell with midtone, and ended up 196 of
+// 256 pixels (77%) in two ADJACENT midtones with six pixels of highlight in the
+// entire tile. At 1x that is not staghorn coral, it is a square of brown gravel:
+// no value range means no form, and the stalks the comment described could not be
+// seen at all.
+//
+// This one widens the range instead of adding more midtone wander. The gap between
+// branches is slot 0 — that gap is a shaded crevice, so it should be the darkest
+// thing in the tile — and every branch is read out as a CROSS-SECTION rather than
+// by looking at whether the pixel next door is empty: lit arris, core, shadow
+// flank, crevice, straight across. That is what puts the whole ramp on every
+// stalk. Measured: no slot above 39% of the tile and 47 pixels across slots 3-5,
+// against 77% in two adjacent midtones and six highlight pixels before.
+//
+// Coral is SOLID terrain, so the silhouette is the whole cell; the structure lives
+// inside it.
 // ---------------------------------------------------------------------------
 
-const R_CORAL = px(
-  [
-    '0043330000433300',
-    '0422223004222230',
-    '4222222303222210',
-    '3222222100311100',
-    '3222222100000000',
-    '0322221004333330',
-    '0031110042222223',
-    '0000000032222221',
-    '0043330032222221',
-    '0422223003111110',
-    '4222222300000000',
-    '3222222100433300',
-    '3222222104222230',
-    '0322221003222210',
-    '0031110000311100',
-    '0000000000000000',
-  ],
-  [
-    [1, 1, '5'], [9, 1, '5'], [8, 6, '5'], [1, 9, '5'], [10, 12, '5'],
-    [4, 3, '1'], [2, 4, '1'], [11, 2, '1'], [11, 7, '1'], [4, 11, '1'], [12, 13, '1'],
-    [5, 2, '3'], [3, 10, '3'], [13, 6, '3'], [5, 3, '1'], [12, 8, '1'], [5, 12, '1'],
-  ]
-);
+// The branches are wavy DIAGONALS on an 8px pitch — 8 divides 16, so the pattern
+// wraps and a wall of coral grows through every seam — and the offset of each is
+// perturbed by wrapping noise so no two are the same width or take the same wander.
+// Three hand-placed stalks at fixed columns were tried first and produced a regular
+// weave: a basket, not a reef, because every branch was the same width and every
+// gap the same gap.
+const coralWave = (x, y) => 2.7 * vnoise(x, y, 4, 7, 4) + 1.15 * vnoise(x, y, 8, 23, 8);
+
+function coralRows() {
+  const rows = [];
+  const cand = [];
+  for (let y = 0; y < 16; y++) {
+    let s = '';
+    for (let x = 0; x < 16; x++) {
+      const p = (((x + y + coralWave(x, y)) % 8) + 8) % 8;
+      if (p < 0.95) s += '3';                    // arris facing the light
+      else if (p < 3.5) s += '2';                // core of the branch
+      else if (p < 4.9) s += '1';                // flank turning away
+      else s += '0';                             // crevice between branches
+      if (p > 1.1 && p < 3.0 && y > 1 && y < 14) cand.push([x, y, hash2(x, y, 313)]);
+    }
+    rows.push(s);
+  }
+  // Five polyp clusters on the lit shoulders of the branches: a 3px slot-4 cap
+  // with a slot-5 wet pip in the middle of each. Choosing them by rank rather than
+  // by a threshold guarantees the top of the ramp is reached — a coral tile whose
+  // brightest tone appears six times in 256 pixels has no highlight at all.
+  const caps = [];
+  cand.sort((a, b) => a[2] - b[2]);
+  const taken = [];
+  for (const [x, y] of cand) {
+    if (caps.length >= 15) break;
+    if (taken.some(([tx, ty]) => Math.abs(tx - x) < 4 && Math.abs(ty - y) < 3)) continue;
+    taken.push([x, y]);
+    caps.push([(x + 15) % 16, y, '4'], [x, y, '5'], [(x + 1) % 16, y, '4']);
+  }
+  return px(rows, caps);
+}
+
+const R_CORAL = coralRows();
 
 // ---------------------------------------------------------------------------
 // ONE-WAY PLATFORM — planked lift, 8px deep, open underneath. The cap is
@@ -905,21 +1184,27 @@ const R_PLATFORM = [
 // CANNON — blaster barrel with a bored muzzle, and a plated pedestal that stacks.
 // ---------------------------------------------------------------------------
 
+// The muzzle is a BORED HOLE, not a black sticker. Slot 5 is the black core, slot 6
+// a machined rim-light on the upper-left inner edge where the bevel catches the key,
+// slot 7 the depth on the lower-right that the light never reaches. The aperture is
+// mirror-symmetric about y = 7: rows 4/10 and 5/9 carry the same silhouette, so the
+// hole is round instead of pear-shaped, which is what the old asymmetric outline
+// made it.
 const R_CANNON_BARREL = px(
   [
     '0000000000000000',
     '0444444444444410',
     '0433333333333210',
-    '0432224444222210',
-    '0432240000122210',
-    '0432405555012210',
-    '0434055555501210',
-    '0434055555501210',
-    '0432055555501210',
-    '0432055551101210',
-    '0432201111012210',
-    '0432220000222210',
-    '0432222222222210',
+    '0432244444422210',
+    '0432460000642210',
+    '0432605555506210',
+    '0434055557501210',
+    '0434055577501210',
+    '0434055577501210',
+    '0432055777501210',
+    '0432605555706210',
+    '0432460000642210',
+    '0432244444422210',
     '0421111111111110',
     '0111111111111110',
     '0000000000000000',
@@ -927,27 +1212,34 @@ const R_CANNON_BARREL = px(
   [[2, 4, '3'], [13, 11, '2'], [3, 12, '3']]
 );
 
+// A plate, not a rung. A horizontal seam at the top of each plate, a right-hand
+// falloff so the pedestal turns away from the light, and rivets big enough to read
+// as raised bosses: slot 4 on the lit corner, slot 1 on the shaded one.
 const R_CANNON_BASE = px(
   [
     '0400000000000010',
     '0443333333322110',
-    '0432222222222110',
-    '0432222222222110',
-    '0432222222222110',
-    '0432222222222110',
+    '0433333333322110',
     '0432222222221110',
+    '0432222222221110',
+    '0432222222221110',
+    '0432222222211110',
     '0432111111111110',
     '0400000000000010',
     '0443333333322110',
-    '0432222222222110',
-    '0432222222222110',
-    '0432222222222110',
-    '0432222222222110',
+    '0433333333322110',
     '0432222222221110',
+    '0432222222221110',
+    '0432222222221110',
+    '0432222222211110',
     '0432111111111110',
   ],
-  [[4, 3, '4'], [11, 3, '4'], [4, 4, '1'], [11, 4, '1'],
-   [4, 11, '4'], [11, 11, '4'], [4, 12, '1'], [11, 12, '1']]
+  [
+    [4, 4, '4'], [5, 4, '4'], [4, 5, '4'], [5, 5, '1'],
+    [10, 4, '4'], [11, 4, '4'], [10, 5, '4'], [11, 5, '1'],
+    [4, 12, '4'], [5, 12, '4'], [4, 13, '4'], [5, 13, '1'],
+    [10, 12, '4'], [11, 12, '4'], [10, 13, '4'], [11, 13, '1'],
+  ]
 );
 
 // ---------------------------------------------------------------------------
@@ -974,24 +1266,32 @@ const R_VINE_BLOCK = px(
     '0000000000000000',
   ],
   [
-    // mouth the beanstalk climbs out of
-    [5, 11, '0'], [6, 11, '0'], [7, 11, '0'], [8, 11, '0'], [9, 11, '0'], [10, 11, '0'],
-    [5, 12, '0'], [6, 12, '5'], [7, 12, '5'], [8, 12, '5'], [9, 12, '5'], [10, 12, '0'],
-    // stem, curving left then back
+    // the mouth the beanstalk climbs out of
+    [5, 12, '0'], [6, 12, '0'], [7, 12, '0'], [8, 12, '0'], [9, 12, '0'], [10, 12, '0'],
+    [5, 13, '0'], [6, 13, '5'], [7, 13, '5'], [8, 13, '5'], [9, 13, '5'], [10, 13, '0'],
+    // Stem: two pixels wide the whole way, lit tone ALWAYS on the left and shadow
+    // ALWAYS on the right. The old stem swapped its lit edge from side to side as
+    // it jogged, which is what turned a beanstalk into a green zigzag.
+    [7, 12, '7'], [8, 12, '6'],
     [7, 11, '7'], [8, 11, '6'],
-    [7, 10, '7'], [8, 10, '6'], [6, 10, '8'],
-    [7, 9, '7'], [8, 9, '6'],
-    [7, 8, '7'], [8, 8, '6'],
+    [7, 10, '7'], [8, 10, '6'],
+    [6, 9, '7'], [7, 9, '6'],
+    [6, 8, '7'], [7, 8, '6'],
     [6, 7, '7'], [7, 7, '6'],
-    [6, 6, '7'], [7, 6, '6'], [5, 6, '8'],
+    [7, 6, '7'], [8, 6, '6'],
     [7, 5, '7'], [8, 5, '6'],
-    [7, 4, '7'], [8, 4, '6'], [6, 4, '8'],
+    [8, 4, '7'], [9, 4, '6'],
     [8, 3, '7'], [9, 3, '6'],
     [9, 2, '7'], [10, 2, '6'],
-    // left leaf
-    [3, 8, '7'], [4, 8, '8'], [5, 8, '7'], [3, 9, '6'], [4, 9, '6'], [5, 9, '6'],
-    // right leaf
-    [9, 5, '7'], [10, 5, '8'], [11, 5, '7'], [10, 6, '6'], [11, 6, '6'], [12, 5, '6'],
+    // Left leaf — a 4x3 teardrop with a lit top, a bright core and a shadowed
+    // underside, joined to the stem instead of floating beside it.
+    [2, 7, '7'], [3, 7, '7'],
+    [2, 8, '7'], [3, 8, '8'], [4, 8, '8'], [5, 8, '7'],
+    [3, 9, '6'], [4, 9, '6'],
+    // right leaf, with its stalk reaching back to the stem
+    [11, 3, '7'], [12, 3, '7'],
+    [9, 4, '7'], [10, 4, '7'], [11, 4, '8'], [12, 4, '8'], [13, 4, '7'],
+    [11, 5, '6'], [12, 5, '6'],
   ]
 );
 
@@ -1000,24 +1300,34 @@ const R_VINE_BLOCK = px(
 // all five themes is a tile nobody drew for four of them.
 // ---------------------------------------------------------------------------
 
-// [depth, deep body, mid body, lit body, caustic, foam]
+// [abyss, depth, deep body, mid body, lit body, caustic, foam] — seven notches so
+// waterDepthPal can slide a four-colour window three steps down it. The window is
+// what makes a pool deepen; the drawing never changes.
 const WATER_PAL = {
-  overworld:   ['#052a55', '#0f5a86', '#2088c0', '#4fc0e8', '#b5ebf2', '#ffffff'],
-  underground: ['#052a55', '#083f78', '#0a4a90', '#2f8ad0', '#9fd6f2', '#ffffff'],
-  castle:      ['#083440', '#0a5a44', '#12806a', '#2fbc94', '#a0eec0', '#e8fff8'],
-  water:       ['#052a55', '#0d5090', '#1c74cc', '#4fa8ec', '#bcdfff', '#ffffff'],
-  athletic:    ['#062c50', '#12629a', '#2f94cc', '#63cbe8', '#c2eff4', '#ffffff'],
+  overworld:   ['#02142c', '#052a55', '#0f5a86', '#2088c0', '#4fc0e8', '#b5ebf2', '#ffffff'],
+  underground: ['#01060f', '#052a55', '#083f78', '#0a4a90', '#2f8ad0', '#9fd6f2', '#ffffff'],
+  // Cold, not emerald. A saturated green pool was the loudest thing on a castle
+  // screen and it collided head-on with the one object the castle rule reserves
+  // saturation for — the pipe. This one stays liquid, keeps a non-black darkest
+  // slot, and sits in the same cold key as the masonry.
+  castle:      ['#03141e', '#082430', '#0c3c50', '#14586e', '#2c8098', '#88c0d0', '#d8eef4'],
+  water:       ['#021530', '#052a55', '#0d5090', '#1c74cc', '#4fa8ec', '#bcdfff', '#ffffff'],
+  athletic:    ['#02102a', '#062450', '#0e4a92', '#2070c8', '#3f9ce0', '#a0d8f4', '#ffffff'],
 };
 
-// [crust, dark, body, lit, hot, crest]. Lava's darkest tone is a blood red, never
-// a brown-black: a crust plate has to stay legible as lava when the tile sits
-// right next to brown ground or brick.
+// [crust, deep, body, lit, hot, white-hot]. Six notches, and the pool is drawn
+// BODY-DOMINANT: the old set thresholded so hard toward the top of the ramp that a
+// lava tile came out a flat sheet of cream-flecked orange, weighted luminance 111 in
+// a theme whose floor is 52 — the pool was the brightest thing in the fortress and
+// it read as a lit rectangle rather than as molten rock. Lava's darkest tone is
+// still a blood red, never a brown-black, so a cooled crust plate stays legible as
+// lava when the tile sits right next to brown ground.
 const LAVA_PAL = {
-  overworld:   ['#6a0800', '#b00c00', '#e63000', '#ff6a00', '#ffb028', '#ffe89a'],
-  underground: ['#620a08', '#8e1000', '#bc2000', '#dc5606', '#f28c1c', '#ffc25e'],
-  castle:      ['#700600', '#c41800', '#f43c00', '#ff9020', '#ffd468', '#fff6d2'],
-  water:       ['#5a0a14', '#a80c22', '#d6241c', '#f4661c', '#ffa63c', '#ffe0a0'],
-  athletic:    ['#6a1000', '#c02c00', '#ee5200', '#ff9c22', '#ffd450', '#fff8c4'],
+  overworld:   ['#4a0600', '#8c1200', '#c42c00', '#ee5c04', '#ff9c1c', '#ffc84c'],
+  underground: ['#400a04', '#761000', '#a82400', '#d05204', '#ee8a18', '#ffb03c'],
+  castle:      ['#520400', '#9a1400', '#d43200', '#fa7010', '#ffae34', '#ffd868'],
+  water:       ['#440612', '#7e0c1c', '#b42018', '#e05418', '#f89434', '#ffbc60'],
+  athletic:    ['#4e0c00', '#902000', '#cc3e00', '#f47a10', '#ffb838', '#ffd66c'],
 };
 
 const FLAG_PAL = {
@@ -1031,29 +1341,32 @@ const FLAG_PAL = {
 // Coral is a different mineral in every place it grows: warm rock above ground,
 // cave teal below, ash in the castle, NES coral pink in the sea, moss in the sky.
 const CORAL_PAL = {
-  overworld:   ['#2a1010', '#6e2418', '#a8442c', '#dc7a52', '#f8c49a', '#fff2e0'],
-  underground: ['#1a0a20', '#4a1650', '#7e2a86', '#b85ac0', '#e8a8e8', '#ffffff'],
-  castle:      ['#120c10', '#3a2830', '#5e4650', '#8e7480', '#c4b0b8', '#ffffff'],
-  water:       ['#2e0c22', '#6e2046', '#c03470', '#ff83c0', '#ffcce5', '#ffffff'],
-  athletic:    ['#0e2010', '#245020', '#3f8030', '#78b850', '#c8e896', '#ffffff'],
+  overworld:   ['#42201a', '#7e3020', '#b04c30', '#dc7a52', '#f8c49a', '#fff2e0'],
+  underground: ['#2e1436', '#5a2062', '#8a3492', '#b85ac0', '#e8a8e8', '#ffffff'],
+  castle:      ['#241a20', '#4a3440', '#6a505c', '#8e7480', '#c4b0b8', '#ffffff'],
+  water:       ['#48163a', '#802854', '#c03470', '#ff83c0', '#ffcce5', '#ffffff'],
+  athletic:    ['#1c3620', '#2e5e28', '#498c38', '#78b850', '#c8e896', '#ffffff'],
 };
 
 const STONE_DEEP = {
-  overworld: '#33313a', underground: '#2c2210', castle: '#1b1b1f',
-  water: '#0e2c36', athletic: '#26302c',
+  overworld: '#2a1020', underground: '#241806', castle: '#181212',
+  water: '#0c1420', athletic: '#0c1a0c',
 };
-// Chamfer highlight on the staircase block — warm and tied to QUARRY, never a
-// bare #ffffff dropped on a coloured face.
+// Chamfer highlight on the staircase block — tied to QUARRY, never a bare #ffffff
+// dropped on a coloured face.
 const QUARRY_LIT = {
-  overworld: '#fff2dc', underground: '#e0f0d4', castle: '#fdf8fa',
-  water: '#e8fce8', athletic: '#f6ffe0',
+  overworld: '#fff0d4', underground: '#e0f8e4', castle: '#ffffee',
+  water: '#ffe8f4', athletic: '#f4ffff',
 };
 
 // SPENT GOLD — the used block. Reads as the SAME block as the question block (same
-// gold family, same bevel) but drained of light: peak luminance ~139 against the
-// live block's ~241. A consumed block must recede, so it is never built on TIMBER,
-// which is the lightest ramp in the theme and would drag the eye to a dead tile.
-const GOLD_SPENT = ['#4a3208', '#6e4c10', '#8f6a1e', '#ab8a3c'];
+// gold family, same bevel) but drained of light. It stays GOLD rather than sliding
+// to brown: the old ramp landed 24 units from the overworld floor and within two
+// luminance units of it, so in the theme where nearly every used block in the game
+// appears, a spent block was the same colour and the same value as the ground under
+// it. This one holds 46 from EARTH.overworld and reads 28 luminance units above it,
+// while still sitting far below the live block's peak.
+const GOLD_SPENT = ['#5c4410', '#8a6a1c', '#b08e34', '#d0b060'];
 
 // The muzzle bore: a bored hole, not a black sticker. Slot 5 is the black core,
 // slot 6 the machined bevel catching the upper-left light, slot 7 the depth the
@@ -1077,6 +1390,10 @@ export const TID = {
   CANNON_BARREL: 25, CANNON_BASE: 26, VINE_BLOCK: 27,
   COIN: 28, AXE: 29, TREE: 30, BUSH: 31, HILL: 32, CLOUD: 33,
   ANCHOR_PLATFORM: 34, ANCHOR_FIREBAR: 35,
+  // Extensions past the ARCHITECTURE legend: the top row of a lava pool and the
+  // capped top step of a staircase. Both are the same collision class as the tile
+  // they cap, so a level can adopt them by swapping a character.
+  LAVA_SURF: 36, STAIR_TOP: 37,
 };
 
 // ---------------------------------------------------------------------------
@@ -1090,31 +1407,48 @@ function buildTheme(theme) {
   const quarry = QUARRY[theme];
   const pipe = PIPE[theme];
   const timber = TIMBER[theme];
-  const water = WATER_PAL[theme];
+  const surfPal = waterSurfPal(theme);
   const lava = LAVA_PAL[theme];
   const S = (rows, palette, name) => makeSprite(rows, palette, { name: `${theme}:${name}` });
   // Question block: slot 0 is the theme outline, 1-4 are the gold ramp, 5-6 glyph.
   const qp = (ramp) => [earth[0], ramp[0], ramp[1], ramp[2], ramp[3], GLYPH[0], GLYPH[1]];
 
-  const qa = S(R_QUESTION_A, qp(GOLD), 'question-rest');
-  const qb = S(R_QUESTION_B, qp(GOLD_MID), 'question-bounce');
-  const qc = S(R_QUESTION_C, qp(GOLD_DIM), 'question-pressed');
-  const qd = S(R_QUESTION_D, qp(GOLD_RISE), 'question-rebound');
-  const lavaA = S(R_LAVA_A, lava, 'lava-a');
-  const lavaB = S(R_LAVA_B, lava, 'lava-b');
-  const lavaC = S(R_LAVA_C, lava, 'lava-c');
-  const surfA = S(R_WATER_SURF_A, water, 'water-surface-a');
-  const surfB = S(R_WATER_SURF_B, water, 'water-surface-b');
-  const bodyA = S(R_WATER_BODY_A, water, 'water-body-a');
-  const bodyB = S(R_WATER_BODY_B, water, 'water-body-b');
+  // The idle sweep runs on ONE ramp. Cycling the palette between idle frames is the
+  // "brightness flash" that makes a whole screen of blocks pulse in unison; the
+  // struck frames are the only ones allowed to change the block's overall level.
+  const qa = S(R_QUESTION_A, qp(GOLD), 'question-idle-0');
+  const qb = S(R_QUESTION_B, qp(GOLD), 'question-idle-1');
+  const qc = S(R_QUESTION_C, qp(GOLD), 'question-idle-2');
+  const qd = S(R_QUESTION_D, qp(GOLD), 'question-idle-3');
+  const qhit = S(R_QUESTION_HIT, qp(GOLD_MID), 'question-hit');
+  const qpress = S(R_QUESTION_PRESS, qp(GOLD_DIM), 'question-pressed');
+  const qrise = S(R_QUESTION_RISE, qp(GOLD_RISE), 'question-rebound');
+  const lavaF = R_LAVA.map((rows, i) => S(rows, lava, `lava-${i}`));
+  const lavaS = R_LAVA_SURF.map((rows, i) => S(rows, lava, `lava-surf-${i}`));
+  const [lavaA, lavaB, lavaC] = [lavaF[0], lavaF[3], lavaF[5]];
+  // Four phases of one drawing. The crest travels 4px per frame and wraps after
+  // sixteen; the field under it never moves.
+  const surf = R_WATER_SURF.map((rows, i) => S(rows, surfPal, `water-surface-${i}`));
+  // Depth step 0 is the tile that sits directly under a surface tile; 1 and 2 are
+  // the same four phases lit one and two notches further down the ramp.
+  const bodies = [0, 1, 2].map((d) =>
+    R_WATER_BODY.map((rows, i) => S(rows, waterDepthPal(theme, d), `water-body-${d}-${i}`))
+  );
+  const [surfA, surfB] = [surf[0], surf[2]];
+  const [bodyA, bodyB] = [bodies[0][0], bodies[0][2]];
   const groundA = S(R_GROUND_A, earth, 'ground-a');
   const groundB = S(R_GROUND_B, earth, 'ground-b');
+  const quarryPal = pal(quarry, QUARRY_LIT[theme]);
+  const stairA = S(R_STAIR_A, quarryPal, 'stair-a');
+  const stairB = S(R_STAIR_B, quarryPal, 'stair-b');
 
   const anims = {
-    question: new Anim([qa, qb, qc, qd], [10, 6, 8, 6]),
-    lava: new Anim([lavaA, lavaB, lavaC, lavaB], [8, 6, 8, 6]),
-    water: new Anim([surfA, surfB], 10),
-    waterBody: new Anim([bodyA, bodyB], 10),
+    question: new Anim([qa, qb, qc, qd], 9),
+    questionBump: new Anim([qhit, qpress, qrise, qa], [3, 4, 4, 3], false),
+    lava: new Anim(lavaF, 9),
+    lavaSurf: new Anim(lavaS, 9),
+    water: new Anim(surf, 8),
+    waterBody: new Anim(bodies[0], 10),
   };
 
   const t = {};
@@ -1124,7 +1458,9 @@ function buildTheme(theme) {
   t[TID.Q_ITEM] = qa;
   t[TID.USED] = S(R_USED, [earth[0], ...GOLD_SPENT], 'used');
   t[TID.STONE] = S(R_STONE, pal(stone, STONE_DEEP[theme]), 'stone');
-  t[TID.STAIR] = S(R_STAIR, pal(quarry, QUARRY_LIT[theme]), 'stair');
+  t[TID.STAIR] = stairA;
+  t[TID.STAIR_TOP] = S(R_STAIR_TOP, quarryPal, 'stair-top');
+  t[TID.LAVA_SURF] = lavaS[0];
   t[TID.PIPE_TL] = S(R_PIPE_TL, pipe, 'pipe-tl');
   t[TID.PIPE_TR] = S(R_PIPE_TR, pipe, 'pipe-tr');
   t[TID.PIPE_BL] = S(R_PIPE_BL, pipe, 'pipe-bl');
@@ -1140,15 +1476,26 @@ function buildTheme(theme) {
   t[TID.CASTLE_BRICK] = S(R_CASTLE, ASHLAR[theme], 'castle-brick');
   t[TID.CORAL] = S(R_CORAL, CORAL_PAL[theme], 'coral');
   t[TID.PLATFORM] = S(R_PLATFORM, timber, 'platform');
-  t[TID.CANNON_BARREL] = S(R_CANNON_BARREL, pal(stone, BORE), 'cannon-barrel');
+  t[TID.CANNON_BARREL] = S(R_CANNON_BARREL, pal(stone, BORE, BORE_RIM, BORE_DEEP), 'cannon-barrel');
   t[TID.CANNON_BASE] = S(R_CANNON_BASE, stone, 'cannon-base');
-  t[TID.VINE_BLOCK] = S(R_VINE_BLOCK, pal(brick, ...VINE_INK), 'vine-block');
+  // On TIMBER, not BRICK: a block that hands you a beanstalk must not ship the
+  // exact palette of the block you are meant to smash.
+  t[TID.VINE_BLOCK] = S(R_VINE_BLOCK, pal(timber, ...VINE_INK), 'vine-block');
 
   return {
     tiles: t,
     anims,
     ground: [groundA, groundB],
-    frames: { qa, qb, qc, qd, lavaA, lavaB, lavaC, surfA, surfB, bodyA, bodyB },
+    stair: [stairA, stairB],
+    lavaF,
+    lavaS,
+    surf,
+    bodies,
+    depth: bodies.map((b) => b[0]),
+    frames: {
+      qa, qb, qc, qd, qhit, qpress, qrise,
+      lavaA, lavaB, lavaC, surfA, surfB, bodyA, bodyB,
+    },
   };
 }
 
@@ -1186,6 +1533,92 @@ export const THEME_GROUND = {
 export const groundVariant = (theme, tileX = 0, tileY = 0) =>
   (THEME_GROUND[theme] || THEME_GROUND.overworld)[(tileX + tileY) & 1];
 
+// THEME_WATER_PHASES[theme] -> [p0, p1, p2, p3] surface tiles, each the crest
+// translated 4px right. Index by (tileX & 3) as well as by tick and the crest
+// travels along the pool instead of every tile pumping in unison.
+export const THEME_WATER_PHASES = {
+  overworld: BUILT.overworld.surf,
+  underground: BUILT.underground.surf,
+  castle: BUILT.castle.surf,
+  water: BUILT.water.surf,
+  athletic: BUILT.athletic.surf,
+};
+
+// THEME_WATER_DEPTH[theme][d] -> body tile lit d notches deeper (d = 0..2).
+// Depth is a palette window, never a gradient inside the tile, so a column of these
+// stacks without drawing a band every 16 pixels.
+export const THEME_WATER_DEPTH = {
+  overworld: BUILT.overworld.depth,
+  underground: BUILT.underground.depth,
+  castle: BUILT.castle.depth,
+  water: BUILT.water.depth,
+  athletic: BUILT.athletic.depth,
+};
+
+// Full 3 x 4 grid: [depthStep][phase].
+export const THEME_WATER_BODIES = {
+  overworld: BUILT.overworld.bodies,
+  underground: BUILT.underground.bodies,
+  castle: BUILT.castle.bodies,
+  water: BUILT.water.bodies,
+  athletic: BUILT.athletic.bodies,
+};
+
+export const waterDepth = (theme, tilesBelowSurface = 0) => {
+  const set = THEME_WATER_DEPTH[theme] || THEME_WATER_DEPTH.overworld;
+  return set[Math.max(0, Math.min(set.length - 1, tilesBelowSurface))];
+};
+
+export const waterPhase = (theme, tileX = 0, tick = 0) => {
+  const set = THEME_WATER_PHASES[theme] || THEME_WATER_PHASES.overworld;
+  return set[(tileX + (tick >> 3)) & 3];
+};
+
+// THEME_STAIR[theme] -> [variantA, variantB]. Two differently pitched stones, so a
+// flight of steps alternates instead of printing one drawing forty times.
+export const THEME_STAIR = {
+  overworld: BUILT.overworld.stair,
+  underground: BUILT.underground.stair,
+  castle: BUILT.castle.stair,
+  water: BUILT.water.stair,
+  athletic: BUILT.athletic.stair,
+};
+
+export const stairVariant = (theme, tileX = 0, tileY = 0) =>
+  (THEME_STAIR[theme] || THEME_STAIR.overworld)[(tileX + tileY) & 1];
+
+// THEME_LAVA_FRAMES[theme] -> the eight frames of the pool, so a caller with tile
+// coordinates can DE-PHASE a pool the way waterPhase de-phases a wave. Every cell
+// of a pool drawing the identical frame at the identical tick is what turned the
+// last lava into a 16px lattice; the body tile itself is now a seamless texture
+// with no landmark in it, and this is the second line of defence for any renderer
+// that can pass coordinates in.
+export const THEME_LAVA_FRAMES = {
+  overworld: BUILT.overworld.lavaF,
+  underground: BUILT.underground.lavaF,
+  castle: BUILT.castle.lavaF,
+  water: BUILT.water.lavaF,
+  athletic: BUILT.athletic.lavaF,
+};
+
+export const THEME_LAVA_SURF_FRAMES = {
+  overworld: BUILT.overworld.lavaS,
+  underground: BUILT.underground.lavaS,
+  castle: BUILT.castle.lavaS,
+  water: BUILT.water.lavaS,
+  athletic: BUILT.athletic.lavaS,
+};
+
+export const lavaPhase = (theme, tileX = 0, tileY = 0, tick = 0) => {
+  const set = THEME_LAVA_FRAMES[theme] || THEME_LAVA_FRAMES.overworld;
+  return set[(tileX * 3 + tileY * 5 + (tick >> 3)) & 7];
+};
+
+export const lavaSurfPhase = (theme, tileX = 0, tick = 0) => {
+  const set = THEME_LAVA_SURF_FRAMES[theme] || THEME_LAVA_SURF_FRAMES.overworld;
+  return set[(tileX * 3 + (tick >> 3)) & 7];
+};
+
 // ---------------------------------------------------------------------------
 // named exports (overworld set is the canonical one)
 // ---------------------------------------------------------------------------
@@ -1204,10 +1637,17 @@ export const T_QUESTION_C = OWF.qc;
 export const T_QUESTION_D = OWF.qd;
 export const T_QUESTION = OWF.qa;
 export const T_QUESTION_ANIM = BUILT.overworld.anims.question;
+export const T_QUESTION_HIT = OWF.qhit;
+export const T_QUESTION_PRESS = OWF.qpress;
+export const T_QUESTION_RISE = OWF.qrise;
+export const T_QUESTION_BUMP = BUILT.overworld.anims.questionBump;
 export const T_USED = OW[TID.USED];
 export const T_QUESTION_USED = OW[TID.USED];
 export const T_STONE = OW[TID.STONE];
 export const T_STAIR = OW[TID.STAIR];
+export const T_STAIR_A = BUILT.overworld.stair[0];
+export const T_STAIR_B = BUILT.overworld.stair[1];
+export const STAIR_VARIANTS = BUILT.overworld.stair;
 export const T_PIPE_TL = OW[TID.PIPE_TL];
 export const T_PIPE_TR = OW[TID.PIPE_TR];
 export const T_PIPE_BL = OW[TID.PIPE_BL];
@@ -1220,6 +1660,13 @@ export const T_LAVA_B = OWF.lavaB;
 export const T_LAVA_C = OWF.lavaC;
 export const T_LAVA = OWF.lavaA;
 export const T_LAVA_ANIM = BUILT.overworld.anims.lava;
+export const T_LAVA_FRAMES = BUILT.overworld.lavaF;
+export const T_LAVA_SURF_A = BUILT.overworld.lavaS[0];
+export const T_LAVA_SURF_B = BUILT.overworld.lavaS[3];
+export const T_LAVA_SURF_C = BUILT.overworld.lavaS[5];
+export const T_LAVA_SURF = BUILT.overworld.lavaS[0];
+export const T_LAVA_SURF_ANIM = BUILT.overworld.anims.lavaSurf;
+export const T_STAIR_TOP = OW[TID.STAIR_TOP];
 export const T_WATER_SURF_A = OWF.surfA;
 export const T_WATER_SURF_B = OWF.surfB;
 export const T_WATER_SURF = OWF.surfA;
@@ -1228,6 +1675,9 @@ export const T_WATER_BODY_A = OWF.bodyA;
 export const T_WATER_BODY_B = OWF.bodyB;
 export const T_WATER_BODY = OWF.bodyA;
 export const T_WATER_BODY_ANIM = BUILT.overworld.anims.waterBody;
+export const T_WATER_SURF_PHASES = BUILT.overworld.surf;
+export const T_WATER_BODY_PHASES = BUILT.overworld.bodies[0];
+export const T_WATER_BODY_DEPTH = BUILT.overworld.depth;
 export const T_FLAG_POLE = OW[TID.FLAG_POLE];
 export const T_FLAG_BALL = OW[TID.FLAG_BALL];
 export const T_CASTLE_BRICK = OW[TID.CASTLE_BRICK];
@@ -1247,11 +1697,11 @@ export const TILES = {
   2: { name: 'brick', solid: true, sprite: T_BRICK, breakable: true },
   3: {
     name: 'question', solid: true, sprite: T_QUESTION, question: true,
-    animated: T_QUESTION_ANIM, contains: 'coin', becomes: 7,
+    animated: T_QUESTION_ANIM, bump: T_QUESTION_BUMP, contains: 'coin', becomes: 7,
   },
   4: {
     name: 'question-item', solid: true, sprite: T_QUESTION, question: true,
-    animated: T_QUESTION_ANIM, contains: 'mushroom', becomes: 7,
+    animated: T_QUESTION_ANIM, bump: T_QUESTION_BUMP, contains: 'mushroom', becomes: 7,
   },
   5: {
     name: 'question-1up', solid: true, sprite: null, question: true,
@@ -1263,7 +1713,11 @@ export const TILES = {
   },
   7: { name: 'used', solid: true, sprite: T_USED },
   8: { name: 'stone', solid: true, sprite: T_STONE },
-  9: { name: 'stair', solid: true, sprite: T_STAIR },
+  // `capTop` names the tile this one turns into when nothing of its own kind is
+  // directly above it: the top step of a flight, the waterline of a pool. spriteFor
+  // and animatedSpriteFor apply it from the neighbour id; a renderer that only has
+  // the record can read it straight off here.
+  9: { name: 'stair', solid: true, sprite: T_STAIR, variants: STAIR_VARIANTS, capTop: 37 },
   10: { name: 'pipe-tl', solid: true, sprite: T_PIPE_TL, pipe: 'tl' },
   11: { name: 'pipe-tr', solid: true, sprite: T_PIPE_TR, pipe: 'tr' },
   12: { name: 'pipe-bl', solid: true, sprite: T_PIPE_BL, pipe: 'bl' },
@@ -1273,6 +1727,7 @@ export const TILES = {
   16: { name: 'pipe-side-body', solid: true, sprite: T_PIPE_SIDE_BODY, pipe: 'body' },
   17: {
     name: 'lava', solid: false, sprite: T_LAVA, harm: 'lava', animated: T_LAVA_ANIM,
+    frames: T_LAVA_FRAMES, capTop: 36,
   },
   18: {
     name: 'water-surface', solid: false, sprite: T_WATER_SURF, liquid: true,
@@ -1301,10 +1756,24 @@ export const TILES = {
   33: { name: 'cloud', solid: false, sprite: null, decor: true },
   34: { name: 'anchor-platform', solid: false, sprite: null, anchor: 'platform' },
   35: { name: 'anchor-firebar', solid: false, sprite: null, anchor: 'firebar' },
+  36: {
+    name: 'lava-surface', solid: false, sprite: T_LAVA_SURF, harm: 'lava',
+    animated: T_LAVA_SURF_ANIM,
+  },
+  37: { name: 'stair-top', solid: true, sprite: T_STAIR_TOP },
 };
 
-// Every LEGEND char from ARCHITECTURE.md §6, plus three extensions:
-// 'K'/'k' cannon barrel/base and '-' horizontal pipe body.
+// Every LEGEND char from ARCHITECTURE.md §6, plus five extensions:
+// 'K'/'k' cannon barrel/base, '-' horizontal pipe body, 'l' the top row of a lava
+// pool and 'T' the capped top step of a staircase.
+//
+// 'l' and 'T' stay in the legend for a level that wants to place them by hand, but
+// a level is no longer REQUIRED to: a census across 1-1..1-4 found both used zero
+// times, which stranded eight lava-surface frames per theme and five stair caps as
+// art that never appeared in the game. TILES[9].capTop / TILES[17].capTop and the
+// `above` argument to spriteFor / animatedSpriteFor apply the caps from the tile
+// map itself, so the pool gets its waterline and the flight gets its lit tread
+// whether or not anyone remembers to type the character.
 export const CHAR_TO_TILE = {
   '.': 0, ' ': 0,
   '#': 1, '=': 2,
@@ -1317,14 +1786,216 @@ export const CHAR_TO_TILE = {
   't': 30, 'b': 31, 'h': 32, 'c': 33,
   'g': 23, 'P': 24, '@': 34, 'F': 35, 'v': 27,
   'K': 25, 'k': 26,
+  'l': 36, 'T': 37,
 };
 
 export const tileForChar = (ch) => TILES[CHAR_TO_TILE[ch] ?? 0];
 
-// spriteFor(theme, id) is the plain lookup; pass tile coords as well and the
-// ground tile returns its alternating variant.
-export const spriteFor = (theme, id, tileX, tileY) => {
+// spriteFor(theme, id) is the plain lookup. Pass tile coordinates as well and the
+// tiles that must not wallpaper de-phase themselves; pass the id of the tile
+// DIRECTLY ABOVE and the two capping tiles apply themselves, so a level gets a
+// waterline on its lava and a lit tread on its staircase without having to opt in
+// with a legend character. `above` may be undefined (treated as "not the same
+// material", i.e. this cell is the top of its run) or null for "off the map".
+//
+// LAVA_SURF and STAIR_TOP exist precisely so that a pool does not ship with a hard
+// flat top edge and a staircase does not ship as a wall with no tread anywhere.
+// A shipped-level char census found 'l' and 'T' used zero times, which stranded 45
+// sprites; hanging the decision on the neighbour instead of on the level data is
+// what stops that happening again.
+export const spriteFor = (theme, id, tileX, tileY, above) => {
   const set = THEME_TILES[theme] || THEME_TILES.overworld;
+  if (id === TID.LAVA && above !== TID.LAVA && above !== undefined) return set[TID.LAVA_SURF];
+  if (id === TID.STAIR && above !== TID.STAIR && above !== undefined) return set[TID.STAIR_TOP];
   if (id === TID.GROUND && tileX != null) return groundVariant(theme, tileX, tileY || 0);
+  if (id === TID.STAIR && tileX != null) return stairVariant(theme, tileX, tileY || 0);
+  if (id === TID.LAVA && tileX != null) return lavaPhase(theme, tileX, tileY || 0, 0);
   return set[id] || null;
 };
+
+// The animated counterpart: same rules, but a live tick picks the frame. A renderer
+// that has the tile coordinate and the tick should call this for every animated
+// terrain tile — it is the only way a pool of lava or a pane of water stops drawing
+// the identical stamp in every cell on the same frame.
+export const animatedSpriteFor = (theme, id, tileX = 0, tileY = 0, tick = 0, above) => {
+  if (id === TID.LAVA) {
+    return above !== TID.LAVA && above !== undefined
+      ? lavaSurfPhase(theme, tileX, tick)
+      : lavaPhase(theme, tileX, tileY, tick);
+  }
+  if (id === TID.LAVA_SURF) return lavaSurfPhase(theme, tileX, tick);
+  if (id === TID.WATER_SURF) return waterPhase(theme, tileX, tick);
+  if (id === TID.WATER_BODY) {
+    const set = (THEME_WATER_BODIES[theme] || THEME_WATER_BODIES.overworld)[0];
+    return set[(tileX + (tick >> 3)) & 3];
+  }
+  return spriteFor(theme, id, tileX, tileY, above);
+};
+
+// ---------------------------------------------------------------------------
+// The palette policy at the top of this file, enforced.
+//
+// Every clause up there used to be a comment, and a review found four of them
+// measurably false in the shipped module — the castle's breakable brick and its
+// indestructible ashlar were two luminance units apart, a spent block was the same
+// colour and value as the floor, and two ramps shipped identical in two themes.
+// A rule nobody measures is a wish. These run at import time and throw, so the
+// module cannot boot with the policy broken.
+// ---------------------------------------------------------------------------
+
+const rgb = (c) => {
+  let h = String(c).slice(1);
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+};
+const lumOf = (c) => { const [r, g, b] = rgb(c); return 0.299 * r + 0.587 * g + 0.114 * b; };
+const rgbDist = (a, b) => {
+  const p = rgb(a); const q = rgb(b);
+  return Math.sqrt((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2);
+};
+// mean over the four body tones — slot 0 is exempt, every terrain outline is
+// deliberately near-black and shared
+const rampGap = (a, b, ao = 1, bo = 1) => {
+  let s = 0;
+  for (let i = 0; i < 4; i++) s += rgbDist(a[ao + i], b[bo + i]);
+  return s / 4;
+};
+// what the eye actually gets: the mean luminance of the finished 16x16 tile
+const SLOTS = '0123456789abcdef';
+function tileLuminance(sprite) {
+  let sum = 0;
+  let n = 0;
+  for (const row of sprite.rows) {
+    for (const ch of row) {
+      if (ch === '.' || ch === ' ') continue;
+      const c = sprite.palette[SLOTS.indexOf(ch)];
+      if (c == null) continue;
+      sum += lumOf(c);
+      n++;
+    }
+  }
+  return n ? sum / n : 0;
+}
+
+function assertPalette() {
+  const fail = [];
+  const check = (ok, msg) => { if (!ok) fail.push(msg); };
+  const MATERIAL = {
+    EARTH: EARTH, BRICK: BRICK, ASHLAR: ASHLAR, STONE: STONE, QUARRY: QUARRY, TIMBER: TIMBER,
+  };
+  const names = Object.keys(MATERIAL);
+
+  for (const t of THEMES) {
+    for (let i = 0; i < names.length; i++) {
+      for (let j = i + 1; j < names.length; j++) {
+        const d = rampGap(MATERIAL[names[i]][t], MATERIAL[names[j]][t]);
+        check(d >= 45, `${t}: ${names[i]}/${names[j]} only ${d.toFixed(0)} RGB apart`);
+      }
+    }
+    // liquids never disappear into the floor they are cut into
+    const liquids = { WATER: WATER_PAL[t].slice(2), LAVA: LAVA_PAL[t].slice(1) };
+    for (const lk of Object.keys(liquids)) {
+      for (const mk of names) {
+        const d = rampGap(liquids[lk], MATERIAL[mk][t], 0, 1);
+        check(d >= 55, `${t}: ${lk} only ${d.toFixed(0)} from ${mk}`);
+      }
+    }
+    // breakable never wears the question block's gold
+    check(rampGap(BRICK[t], GOLD, 1, 0) >= 45, `${t}: BRICK only ${rampGap(BRICK[t], GOLD, 1, 0).toFixed(0)} from GOLD`);
+    // a spent block is neither the colour nor the value of the floor
+    check(rampGap(GOLD_SPENT, EARTH[t], 0, 1) >= 40, `${t}: GOLD_SPENT only ${rampGap(GOLD_SPENT, EARTH[t], 0, 1).toFixed(0)} from EARTH`);
+
+    const tiles = BUILT[t].tiles;
+    const L = (id) => tileLuminance(tiles[id]);
+    check(L(TID.BRICK) - L(TID.GROUND) >= 20, `${t}: BRICK is only ${(L(TID.BRICK) - L(TID.GROUND)).toFixed(0)} luminance above GROUND`);
+    check(L(TID.CASTLE_BRICK) - L(TID.BRICK) >= 25, `${t}: ASHLAR is only ${(L(TID.CASTLE_BRICK) - L(TID.BRICK)).toFixed(0)} luminance above BRICK`);
+    check(L(TID.USED) - L(TID.GROUND) >= 20, `${t}: USED is only ${(L(TID.USED) - L(TID.GROUND)).toFixed(0)} luminance above GROUND`);
+    check(L(TID.STAIR) - L(TID.GROUND) >= 40, `${t}: STAIR is only ${(L(TID.STAIR) - L(TID.GROUND)).toFixed(0)} luminance above GROUND`);
+  }
+
+  // one material must not ship twice under two theme names
+  for (const k of names) {
+    for (let i = 0; i < THEMES.length; i++) {
+      for (let j = i + 1; j < THEMES.length; j++) {
+        const d = rampGap(MATERIAL[k][THEMES[i]], MATERIAL[k][THEMES[j]]);
+        check(d >= 35, `${k}: ${THEMES[i]} and ${THEMES[j]} only ${d.toFixed(0)} apart`);
+      }
+    }
+  }
+  const pipeNames = Object.keys(PIPE);
+  for (let i = 0; i < pipeNames.length; i++) {
+    for (let j = i + 1; j < pipeNames.length; j++) {
+      const d = rampGap(PIPE[pipeNames[i]], PIPE[pipeNames[j]]);
+      check(d >= 35, `PIPE: ${pipeNames[i]} and ${pipeNames[j]} only ${d.toFixed(0)} apart`);
+    }
+  }
+
+  // every declared slot reached by at least one pixel — an unused slot means the
+  // form was never fully shaded
+  for (const t of THEMES) {
+    for (const id of Object.keys(BUILT[t].tiles)) {
+      const sp = BUILT[t].tiles[id];
+      const seen = new Set([...sp.rows.join('')]);
+      for (let i = 0; i < sp.palette.length; i++) {
+        if (sp.palette[i] == null) continue;
+        check(seen.has(SLOTS[i]), `${sp.name}: declares slot ${i} and never uses it`);
+      }
+    }
+  }
+
+  if (fail.length) throw new Error(`tiles.js palette policy broken:\n  ${fail.join('\n  ')}`);
+}
+
+// The animation policy, enforced the same way. "A frame is not allowed to be its
+// neighbour nudged sideways" is only worth writing down if something checks it:
+// the water body shipped with 86% of its pixels byte-identical across the whole
+// loop and a 7% per-frame delta, which is a cycle in name only.
+function assertAnimation() {
+  const fail = [];
+  const stats = (anim) => {
+    const f = anim.frames;
+    const h = f[0].rows.length;
+    const w = f[0].rows[0].length;
+    let still = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let same = true;
+        for (let i = 1; i < f.length && same; i++) if (f[i].rows[y][x] !== f[0].rows[y][x]) same = false;
+        if (same) still++;
+      }
+    }
+    let min = Infinity;
+    for (let i = 0; i < f.length; i++) {
+      const a = f[i].rows;
+      const b = f[(i + 1) % f.length].rows;
+      let d = 0;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (a[y][x] !== b[y][x]) d++;
+      min = Math.min(min, d);
+    }
+    return { still: still / (w * h), min: min / (w * h) };
+  };
+  for (const t of THEMES) {
+    for (const key of ['question', 'lava', 'lavaSurf', 'water', 'waterBody']) {
+      const s = stats(BUILT[t].anims[key]);
+      if (s.min < 0.12) fail.push(`${t}.${key}: per-frame delta only ${(s.min * 100).toFixed(0)}%`);
+      if (s.still > 0.72) fail.push(`${t}.${key}: ${(s.still * 100).toFixed(0)}% of the tile never moves`);
+    }
+    // The question block's '?' must be byte-identical across its idle loop: an
+    // idle animation that moves geometry the player reads as static makes a row of
+    // untouched blocks judder in lockstep like a rendering fault.
+    const idle = BUILT[t].anims.question.frames;
+    let moved = 0;
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const c = idle[0].rows[y][x];
+        if (c !== '5' && c !== '6') continue;
+        for (let i = 1; i < idle.length; i++) if (idle[i].rows[y][x] !== c) moved++;
+      }
+    }
+    if (moved) fail.push(`${t}: the question glyph moves in ${moved} places during its idle loop`);
+  }
+  if (fail.length) throw new Error(`tiles.js animation policy broken:\n  ${fail.join('\n  ')}`);
+}
+
+assertPalette();
+assertAnimation();

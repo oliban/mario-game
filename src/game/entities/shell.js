@@ -180,13 +180,17 @@ export default class Shell extends Entity {
 
   onPlayerTouch(player) {
     if (this.dead) return;
+    // The grace window has to be checked BEFORE the sliding branch. kick() sets
+    // `sliding` and `kickGrace` together, so a player who is still overlapping the
+    // shell on the frame after kicking it would otherwise be hurt by the very shell
+    // they just kicked away.
+    if (this.kickGrace > 0) return;
     if (this.sliding) {
       // Star Mario smashes a live shell instead of taking the hit.
       if (starTouch(this, player, 200)) return;
       hurtPlayer(this);
       return;
     }
-    if (this.kickGrace > 0) return;
     let dir = player && player.centerX > this.centerX ? -1 : 1;
     if (player && Math.abs(player.vx || 0) > 0.15) dir = player.vx > 0 ? 1 : -1;
     this.kick(dir);

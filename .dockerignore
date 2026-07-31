@@ -1,0 +1,10 @@
+node_modules
+shots
+tools
+.git
+.github
+*.md
+!index.html
+package-lock.json
+.DS_Store
+_j*.js

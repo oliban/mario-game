@@ -606,6 +606,10 @@ export class World {
         pickArt(itemsMod, ['DEBRIS', 'BRICK_DEBRIS', 'BRICK_PIECE']) ||
         pickArt(tilesMod, ['T_BRICK_DEBRIS', 'BRICK_DEBRIS', 'T_BRICK_PIECE']),
       flag: pickArt(sceneryMod, ['FLAG', 'FLAGPOLE_FLAG', 'LEVEL_FLAG']),
+      // scenery.js authors a proper 80x80 castle; without this it was never drawn
+      // and levels had to fake one out of solid castle-brick tiles.
+      castle: poseArt(sceneryMod && sceneryMod.CASTLE_BIG, ['sprite', 'idle', 'big']),
+      castleSmall: poseArt(sceneryMod && sceneryMod.CASTLE_SMALL, ['sprite', 'idle', 'small']),
     };
 
     this.particles = opts.particles !== undefined ? opts.particles : buildParticles();
@@ -1455,8 +1459,10 @@ export class World {
   }
 
   _onStompLanded(p, e) {
-    this.freeze(3);
-    this.shake(1.1, 5);
+    // No hit-stop on a stomp. SMB has none, and freezing here breaks chain-stomping:
+    // every frozen frame costs ~2.6px of horizontal travel at run speed, so a player
+    // bouncing off one enemy lands SHORT of the next one and takes a hit instead.
+    this.shake(0.8, 4);
     this.sfx('stomp');
     this.fx('landingDust', e.x + e.w * 0.5, e.y + e.h, 1);
 
@@ -1782,7 +1788,33 @@ export class World {
     return rec.sprite || null;
   }
 
+  // The end-of-level castle. Background art, drawn behind everything, with its base
+  // planted on the ground column beneath it and its doorway centred on castleX so
+  // the walk-in lines up with the arch.
+  _drawCastle(ctx, cam) {
+    if (this.castleX == null) return;
+    const s = artFrame(this.art.castle, this.tick);
+    if (!s) return;
+    const tx = Math.floor(this.castleX / TILE);
+    // Find the floor by walking UP from the bottom to the first gap. Scanning down
+    // from the top instead lands on whatever solid tile comes first — a brick, a
+    // platform, a leftover decorative block — and leaves the castle floating.
+    let groundY = this.h * TILE;
+    for (let ty = this.h - 1; ty >= 0; ty--) {
+      const r = this.recAt(tx, ty);
+      if (!(r && r.solid)) {
+        groundY = (ty + 1) * TILE;
+        break;
+      }
+    }
+    const x = Math.floor(this.castleX + TILE / 2 - s.w / 2 - cam.x);
+    const y = Math.floor(groundY - s.h - cam.y);
+    if (x + s.w < 0 || x > SCREEN_W) return;
+    s.draw(ctx, x, y);
+  }
+
   drawBackground(ctx, cam) {
+    this._drawCastle(ctx, cam);
     const list = this.decor;
     const span = this.w * TILE;
     for (let i = 0; i < list.length; i++) {

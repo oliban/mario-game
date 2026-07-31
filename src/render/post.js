@@ -124,19 +124,23 @@ const PRESET_DEFS = {
       persistence: false,
       grade: true,
     },
+    // The default preset. Bloom here is a highlight accent, NOT an image-wide glow:
+    // a high threshold plus a tight radius means only genuinely emissive things
+    // (coins, fireballs, the star) halo, while tile and sprite edges stay hard.
+    // A wide low-threshold bloom is what makes crisp pixel art read as blurry.
     params: {
-      sharp: 0.85,
-      bloomThreshold: 0.72,
-      bloomKnee: 0.09,
-      bloomAmount: 1.35,
-      bloomRadius: 0.85,
+      sharp: 1.0,
+      bloomThreshold: 0.86,
+      bloomKnee: 0.05,
+      bloomAmount: 0.5,
+      bloomRadius: 0.45,
       bloomIterations: 1,
-      scanline: 0.1,
-      vignette: 0.15,
-      glow: 0.05,
-      gamma: 1.02,
-      saturation: 1.1,
-      contrast: 1.03,
+      scanline: 0.05,
+      vignette: 0.1,
+      glow: 0.02,
+      gamma: 1.0,
+      saturation: 1.08,
+      contrast: 1.06,
       brightness: 1.0,
       lift: 0.0,
     },
@@ -583,7 +587,12 @@ export class PostChain {
   _syncSrcFilter() {
     const gl = this.gl;
     if (!gl || this.dead) return;
-    const wantLinear = !this.passthrough;
+    // The 256x240 source is pixel art and must be magnified with NEAREST, or every
+    // sprite edge is bilinearly smeared across the upscale — which is what made the
+    // whole game look soft the moment any post pass was enabled. Only barrel
+    // distortion genuinely needs interpolation, because it resamples on warped UVs;
+    // every other pass reads the source 1:1 and wants hard texels.
+    const wantLinear = !this.passthrough && !!this.passes.barrel;
     if (wantLinear === this._linearSrc) return;
     this._linearSrc = wantLinear;
     const f = wantLinear ? gl.LINEAR : gl.NEAREST;

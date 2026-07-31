@@ -70,6 +70,11 @@ export default class Hammer extends Entity {
     this.autoCorpse = false;
     this.despawnOffscreen = false;
     this.held = !!opts.held;
+    // A thrown hammer spawns roughly a tile ABOVE the Hammer Bro's head, which is
+    // exactly where a player descending to stomp him passes through. Without a
+    // short grace the bro is effectively unstompable while armed: you land on his
+    // head and die to a hammer that has not visibly left his hand yet.
+    this.spawnGrace = opts.held ? 0 : 8;
     this.holder = opts.holder || null;
     if (!this.held) sfx(world, 'shoot');
   }
@@ -88,11 +93,15 @@ export default class Hammer extends Entity {
     this.holder = null;
     this.vx = typeof vx === 'number' ? vx : 1.5 * this.facing;
     this.vy = typeof vy === 'number' ? vy : -5.0;
+    // Same reason as the constructor: give it a few frames to clear the thrower's
+    // head so a descending stomp is not an automatic hit.
+    this.spawnGrace = 8;
     sfx(this.world, 'shoot');
   }
 
   update() {
     this.t++;
+    if (this.spawnGrace > 0) this.spawnGrace--;
     if (this.held) {
       if (this.holder) {
         this.x = this.holder.x + (this.holder.facing < 0 ? -6 : this.holder.w - 4);
@@ -112,6 +121,7 @@ export default class Hammer extends Entity {
 
   onPlayerTouch(player) {
     if (this.held || this.removed) return;
+    if (this.spawnGrace > 0) return;
     if (player && typeof player.hurt === 'function') player.hurt(this);
     else if (player && typeof player.damage === 'function') player.damage(this);
   }

@@ -16,6 +16,8 @@
 // touches the play field.
 
 import { SCREEN_W, HUD_H, LAYER } from '../core/constants.js';
+// aliased: hud.js already uses a local `t` for the tick counter.
+import { t as tr } from '../i18n.js';
 import { makeSprite } from '../core/gfx.js';
 import { FONT, FONT_PAL_WHITE, FONT_PAL_DARK, GLYPH } from '../data/sprites/font.js';
 
@@ -380,6 +382,8 @@ export class Hud {
       time: w.time | 0,
       lives: w.lives | 0,
       timeUp: (w.time | 0) <= 0 && w.deathCause === 'timeup',
+      // Harry mode and two-player both rename the left-hand label.
+      name: w.playerName || null,
     };
   }
 
@@ -403,9 +407,9 @@ export class Hud {
     const d = data || DEFAULT_STATE;
     const t = this.tick;
 
-    drawText(ctx, 'MARIO', L.marioX, L.rowLabel);
-    drawText(ctx, 'WORLD', L.worldX, L.rowLabel);
-    drawText(ctx, 'TIME', L.timeX, L.rowLabel);
+    drawText(ctx, d.name || tr('mario'), L.marioX, L.rowLabel);
+    drawText(ctx, tr('world'), L.worldX, L.rowLabel);
+    drawText(ctx, tr('time'), L.timeX, L.rowLabel);
 
     // Score. While a big award rolls in the digits sit in the gold palette so
     // the eye is pulled to them, then settle back to white.

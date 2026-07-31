@@ -61,7 +61,11 @@ export default {
     // Fire bars. `count` sets the ball count; reach is (count-1)*16 + 4 px.
     // 3 -> 36px, 4 -> 52px, 5 -> 68px.
     { type: 'firebar', x: 20, y: 7, count: 3 },
-    { type: 'firebar', x: 60, y: 5, count: 3, dir: -1 },
+    // Anchored over the LEDGE at 52-57, not over the lava gap at 58-61. Hanging it
+    // above the gap forced a frame-perfect jump that had to clear four tiles of lava
+    // and thread a rotating bar at the same instant; SMB always sequences these two
+    // challenges so you solve the bar on solid ground and then take the jump clean.
+    { type: 'firebar', x: 54, y: 8, count: 3, dir: -1 },
     { type: 'firebar', x: 71, y: 9, count: 4, angle: 90 },
     { type: 'firebar', x: 103, y: 5, count: 4, dir: -1 },
     { type: 'firebar', x: 152, y: 8, count: 5, angle: 180 },

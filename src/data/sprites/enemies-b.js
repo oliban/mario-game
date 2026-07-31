@@ -2,8 +2,18 @@
 // Blooper, Podoboo, Hammer Bro and the fire bar.
 //
 // Pixel chars: '.' transparent, '0'-'9'/'a'-'f' palette slots.
-// Light comes from the UPPER LEFT on every solid form.
+// Light comes from the UPPER LEFT on every solid form — including the frames
+// that are derived by rotation, which are re-lit rather than merely turned.
 // All sprites face RIGHT.
+//
+// Cross-material separation is a hard constraint here: a Bullet Bill, a grey
+// Cheep Cheep and a Blooper used to be painted from one blue-grey ramp and
+// merged into a single blob. They are now three different materials — Bill is
+// iron-black (fill luminance 7..87), the grey Cheep is saturated teal slate
+// with a warm-cream fin, the Blooper is a warm pearl bell (112..255). Bill's
+// ramp clears the Blooper's by 53 RGB units and the grey Cheep's by 38. The
+// one pair still tighter than that is the Blooper's lit tone against the
+// Cheep's dorsal specular, and both of those are near-white on purpose.
 
 import { makeSprite, Anim } from '../../core/gfx.js';
 import { INK } from '../palette.js';
@@ -24,11 +34,16 @@ function sp(rows, pal, w, h, name) {
 
 /* ------------------------------------------------------------------ *
  *  PIRANHA PLANT — 16x24, 2-frame snap.
- *  OPEN is the stretch: the head climbs two rows higher and pulls in to
- *  x1..x14 at its widest. SHUT is the squash: the head loses the top two
- *  rows, bleeds out to the full 16px for three rows, and the stalk whips
- *  — left under the head, right at the pot — as the jaws slam.
- *  White spots ride on the HEAD, as in the reference, not on the stem.
+ *  OPEN is the stretch: the crown climbs to row 0 and the maw narrows to
+ *  x3..x12 between two flared white lips. SHUT is the squash: the whole head
+ *  drops four rows, holds full width x2..x13 across five rows instead of one,
+ *  and the closed lip band ARCS — high on the left, low on the right — with
+ *  four irregular tooth gaps, so it is a scowl and not a zipper. No frame of
+ *  either plant touches x0 or x15, so neither collides with its own box.
+ *  The stalk is not an extruded tube: its specular column alternates one and
+ *  two pixels wide, and it KINKS one pixel sideways partway down — left for
+ *  the green plant, right for the fire plant, so a level holding both never
+ *  shows two identical columns of plastic.
  * ------------------------------------------------------------------ */
 
 const PIRANHA_PAL = [
@@ -39,50 +54,54 @@ const PIRANHA_PAL = [
   '#5ecb4a',  // 4 lit green
   '#a9ef8e',  // 5 specular
   '#ffffff',  // 6 white lips / spots / teeth
-  '#c2ccc0',  // 7 lip underside
+  '#aecfa6',  // 7 lip underside
   '#3d0a04',  // 8 throat
-  '#b02a18',  // 9 tongue
+  '#8e1d10',  // 9 tongue
 ];
 
+// The old fire ramp was rust-brown and sat on top of the Podoboo/firebar lava,
+// so plant and hazard read as one material. These are true reds — every index
+// is >= 45 RGB units from the lava ramp at the same slot — and the orange is
+// confined to slot 9, where it means 'a shot is loaded', not 'body colour'.
 const PIRANHA_FIRE_PAL = [
-  OUT,
-  '#4a0d00',
-  '#8f2000',
-  '#c03a10',
-  '#e86a20',
-  '#ffc46a',
-  '#ffffff',
-  '#e0c4b4',
-  '#2a0603',
-  '#e8a020',
+  OUT,        // 0 outline
+  '#3d0400',  // 1 core shadow
+  '#a01000',  // 2 shadow
+  '#e81c00',  // 3 mid
+  '#ff5a30',  // 4 lit
+  '#ffb090',  // 5 specular
+  '#ffffff',  // 6 white lips / teeth
+  '#e0c4b4',  // 7 lip underside
+  '#2a0603',  // 8 throat
+  '#e8a020',  // 9 ember glow
 ];
 
 //        0123456789abcdef
 const PIRANHA_OPEN = [
-  '.....000000.....',
-  '...0443333220...',
-  '..045443333220..',
-  '.04554433332210.',
-  '.04566666666210.',
-  '.06686886868210.',
-  '.06688999988210.',
-  '.04589999998210.',
-  '.04488999988210.',
-  '.04486868868210.',
-  '.03777777776210.',
+  '......0000......',
+  '....00443300....',
+  '...0443363220...',
+  '..046443353220..',
+  '.04555433332220.',
+  '.06666666666660.',
+  '..068868668680..',
+  '..089999999880..',
+  '..089999999980..',
+  '..088999998880..',
+  '..068688686680..',
+  '..077666666770..',
   '..033222222110..',
-  '..032222211110..',
-  '...0222111110...',
-  '....02332210....',
-  '....04533210....',
+  '...0322222110...',
+  '....03222110....',
   '....04553210....',
   '....04533210....',
-  '....04533210....',
-  '....04553210....',
-  '....04533210....',
-  '...0453332210...',
-  '...0455332210...',
-  '..045333221110..',
+  '....04543210....',
+  '...04553210.....',
+  '...04533210.....',
+  '...04543210.....',
+  '...04553210.....',
+  '...045332210....',
+  '...045532210....',
 ];
 
 // The slam: head loses its top two rows and bleeds to full width for three,
@@ -93,57 +112,90 @@ const PIRANHA_SHUT = [
   '................',
   '................',
   '................',
-  '................',
   '....00000000....',
-  '..045544333220..',
-  '.04554433332210.',
-  '0466443333222110',
-  '0466666666666610',
-  '0660600660660670',
-  '0677777777777710',
-  '0333333222221110',
-  '.03332222266110.',
-  '..033222211110..',
-  '...0222111110...',
-  '....02332210....',
-  '...04553210.....',
-  '...04533210.....',
-  '...04533210.....',
-  '...04553210.....',
+  '...0443333220...',
+  '..046443333220..',
+  '.04555433332220.',
+  '.06666433322210.',
+  '.08606660666210.',
+  '.07736906666660.',
+  '.03322777666680.',
+  '..033222227710..',
+  '...0322222110...',
+  '....03222110....',
   '....04533210....',
-  '....0453332210..',
-  '....0455332210..',
-  '...045333221110.',
+  '....04553210....',
+  '...04533210.....',
+  '...04553210.....',
+  '...04533210.....',
+  '...045332100....',
+  '....004553210...',
+  '.....04533210...',
+  '.....04553210...',
+  '.....04533210...',
 ];
 
-// The fire variant is NOT a straight recolour: its maw opens two pixels
-// wider and the throat carries an ember glow, so it reads as loading a shot.
+// The fire variant is NOT a recolour and NOT a symmetric pattern. The maw is
+// built on the same skeleton as the green plant: a single unbroken white lip
+// band on row 5, a dark slot-8 throat across rows 6-8 with a slot-9 ember
+// blob that is deliberately off-centre (its mass sits left of x7), upper teeth
+// hanging as 1px columns at x3/x9/x12 and lower teeth rising OFF those columns
+// at x4/x8/x11. Row 6 bites one pixel deeper on the left than row 8, so the
+// block is mirrored on neither axis and the light still falls from upper left.
+// The whole maw is inset to x1..x14 — nothing reaches x0 or x15.
 //        0123456789abcdef
 const PIRANHA_FIRE_OPEN = [
-  '.....000000.....',
+  '....00000000....',
   '...0443333220...',
-  '..045443333220..',
-  '.04554433332210.',
-  '.06666666666210.',
-  '.06868868686210.',
-  '.08999999998210.',
-  '.08955559988210.',
-  '.08995599988210.',
-  '.08686886868210.',
-  '.07777777776210.',
+  '..046443353220..',
+  '.04555433332220.',
+  '.04554433322210.',
+  '.06666666666660.',
+  '.08688999688680.',
+  '.08899999988880.',
+  '.07889998888880.',
+  '.08868886886880.',
+  '.07766666666770.',
   '..033222222110..',
-  '..032222211110..',
-  '...0222111110...',
-  '....02332210....',
+  '...0322222110...',
+  '....03222110....',
   '....04533210....',
   '....04553210....',
-  '....04533210....',
+  '....04543210....',
+  '.....04533210...',
+  '.....04553210...',
+  '.....04543210...',
+  '.....04533210...',
+  '.....04553210...',
+  '....045332210...',
+  '....045532210...',
+];
+
+const PIRANHA_FIRE_SHUT = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '.....000000.....',
+  '...0044332200...',
+  '..046443332220..',
+  '.04554433332210.',
+  '.06899999999860.',
+  '.03776666667710.',
+  '..033222222110..',
+  '...0332221110...',
+  '....03222110....',
+  '....03221110....',
   '....04533210....',
   '....04553210....',
-  '....04533210....',
-  '...0453332210...',
-  '...0455332210...',
-  '..045333221110..',
+  '.....04533210...',
+  '.....04553210...',
+  '.....04533210...',
+  '....004533210...',
+  '...045532100....',
+  '...04533210.....',
+  '...04553210.....',
+  '...04533210.....',
 ];
 
 const piranhaOpen = sp(PIRANHA_OPEN, PIRANHA_PAL, 16, 24, 'piranha.open');
@@ -153,77 +205,123 @@ export const PIRANHA = {
   snap: new Anim([piranhaOpen, piranhaShut], [22, 14]),
 };
 
+// The shut frame is authored, not recoloured: the fire plant clamps a row
+// tighter than the green one — one lip row instead of three, the seam still
+// glowing — and its stalk whips the opposite way, so the two plants in one
+// level never snap in lockstep.
 export const PIRANHA_FIRE = {
   snap: new Anim(
     [
       sp(PIRANHA_FIRE_OPEN, PIRANHA_FIRE_PAL, 16, 24, 'piranhaFire.open'),
-      piranhaShut.recolor(PIRANHA_FIRE_PAL, 'piranhaFire.shut'),
+      sp(PIRANHA_FIRE_SHUT, PIRANHA_FIRE_PAL, 16, 24, 'piranhaFire.shut'),
     ],
     [22, 14]
   ),
 };
 
 /* ------------------------------------------------------------------ *
- *  BULLET BILL — 16x16, 2-frame fly. A horizontal capsule: flat squared
- *  tail at x0, three-step hemispherical nose leading at x15. The face
- *  rides on the NOSE — white eyes with inward pupils and a downturned
- *  outline scowl, no teeth. One stubby fist, 4-connected to the casing.
+ *  BULLET BILL — 16x16, 2-frame fly plus a distinct static pose. A horizontal
+ *  cylinder banded top-to-bottom — crown streak, lit, mid, shadow, core —
+ *  capped by an ogive nose at the right and squared flat at the tail. The face
+ *  rides on the NOSE: two 2x2 white sclerae each with a slot-0 pupil crowded
+ *  into its forward-lower corner, a solid dark band under them, and a 5px white
+ *  grin below that. Two stubby fists hang off the belly, both outlined.
  * ------------------------------------------------------------------ */
 
-// Gunmetal rather than true black, and the outline is lifted to #3d4557 so
-// the silhouette survives a black castle sky instead of dissolving into it.
+// Iron, not gunmetal. The old ramp topped out mid-grey and the round looked
+// like a pale blimp; worse, its lit tone landed inside 10 RGB units of both
+// the grey Cheep's flesh and the Blooper's mantle, so three materials read as
+// one. This ramp is near-black throughout: the fill averages luminance 55 of
+// 255, 57% of it sits at slot 2 or darker, and the crown streak — the only
+// value above luminance 60 apart from the eyes — is spent on four pixels.
+// Slot 0 is the only value LIGHTER than the deepest fill: a rim, so the round
+// still cuts against a black castle sky.
 const BILL_PAL = [
-  '#3d4557',  // 0 outline (lifted off black on purpose)
-  '#4c5468',  // 1 core shadow
-  '#626b82',  // 2 shadow
-  '#7f899f',  // 3 mid
-  '#99a3b8',  // 4 lit
-  '#c3cbdb',  // 5 specular / belly bounce
-  '#ffffff',  // 6 eye white
-  '#c4cad6',  // 7 eye shade
+  '#1b1f2b',  // 0 outline / rim — the only value lighter than the deepest fill
+  '#06070c',  // 1 core shadow (the belly; near black)
+  '#12151f',  // 2 shadow
+  '#1f2431',  // 3 mid
+  '#2f3949',  // 4 lit
+  '#4e5670',  // 5 crown streak / belly bounce — 4 px, nothing else
+  '#ffffff',  // 6 eye white / grin
 ];
 
+// Frame A — level flight. The casing is a long, LOW capsule, not an egg: nine
+// rows tall across all sixteen columns, sealed by a square tail (outline column
+// x0, flat top and bottom outlines that start at x0 with no chamfer) and closed
+// by an ogive nose whose right edge steps 12/13/14/15/14/13/12. Row 4 is the
+// single lit crown band; the two 2x2 sclerae sit on rows 5-6 at x7-x8 and
+// x10-x11 with their slot-0 pupils forward and low, at x8 and x11. Row 7 is a
+// solid dark band, there purely so the eyes cannot fuse with the 5px white
+// grin on row 8 — which is exactly what they did before it was put in.
 //        0123456789abcdef
 const BILL_A = [
   '................',
   '................',
   '................',
-  '.000000000000...',
-  '04445555555440..',
-  '04444444444330..',
-  '044444333663660.',
-  '0333333337030730',
-  '0222222222223320',
-  '022222222000020.',
-  '02211111011010..',
-  '01555555555510..',
-  '.000433000000...',
-  '...03320........',
-  '...02210........',
-  '...00000........',
+  '000000000000....',
+  '0555544444330...',
+  '04433336636620..',
+  '033222260260220.',
+  '0322222222222210',
+  '022221166666110.',
+  '02111111111110..',
+  '0431111111110...',
+  '000000000000....',
+  '..0330.0330.....',
+  '...00...00......',
+  '................',
+  '................',
 ];
 
-// Frame B is the same round in flight: the casing specular slides three
-// pixels aft, the belly bounce runs two the other way, and the eyes squeeze
-// a pixel narrower — air rushing past, and a scowl pulse.
+// Frame B — the round pitches nose-up. Everything from x0 to x6 drops one row
+// while the nose half from x7 holds, so the casing tilts around the face
+// instead of shearing through it; the crown streak steps back with the tail,
+// the belly bounce rides down, and the rear fist swings a column further back
+// AND a row lower than the lead one, so the two mitts trail out of phase.
 //        0123456789abcdef
 const BILL_B = [
   '................',
   '................',
   '................',
-  '.000000000000...',
-  '05555555444440..',
-  '04444444443330..',
-  '044444333063060.',
-  '0333333330730730',
-  '0222222222223320',
-  '022222222000020.',
-  '02111111011010..',
-  '01115555555550..',
-  '.000433000000...',
-  '...03320........',
-  '...02210........',
-  '...00000........',
+  '.......00000....',
+  '0000000444330...',
+  '05555446636620..',
+  '044333360260220.',
+  '0332222222222210',
+  '032222266666110.',
+  '02222111111110..',
+  '0211111111110...',
+  '043111100000....',
+  '00000000330.....',
+  '.0330..0220.....',
+  '.0220...00......',
+  '..00............',
+];
+
+// The static export is a pose of its own, not a second reference to frame A.
+// The round is pitched a full two rows nose-up in three steps — x0-x3 drops
+// two, x4-x6 drops one, the face band x7-x15 holds — and both fists are pulled
+// flush under the belly at x4..x9 instead of hanging wide. It shares no row
+// with frame A except the three empty ones.
+//        0123456789abcdef
+const BILL_BODY = [
+  '................',
+  '................',
+  '................',
+  '.......00000....',
+  '....000444330...',
+  '00005446636620..',
+  '055533360260220.',
+  '0443222222222210',
+  '033222266666110.',
+  '03222111111110..',
+  '0222111111110...',
+  '021111100000....',
+  '04310000330.....',
+  '00003300220.....',
+  '...0220.00......',
+  '....00..........',
 ];
 
 const billA = sp(BILL_A, BILL_PAL, 16, 16, 'bulletBill.a');
@@ -231,13 +329,15 @@ const billB = sp(BILL_B, BILL_PAL, 16, 16, 'bulletBill.b');
 
 export const BULLET_BILL = {
   fly: new Anim([billA, billB], [6, 6]),
-  body: billA,
+  body: sp(BILL_BODY, BILL_PAL, 16, 16, 'bulletBill.body'),
 };
 
 /* ------------------------------------------------------------------ *
- *  CHEEP CHEEP — 16x16, 2-frame flap. Frame A drives the tail down and
- *  fans the pectoral fin; frame B whips the tail up over the spine and
- *  tucks the fin in, so the silhouette actually changes shape.
+ *  CHEEP CHEEP — 16x16, 2-frame flap. Frame A drives the caudal fin low and
+ *  fans the pectoral; frame B whips the tail up over the spine, drops the whole
+ *  head one row and tucks the fin flush, so the body undulates end to end.
+ *  Every outline pixel has fill behind it — the old top tail lobe was drawn in
+ *  bare outline and vanished on a dark cave background.
  * ------------------------------------------------------------------ */
 
 // The fin used to be #ffffff/#b8b8b8 — a chroma-free grey that read as a sock
@@ -255,62 +355,69 @@ const CHEEP_RED_PAL = [
   '#e09a86',  // 8 fin + belly shade
 ];
 
+// The grey Cheep is not a desaturated fish. Its body ramp is saturated TEAL
+// slate — clear of Bullet Bill's iron and of the Blooper's warm pearl — and
+// its fins are a warm cream/tan pair, so the pectoral membrane separates from
+// the belly instead of dissolving into it. Slot 7 now sits 64 units from
+// slot 5 and slot 8 sits 87 from slot 4; they used to sit 12 and 21.
 const CHEEP_GREY_PAL = [
-  OUT,
-  '#33404e',
-  '#55636f',
-  '#8391a0',
-  '#b4c0cc',
-  '#e8f0f6',
-  '#ffffff',
-  '#dfe8f0',
-  '#8fa0ae',
+  OUT,        // 0 outline
+  '#083c44',  // 1 core shadow
+  '#25666a',  // 2 shadow
+  '#468489',  // 3 mid
+  '#79b4b8',  // 4 lit
+  '#d6e8e8',  // 5 dorsal specular
+  '#ffffff',  // 6 eye sclera / lip highlight
+  '#f2ddbe',  // 7 fin lit  (warm — 64 units off the dorsal specular)
+  '#b8945c',  // 8 fin shade
 ];
 
-// Frame A: triangular caudal fin swept low, pectoral fin tucked inside the
-// belly outline and tapered to a point. Exactly one white shape on the head —
-// a 3x3 sclera with a centred pupil and a shaded lower lid; the mouth is a
-// bare outline notch, so nothing competes with the eye.
+// Frame A: caudal fin swept LOW and given real fill — every outline pixel has
+// body behind it, so the top lobe no longer dissolves on a dark background.
+// Exactly one white mass on the head: a 3x3 sclera at x10-x12 with a 2x2 pupil
+// crowded into its upper-right corner, so the fish looks forward and down. The
+// mouth is a 2px slit at the snout with a single white lip pixel above it.
 //        0123456789abcdef
 const CHEEP_A = [
   '.......000......',
-  '......04430.....',
-  '.....0444320....',
-  '0...0444433220..',
-  '00.055555433220.',
-  '0300444443332220',
-  '0330443333226660',
-  '0333333333226060',
-  '0333333332227770',
-  '0222332222222210',
-  '0220222222211000',
-  '020022222211000.',
-  '00..022778810...',
-  '......0788000...',
-  '......080.......',
+  '......04440.....',
+  '.....04444300...',
+  '....0554443320..',
+  '...055544433220.',
+  '..04455544333220',
+  '..03444443600220',
+  '..03333333600220',
+  '.023333333666260',
+  '.02233222222200.',
+  '033222227788210.',
+  '03222222788110..',
+  '0220000008800...',
+  '.00......00.....',
+  '................',
   '................',
 ];
 
-// Frame B: tail whipped up over the spine, and the head takes a 1px vertical
-// squash (rows 6-8 drop one, row 5 holds) so the whole body undulates
-// instead of just the tail flicking.
+// Frame B: the caudal fin whips UP over the spine while the head drops a row —
+// the eye, the mouth slit and the whole jaw travel one pixel down and the
+// pectoral fin tucks flush inside the belly, so the body undulates end to end
+// instead of the tail flicking on a frozen fish.
 //        0123456789abcdef
 const CHEEP_B = [
   '.......000......',
-  '0.....04430.....',
-  '00...0444320....',
-  '030.0444433220..',
-  '033055555433220.',
-  '0333444443332220',
-  '0333444433332220',
-  '0222443333226660',
-  '0220433333226060',
-  '00.0333332227770',
-  '...0332222222210',
-  '...0222222211000',
-  '...0222277880...',
-  '.......0788000..',
-  '........080.....',
+  '.00..004440.....',
+  '0220044443000...',
+  '032205544433200.',
+  '0322255544433220',
+  '.022344554433320',
+  '..04444443332220',
+  '..03444443600220',
+  '..03333333600220',
+  '..0333333666260.',
+  '..0223322222200.',
+  '...022222778810.',
+  '....02122788820.',
+  '.....000000000..',
+  '................',
   '................',
 ];
 
@@ -332,81 +439,93 @@ export const CHEEP_GREY = {
 };
 
 /* ------------------------------------------------------------------ *
- *  BLOOPER — 16x24. The mantle is a pointed BELL, not a dome: a 2px apex
- *  and a straight diagonal flank, so it cannot be mistaken for a skull.
- *  "open" is the propulsion pose — mantle squashed wide, tentacles thrown
- *  outward, outer pair four rows longer than the inner pair and splaying.
- *  "closed" is the glide: bell stretched tall, tentacles streaming.
+ *  BLOOPER — 16x24. The mantle is a pointed BELL, not a dome: a 2px apex and a
+ *  straight diagonal flank. "open" is the propulsion pose — bell squashed wide,
+ *  four tentacles thrown outward. "closed" is the glide: bell stretched tall
+ *  and narrow, three tentacles streaming and kinking left as they trail.
+ *
+ *  The tentacle bands are the part that used to be wallpaper — six pixel-identical
+ *  copies of one 16-char string. Every limb now TAPERS to an outline cap: the
+ *  outer pair from three fill pixels to two to one, the foreshortened inner
+ *  pair from two to one. Each starts tapering on a different row, the outer
+ *  pair runs three to four rows longer and flares outward while the inner pair
+ *  converges, and no row in either band repeats — not once, anywhere.
  * ------------------------------------------------------------------ */
 
-// Volume, not a white blob: slot 4 holds only the lit left flank, slot 3 the
-// core, slot 2 runs a continuous shadow band down the right, slot 1 is a 1px
-// terminator at the rim. Slot 5 is spent on ONE small specular and the eye
-// catchlights — nothing else.
+// Volume, not a white blob. The old ramp lived entirely in the top 42% of the
+// value range: two of its slots were 37 units apart and both read as white.
+// The bottom is pushed down and the middle is spread, so the bell now runs
+// luminance 112 -> 161 -> 205 -> 235 -> 255, with no adjacent pair inside 37
+// RGB units. The cast is deliberately WARM pearl rather than blue-grey: that
+// is what buys 53 units of clearance from Bullet Bill's iron and 45 from the
+// grey Cheep's teal body, so a screen holding all three never reads as one
+// blob. Slot 2 is laid as a continuous shadow band down the right flank rather
+// than scattered as a terminator, slot 1 rims the lower right, and no slot
+// holds more than 32% of the fill.
 const BLOOP_PAL = [
   OUT,        // 0 outline
-  '#8d94a8',  // 1 terminator
-  '#b3bacd',  // 2 core shadow band
-  '#dbe0ec',  // 3 mid
-  '#f4f6fc',  // 4 lit
+  '#7d6c64',  // 1 terminator / lower rim   (lum 112)
+  '#ab9e96',  // 2 right-flank shadow band  (lum 161)
+  '#d3ccc4',  // 3 mid                      (lum 206)
+  '#eeeae5',  // 4 lit                      (lum 235)
   '#ffffff',  // 5 specular / eye catchlight
-  '#232b45',  // 6 eye
+  '#2b2f42',  // 6 eye
 ];
 
 //        0123456789abcdef
 const BLOOP_OPEN = [
   '.......00.......',
   '......0430......',
-  '.....054320.....',
-  '....05543210....',
-  '...0454432210...',
-  '..044433322110..',
-  '.04443333222110.',
-  '0444433332222110',
-  '0444333332222110',
-  '0444563333562110',
-  '0444663333662110',
+  '.....054430.....',
+  '....04544330....',
+  '...0454433220...',
+  '..044544332220..',
+  '.04454433322210.',
+  '0444544333322210',
+  '0444456335622210',
+  '0443366336622110',
   '0433333322221110',
-  '.03333222221110.',
-  '..033222221110..',
-  '..040030020020..',
-  '.04400300200220.',
-  '0440.030020.0220',
-  '0440030..0200220',
-  '040.030..020.020',
-  '040.000..000.020',
-  '040..........020',
-  '040..........020',
-  '040..........020',
-  '000..........000',
+  '.04333322221110.',
+  '..033322221110..',
+  '.00003221110000.',
+  '0432032031003110',
+  '0433031021002110',
+  '0430032031003110',
+  '0430.03021002110',
+  '0420.000310.0210',
+  '030....020..0210',
+  '030....00...0110',
+  '030..........020',
+  '00...........020',
+  '..............0.',
 ];
 
 //        0123456789abcdef
 const BLOOP_CLOSED = [
   '.......00.......',
   '......0430......',
-  '.....044320.....',
-  '....04543210....',
-  '....05543210....',
-  '...0454432210...',
-  '...0444332210...',
-  '..044433322110..',
+  '.....054330.....',
+  '....05443320....',
+  '....04543320....',
+  '...0455433220...',
+  '...0445433220...',
+  '..044543332220..',
+  '..044533332210..',
   '.04443333222110.',
-  '.04433333222110.',
-  '.04445633356210.',
-  '.04446633366210.',
-  '.04333332222110.',
-  '..033322221110..',
-  '..033222211110..',
-  '...0322221110...',
-  '....040030020...',
-  '....040030020...',
-  '...040030020....',
-  '...040030020....',
-  '...040030000....',
-  '...040000.......',
-  '...040..........',
-  '...000..........',
+  '.04433332221110.',
+  '.04456335622110.',
+  '.04466336622110.',
+  '..043333222110..',
+  '...0333222110...',
+  '...0032221000...',
+  '...04320320210..',
+  '...04330310310..',
+  '..04300320210...',
+  '..0420031020....',
+  '.043003200......',
+  '.030020.........',
+  '030.00..........',
+  '00..............',
 ];
 
 export const BLOOPER = {
@@ -415,11 +534,14 @@ export const BLOOPER = {
 };
 
 /* ------------------------------------------------------------------ *
- *  PODOBOO — 16x16, 2-frame flicker. Emissive ramp: white-hot core,
- *  saturated orange body, dark ember rim so bloom has an edge to bite.
- *  The two frames are a surge, not a pulse: A is the compressed apex, B
- *  stretches a row taller, narrows two pixels, lifts the core two rows and
- *  runs the tail two rows longer. Each sheds a hot detached spark.
+ *  PODOBOO — 16x16, 2-frame flicker. Emissive ramp: white-hot core, saturated
+ *  orange body, dark ember rim so bloom has an edge to bite. The crown is a
+ *  three-step arc and the mass leans one pixel further left than right, so it
+ *  is a blob and not a cut gem. The two frames are a surge, not a pulse: A is
+ *  the compressed apex with a short tail wandering right, B narrows two pixels,
+ *  lifts the core two rows and runs the tail three rows longer, whipping the
+ *  other way. Each sheds a detached spark — outlined like everything else, and
+ *  well inboard of the frame so neither is clipped.
  * ------------------------------------------------------------------ */
 
 const FIRE_PAL = [
@@ -432,48 +554,52 @@ const FIRE_PAL = [
   '#ffffff',  // 6 white core
 ];
 
-// A is the compressed apex: broad head bleeding to the full 16px, core low
-// at rows 4-6, short tail, and a spark shed BELOW-LEFT.
+// A is the compressed apex. The crown is a three-step arc (4 -> 8 -> 11 px),
+// not a two-step wedge, and the mass bulges one pixel further LEFT than right
+// so the flame leans instead of reading as a cut gem. The tail wanders right
+// off the centreline, and a spark is shed low-LEFT — a 2x2 of hot slots 4/3
+// with its own outline, so it obeys the same rule as every other form here.
 //        0123456789abcdef
 const PODOBOO_A = [
   '......0000......',
   '....00222200....',
-  '..023333333320..',
-  '.02344554433220.',
-  '0234456654433210',
-  '0233456655433210',
-  '0123345664433210',
-  '.01233444433220.',
-  '..012333332210..',
-  '...0122332210...',
-  '....01232210....',
-  '.....012210.....',
-  '......0110......',
-  '................',
-  '..2442..........',
-  '...22...........',
+  '..00223333220...',
+  '.0233344433320..',
+  '023344554433220.',
+  '023345665443220.',
+  '023345665433210.',
+  '.0234454432210..',
+  '..02344322100...',
+  '...02343210.....',
+  '....023310......',
+  '.....0000.......',
+  '..00............',
+  '.0440...........',
+  '.0330...........',
+  '..00............',
 ];
 
-// B is the stretched climb: head a row taller and two pixels narrower, core
-// surged up to rows 3-5, tail two rows longer, spark shed to the RIGHT.
+// B is the stretched climb: the crown narrows two pixels, the white core surges
+// two rows higher, the tail runs three rows longer and whips the OTHER way, and
+// the spark is shed to the RIGHT — well inboard of x15 so nothing is clipped.
 //        0123456789abcdef
 const PODOBOO_B = [
-  '.....000000.....',
-  '...0022222200...',
-  '..023444443320..',
-  '.02345665443320.',
-  '.02345665543320.',
-  '.02334566544320.',
-  '.01233455443320.',
-  '..012334443210..',
-  '...0123332210...',
-  '....01232210....',
-  '....0123210.....',
-  '.....012210.....',
-  '.....01210..2442',
-  '......010....22.',
-  '......00........',
-  '................',
+  '......0000......',
+  '.....022220.....',
+  '...0022332200...',
+  '..023346643320..',
+  '.02334566543320.',
+  '.02334555433220.',
+  '.0233444432210..',
+  '..02344332210...',
+  '...023432210....',
+  '...02332210.....',
+  '....0233210.....',
+  '....023310......',
+  '.....02330.00...',
+  '......000.0440..',
+  '..........0330..',
+  '...........00...',
 ];
 
 export const PODOBOO = {
@@ -484,69 +610,71 @@ export const PODOBOO = {
 };
 
 /* ------------------------------------------------------------------ *
- *  FIRE BAR — 8x8 bead. The OUTLINE rotates, not just the interior: each
- *  frame pushes a 1px flare out of a different quadrant, so the silhouette
- *  itself tumbles. The white core walks the four corners of a 2x2 orbit
- *  and drags a hot tail behind it, opposite the direction of travel.
+ *  FIRE BAR — 8x8 bead. The OUTLINE rotates, not just the interior: the mass
+ *  elongates away from the core, so the silhouette itself tumbles once per
+ *  cycle. The white core walks the four corners of a 2x2 orbit and drags a
+ *  slot-5 trail of 8-9 px behind it. Every bead spends at least three pixels
+ *  on EVERY slot from 1 to 6 — the ramp is on the canvas, not in this comment.
  * ------------------------------------------------------------------ */
 
-// Its own ramp — one step yellower and hotter than PODOBOO's — so a bar bead
-// reads as yellow-white and a Podoboo stays orange-red at a glance.
+// Its own ramp — the low end pulled a full 32 RGB units off PODOBOO's at the
+// same slot and the whole thing skewed yellow — so a bar bead reads as
+// yellow-white and a Podoboo stays orange-red at a glance.
 const FIREBAR_PAL = [
-  '#4a1200',  // 0 rim
-  '#a03000',  // 1 deep
-  '#e05000',  // 2 saturated
-  '#ff9418',  // 3 orange
-  '#ffd84a',  // 4 yellow
-  '#fff6c0',  // 5 hot
+  '#6b2000',  // 0 rim
+  '#c05400',  // 1 deep
+  '#f06a00',  // 2 saturated
+  '#ffb020',  // 3 orange
+  '#ffe860',  // 4 yellow
+  '#fffad0',  // 5 hot
   '#ffffff',  // 6 core
 ];
 
-// A: round, core upper-left, tail trailing left (core travelling right).
+// A: core upper-left, body streaming to the lower right.
 const FIREBAR_A = [
-  '..0000..',
-  '.044330.',
-  '05664320',
-  '05664320',
-  '03443220',
-  '02332210',
-  '.022110.',
-  '..0000..',
+  '..000...',
+  '.05540..',
+  '0566530.',
+  '05665430',
+  '03554320',
+  '.0343210',
+  '..013210',
+  '....000.',
 ];
 
-// B: flare pushed out of the upper right; core has slid across, tail above.
+// B: core upper-right, body streaming to the lower left.
 const FIREBAR_B = [
-  '..00000.',
-  '.0335540',
-  '03446643',
-  '03456640',
-  '02344430',
-  '02233320',
-  '.022210.',
-  '..0000..',
+  '...000..',
+  '..04550.',
+  '.0356650',
+  '03456650',
+  '02345540',
+  '0123430.',
+  '0123210.',
+  '.0000...',
 ];
 
-// C: flare at the lower right; core has dropped, tail to its right.
+// C: core lower-right, body streaming to the upper left.
 const FIREBAR_C = [
-  '..0000..',
-  '.022320.',
-  '02233420',
-  '02334430',
-  '03346650',
-  '02346653',
-  '.0344440',
-  '..00000.',
+  '.000....',
+  '011230..',
+  '0123440.',
+  '02345650',
+  '03455660',
+  '.0455660',
+  '..034550',
+  '...0000.',
 ];
 
-// D: flare at the lower left; core swinging back up, tail below.
+// D: core lower-left, body streaming to the upper right.
 const FIREBAR_D = [
-  '..0000..',
-  '.023320.',
-  '02332210',
-  '03433220',
-  '04664320',
-  '34664320',
-  '0455320.',
+  '....000.',
+  '..032110',
+  '.0443210',
+  '05654320',
+  '06655430',
+  '0565540.',
+  '055430..',
   '.0000...',
 ];
 
@@ -567,13 +695,17 @@ export const FIREBAR = {
  *  banded belly plate on the leading half, shell mass with a lit rim on
  *  the trailing half, notch-horned helmet with a hard brim.
  *
- *  walk: the two frames are hip-anchored, not offset copies. The helmet
- *  holds its absolute row; the torso lifts one pixel so the neck
- *  compresses (that is the bob); the arms genuinely swap — in A the lead
- *  arm hangs low off the right edge and the rear arm shows as a sliver at
- *  the left, in B the lead arm is cocked high and inboard and the rear arm
- *  has swung out of sight; and the shell rocks one pixel left with a fresh
- *  shadow at the plastron seam.
+ *  Head: a 2px-wide horn notch rising from each side of the helmet, a brim
+ *  drawn in slot 1 with slot-0 corners so it has thickness instead of reading
+ *  as a black stripe, a white sclera with a slot-0 pupil, and a pale beak
+ *  wedge at the front of the jaw.
+ *
+ *  walk: the head drops one row on the passing pose and the torso loses a row
+ *  to absorb it, so the feet stay pinned to rows 22-23 — that is the bob. The
+ *  arms genuinely swap: in A the lead arm hangs low at the hip, in B it is
+ *  cocked high with the fist at the shoulder. The legs go from wide contact to
+ *  gathered passing, the shell rim rocks one pixel, and every boot is three
+ *  toned with a lit rim on the leading toe instead of being a black brick.
  * ------------------------------------------------------------------ */
 
 // Skin is Koopa gold, NOT human flesh — #f8d5ac is what made this read as a
@@ -581,19 +713,21 @@ export const FIREBAR = {
 // Troopa, so the two turtles are visibly the same species.
 const BRO_PAL = [
   OUT,        // 0 outline
-  '#0a4a10',  // 1 shell core shadow
-  '#12801e',  // 2 shell shadow
-  '#33b52e',  // 3 shell mid / limbs
-  '#7fe05a',  // 4 shell lit rim
+  '#0b4210',  // 1 shell core shadow
+  '#12751a',  // 2 shell shadow
+  '#35a832',  // 3 shell mid / limbs
+  '#6ed45c',  // 4 shell lit rim
   '#f8dc70',  // 5 skin lit
   '#ffffff',  // 6 eye sclera / beak
   '#a8720c',  // 7 skin shade / scute seam
   '#fffbe8',  // 8 plastron lit
   '#ddb45a',  // 9 plastron shade
-  '#6b7488',  // a hammer head shadow
-  '#c2ccdc',  // b hammer head lit
-  '#8a5c10',  // c hammer haft
-  '#e8b830',  // d skin mid
+  '#3a4450',  // a hammer head core shadow  (same steel as HAMMER.spin)
+  '#707c8c',  // b hammer head shadow
+  '#7a4a1c',  // c hammer haft mid
+  '#e8b830',  // d skin mid / haft lit
+  '#aab4c4',  // e hammer head mid
+  '#e8eef6',  // f hammer head specular
 ];
 
 // Contact pose. Cross-section of the torso, left to right: rear-arm sliver |
@@ -601,30 +735,30 @@ const BRO_PAL = [
 // plate with scute bands | lead arm.
 //        0123456789abcdef
 const BRO_WALK_A = [
-  '....0......0....',
-  '...040....040...',
-  '...0044444400...',
-  '..044444333220..',
-  '..044433332210..',
-  '..000000000000..',
-  '..0d55566555d0..',
-  '..0d55560556660.',
-  '..07d5555556670.',
-  '...0755555700...',
-  '..043322108890..',
-  '.0443322108890..',
-  '0443322210770570',
-  '0433322210880570',
-  '0333222110770570',
-  '0222221110880570',
-  '.022211110790550',
-  '..0111111090....',
-  '..013331033310..',
-  '..0330...03330..',
-  '.0330....03330..',
-  '.0330.....03330.',
-  '01110....011110.',
-  '00000....000000.',
+  '....00....00....',
+  '...0440000440...',
+  '..044443333220..',
+  '.04444433332210.',
+  '.04444333322110.',
+  '..001111111100..',
+  '..0d55555555d0..',
+  '..0d555556055d0.',
+  '..07d55556656760',
+  '..00d555555d6660',
+  '.03221988889000.',
+  '0432219888890330',
+  '0432219777790330',
+  '0432219888890330',
+  '0432219777790550',
+  '0432219888890550',
+  '.03221977779030.',
+  '..022198888910..',
+  '..03320003320...',
+  '.03320...03320..',
+  '.03320...03320..',
+  '.03320..003320..',
+  '.033340033340...',
+  '.011110011110...',
 ];
 
 // Passing pose. Helmet rows are pinned to frame A's; everything from the jaw
@@ -632,30 +766,30 @@ const BRO_WALK_A = [
 // gathered under the hips.
 //        0123456789abcdef
 const BRO_WALK_B = [
-  '....0......0....',
-  '...040....040...',
-  '...0044444400...',
+  '................',
+  '....00....00....',
+  '...0440000440...',
   '..044443333220..',
-  '..044333332210..',
-  '..000000000000..',
-  '..0d55566555d0..',
-  '..0d55560556660.',
-  '..07d5555576670.',
-  '..043322108890..',
-  '.044332210890570',
-  '0443322210790570',
-  '0433322210890550',
-  '0333222110790770',
-  '02222211108890..',
-  '.0222111107790..',
-  '..0111111090....',
-  '..013331033310..',
-  '...033303330....',
-  '...033303330....',
-  '..0333003330....',
-  '..0333003330....',
-  '.01110..011110..',
-  '.00000..000000..',
+  '.04444433332210.',
+  '.04444333322110.',
+  '..001111111100..',
+  '..0d55555555d0..',
+  '..0d555556055d0.',
+  '..07d55556656760',
+  '..00d555555d6660',
+  '.03321988889000.',
+  '0443219888890550',
+  '0443219777790340',
+  '0443219888890330',
+  '044321977779010.',
+  '.03321988889010.',
+  '..032197777910..',
+  '...0033203320...',
+  '....033203320...',
+  '....033203320...',
+  '....033203320...',
+  '...03334033340..',
+  '...01111011110..',
 ];
 
 // Wind-up: hammer cocked overhead, haft running down past the helmet into a
@@ -663,30 +797,30 @@ const BRO_WALK_B = [
 // the head drops four — so the pose loads before the release.
 //        0123456789abcdef
 const BRO_THROW_A = [
-  '..........000000',
-  '.........0bbbaa0',
-  '.........0bbaaa0',
-  '.........0baaaa0',
-  '...0...0.0000000',
-  '..040.040..0cc0.',
-  '..0044444430cc0.',
-  '..0444333220cc0.',
-  '..0000000000cc0.',
-  '..0d556655d0570.',
-  '..0d55605660770.',
-  '..07d5555670770.',
-  '...07555570070..',
-  '..043322108870..',
-  '04433222107790..',
-  '04333222108890..',
-  '03332221107790..',
-  '02222211108890..',
-  '.022211110900...',
-  '..013331033310..',
-  '..0330...03330..',
-  '.0330....03330..',
-  '01110....011110.',
-  '00000....000000.',
+  '..........00000.',
+  '.........0ffeeb0',
+  '.........0feeba0',
+  '...00...00eebaa0',
+  '..044000440bbaa0',
+  '.04444332210dc0.',
+  '.04443332210dc0.',
+  '..0011111000dc0.',
+  '..0d55555d00dc0.',
+  '..0d56055d05d70.',
+  '..07d566566055d0',
+  '...0d5555d6605d0',
+  '..00d5555d66000.',
+  '.032219888890...',
+  '04322198888910..',
+  '04322197777910..',
+  '04322198888910..',
+  '04322197777910..',
+  '.0322198888910..',
+  '..02219888890...',
+  '..03320003320...',
+  '.03320...03320..',
+  '033340...033340.',
+  '011110...011110.',
 ];
 
 // Release: the hammer has left the fist and is already clearing the beak, the
@@ -694,30 +828,30 @@ const BRO_THROW_A = [
 // further forward.
 //        0123456789abcdef
 const BRO_THROW_B = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '....0......0....',
-  '...040....040...',
-  '...0044444400...',
-  '..044444333220..',
-  '..044433332210..',
-  '..000000000000..',
-  '..0d55566555d000',
-  '..0d5556055660b0',
-  '..07d555555660a0',
-  '...0755555700000',
-  '..04332210889570',
-  '.044332210779570',
-  '04333222108890..',
-  '03332221107790..',
-  '02222211108890..',
-  '..013331033310..',
-  '..0330....03330.',
-  '.0330.....03330.',
-  '01110.....011110',
-  '00000.....000000',
+  '..........00000.',
+  '.........0ffeeb0',
+  '...00...00feeba0',
+  '..044000440bbaa0',
+  '.04444332210dc0.',
+  '.0444433221000..',
+  '.04443332210....',
+  '..001111100.....',
+  '..0d55555d0.....',
+  '..0d56055d0.....',
+  '..07d5665660....',
+  '..00d5555d660...',
+  '.03221988889000.',
+  '04322198888905d0',
+  '0432219777790550',
+  '043221988889100.',
+  '04322197777910..',
+  '.0322198888910..',
+  '..022197777900..',
+  '..0320000033320.',
+  '.03320...033320.',
+  '.03320....033320',
+  '033340....033340',
+  '011110....011110',
 ];
 
 export const HAMMER_BRO = {
@@ -733,12 +867,19 @@ export const HAMMER_BRO = {
 };
 
 /* ------------------------------------------------------------------ *
- *  HAMMER — 16x16, 4-frame spin at 45 degree steps. A rigid body rotating
- *  in plane keeps its mass: the head holds ~38-45 lit pixels in every
- *  frame (9x5 on the axes, a 7-tall diagonal block between) and the total
- *  span holds at 15-16px, so it turns instead of pulsing. Every haft is a
- *  three-tone cylinder — lit / mid / shadow — and meets the head at a 1px
- *  outline seam.
+ *  HAMMER — 16x16, 8-frame spin at 45 degree steps: a TRUE 360. Four frames
+ *  are authored and the second half of the revolution is those four turned
+ *  through 180 degrees AND RE-LIT, because rotating a sprite rotates its
+ *  light source with it. relight() inverts both ramps — head 7<->4, 6<->5 and
+ *  haft 3<->1 — so after the geometric turn the specular lands back on the
+ *  world-space upper left and the hammer does not flip which side is bright
+ *  halfway through every revolution.
+ *  A rigid body rotating in plane keeps its mass: the head holds 45 or 46 lit
+ *  pixels in EVERY frame — 9x5 on the vertical axis, 5x9 on the horizontal,
+ *  a 46px foreshortened block on each diagonal — and in all eight frames the
+ *  specular centroid sits up AND left of the head's own centroid.
+ *  The haft is a turned cylinder, not an extrusion: 4 fill px where it sockets
+ *  into the head, 3 through the shaft, a dark grip wrap, 2 at the butt.
  * ------------------------------------------------------------------ */
 
 const HAMMER_PAL = [
@@ -752,46 +893,47 @@ const HAMMER_PAL = [
   '#e8eef6',  // 7 head specular
 ];
 
-// 0 degrees — head across the top (9x5 = 45 lit), haft plumb below it.
+// 0 degrees — head across the top (9x5 = 45 lit), haft plumb below it, swelling
+// where it enters the head and narrowing to a 2px butt through a grip wrap.
 //        0123456789abcdef
 const HAMMER_1 = [
-  '..00000000000...',
+  '...000000000....',
   '..07776665540...',
-  '..07666555440...',
-  '..06665554440...',
+  '..07766655440...',
+  '..07666554440...',
+  '..06655544440...',
   '..06555444440...',
-  '..05554444440...',
-  '..00000000000...',
+  '...000000000....',
+  '....033210......',
+  '....033210......',
   '.....03210......',
   '.....03210......',
-  '.....03210......',
-  '.....03210......',
-  '.....03210......',
-  '.....03210......',
-  '.....03210......',
-  '.....03210......',
-  '.....00000......',
+  '.....02210......',
+  '.....01210......',
+  '......0310......',
+  '......0310......',
+  '.......00.......',
 ];
 
 // 45 degrees — the same block foreshortened, not a smaller one.
 //        0123456789abcdef
 const HAMMER_2 = [
-  '.........000000.',
-  '.........077660.',
-  '........07666550',
-  '.......066655540',
-  '.......065554440',
-  '........05544440',
-  '.........0544440',
-  '.....0321004440.',
-  '....0321000000..',
+  '..........00000.',
+  '.........0776550',
+  '........07765540',
+  '.......077665440',
+  '.......076654440',
+  '.......066554440',
+  '........06554440',
+  '.......000554440',
+  '......0321004440',
+  '.....03210..000.',
   '....03210.......',
   '...03210........',
-  '...03210........',
-  '..03210.........',
   '..03210.........',
   '.03210..........',
-  '.00000..........',
+  '03210...........',
+  '0000............',
 ];
 
 // 90 degrees — head stood on end (5x9 = 45 lit), haft out to the left, the
@@ -800,17 +942,17 @@ const HAMMER_2 = [
 const HAMMER_3 = [
   '................',
   '................',
-  '.........0000000',
+  '..........00000.',
   '.........0776650',
   '.........0766550',
-  '.000000000665540',
-  '.333333330665440',
-  '.222222220655440',
-  '.111111110554440',
-  '.000000000544440',
-  '.........0444440',
-  '.........0444440',
-  '.........0000000',
+  '.000000000766540',
+  '0333333330665540',
+  '0222222220665440',
+  '0111111110655440',
+  '.000000000654440',
+  '.........0554440',
+  '.........0544440',
+  '..........00000.',
   '................',
   '................',
   '................',
@@ -819,32 +961,43 @@ const HAMMER_3 = [
 // 135 degrees — mirror of frame 2 about the horizontal, head swinging low.
 //        0123456789abcdef
 const HAMMER_4 = [
-  '.00000..........',
+  '0000............',
+  '03210...........',
   '.03210..........',
   '..03210.........',
-  '..03210.........',
-  '...03210........',
   '...03210........',
   '....03210.......',
-  '....0321000000..',
-  '.....0321007760.',
-  '.........0766650',
-  '........06665550',
-  '.......066555440',
-  '.......055544440',
-  '........05444440',
-  '.........0444440',
-  '.........000000.',
+  '.....03210..000.',
+  '......0321007770',
+  '.......000776550',
+  '........07765540',
+  '.......077665440',
+  '.......076654440',
+  '.......066544440',
+  '........06554440',
+  '.........0554440',
+  '..........00000.',
 ];
+
+// A thrown hammer must come back round to where it started, and it must not
+// change which side is lit while it does. rot180 supplies the geometry for the
+// second half of the revolution; relight inverts the two ramps so the specular
+// stays on the world-space upper left instead of riding round with the sprite.
+// Slot 2 (haft mid) and slot 0 (outline) are their own inverses.
+const rot180 = (rows) => rows.slice().reverse().map((r) => [...r].reverse().join(''));
+const FLIP = { 1: '3', 3: '1', 4: '7', 5: '6', 6: '5', 7: '4' };
+const relight = (rows) => rows.map((r) => r.replace(/[134567]/g, (c) => FLIP[c]));
+
+const HAMMER_STEPS = [HAMMER_1, HAMMER_2, HAMMER_3, HAMMER_4];
 
 export const HAMMER = {
   spin: new Anim(
     [
-      sp(HAMMER_1, HAMMER_PAL, 16, 16, 'hammer.1'),
-      sp(HAMMER_2, HAMMER_PAL, 16, 16, 'hammer.2'),
-      sp(HAMMER_3, HAMMER_PAL, 16, 16, 'hammer.3'),
-      sp(HAMMER_4, HAMMER_PAL, 16, 16, 'hammer.4'),
+      ...HAMMER_STEPS.map((r, i) => sp(r, HAMMER_PAL, 16, 16, `hammer.${i * 45}`)),
+      ...HAMMER_STEPS.map((r, i) =>
+        sp(relight(rot180(r)), HAMMER_PAL, 16, 16, `hammer.${180 + i * 45}`)
+      ),
     ],
-    4
+    2
   ),
 };
