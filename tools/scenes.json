@@ -1,0 +1,102 @@
+[
+  {
+    "name": "01-title",
+    "out": "shots/scenes/01-title.png",
+    "script": "await g.showTitle(); g.tick(120);"
+  },
+  {
+    "name": "02-1-1-opening",
+    "out": "shots/scenes/02-1-1-opening.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(3, 11); g.tick(30);"
+  },
+  {
+    "name": "03-1-1-first-blocks",
+    "out": "shots/scenes/03-1-1-first-blocks.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(20, 11); g.tick(30);"
+  },
+  {
+    "name": "04-1-1-pipes",
+    "out": "shots/scenes/04-1-1-pipes.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(30, 11); g.tick(90);"
+  },
+  {
+    "name": "05-1-1-piranha",
+    "out": "shots/scenes/05-1-1-piranha.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(44, 11); g.tick(150);"
+  },
+  {
+    "name": "06-1-1-gap",
+    "out": "shots/scenes/06-1-1-gap.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(68, 11); g.tick(30);"
+  },
+  {
+    "name": "07-1-1-staircase",
+    "out": "shots/scenes/07-1-1-staircase.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(136, 11); g.tick(30);"
+  },
+  {
+    "name": "08-1-1-flagpole",
+    "out": "shots/scenes/08-1-1-flagpole.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(192, 11); g.tick(30);"
+  },
+  {
+    "name": "09-big-mario",
+    "out": "shots/scenes/09-big-mario.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(22, 11); g.setPower('big'); g.tick(30);"
+  },
+  {
+    "name": "10-fire-mario",
+    "out": "shots/scenes/10-fire-mario.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(22, 11); g.setPower('fire'); g.tick(30);"
+  },
+  {
+    "name": "11-star-mario",
+    "out": "shots/scenes/11-star-mario.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(22, 11); g.setPower('star'); g.tick(12);"
+  },
+  {
+    "name": "12-run-cycle",
+    "out": "shots/scenes/12-run-cycle.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(10, 11); g.hold({right:true, run:true}); g.tick(45);"
+  },
+  {
+    "name": "13-jump-arc",
+    "out": "shots/scenes/13-jump-arc.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(10, 11); g.hold({right:true, run:true}); g.tick(40); g.hold({right:true, run:true, jump:true}); g.tick(14);"
+  },
+  {
+    "name": "14-underground",
+    "out": "shots/scenes/14-underground.png",
+    "script": "await g.loadLevel('1-2'); g.teleport(10, 9); g.tick(30);"
+  },
+  {
+    "name": "15-athletic",
+    "out": "shots/scenes/15-athletic.png",
+    "script": "await g.loadLevel('1-3'); g.teleport(8, 9); g.tick(60);"
+  },
+  {
+    "name": "16-castle",
+    "out": "shots/scenes/16-castle.png",
+    "script": "await g.loadLevel('1-4'); g.teleport(10, 10); g.tick(60);"
+  },
+  {
+    "name": "17-bowser",
+    "out": "shots/scenes/17-bowser.png",
+    "script": "await g.loadLevel('1-4'); g.teleport(58, 9); g.setPower('fire'); g.tick(90);"
+  },
+  {
+    "name": "18-post-pure",
+    "out": "shots/scenes/18-post-pure.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(30, 11); g.setPreset('pure'); g.tick(30);"
+  },
+  {
+    "name": "19-post-crisp",
+    "out": "shots/scenes/19-post-crisp.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(30, 11); g.setPreset('crisp'); g.tick(30);"
+  },
+  {
+    "name": "20-post-crt",
+    "out": "shots/scenes/20-post-crt.png",
+    "script": "await g.loadLevel('1-1'); g.teleport(30, 11); g.setPreset('crt'); g.tick(30);"
+  }
+]

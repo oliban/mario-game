@@ -1,0 +1,19 @@
+{
+  "name": "super-mario-homage",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx http-server -p 8123 -c-1 .",
+    "shots": "node tools/shot.mjs --scenes tools/scenes.json",
+    "sheet": "node tools/sheet.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "playwright": "^1.62.0"
+  },
+  "private": true
+}

@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>sprite preview</title>
+<style>
+  html,body{margin:0;background:#14161c;}
+  canvas{display:block;image-rendering:pixelated;}
+</style>
+</head>
+<body>
+<canvas id="out" width="16" height="16"></canvas>
+<script type="module">
+const q = new URLSearchParams(location.search);
+const modPath = q.get('mod');
+const SCALE = parseInt(q.get('scale') || '5', 10);
+const BG = q.get('bg') || 'checker';
+
+const { Sprite, Anim } = await import('/src/core/gfx.js');
+
+let mod;
+try {
+  mod = await import(modPath);
+} catch (e) {
+  window.__PREVIEW_ERROR = 'import failed: ' + (e && e.message);
+  window.__PREVIEW_READY = true;
+  throw e;
+}
+
+const items = [];
+function collect(name, v, depth) {
+  if (depth > 4 || v == null) return;
+  if (v instanceof Sprite) { items.push({ name, frames: [v], kind: 'sprite' }); return; }
+  if (v instanceof Anim) { items.push({ name, frames: v.frames, kind: 'anim', holds: v.holds }); return; }
+  if (Array.isArray(v)) {
+    if (v.length && v.every((e) => e instanceof Sprite)) { items.push({ name, frames: v, kind: 'array' }); return; }
+    if (v.length && v.every((e) => e instanceof Anim)) { v.forEach((e, i) => collect(`${name}[${i}]`, e, depth + 1)); return; }
+    return;
+  }
+  if (typeof v === 'object') {
+    for (const [k, sub] of Object.entries(v)) collect(`${name}.${k}`, sub, depth + 1);
+  }
+}
+for (const [k, v] of Object.entries(mod)) collect(k, v, 0);
+
+const PAD = 10;
+const LABEL_H = 16;
+const GAP = 8;
+const MAXW = 1500;
+
+// Lay out rows; wrap a row if its frames exceed MAXW.
+const rows = [];
+for (const it of items) {
+  let cur = { name: it.name, frames: [], w: 0, h: 0, kind: it.kind };
+  for (const f of it.frames) {
+    const fw = f.w * SCALE + GAP;
+    if (cur.w + fw > MAXW - PAD * 2 && cur.frames.length) {
+      rows.push(cur);
+      cur = { name: it.name + ' (cont.)', frames: [], w: 0, h: 0, kind: it.kind };
+    }
+    cur.frames.push(f);
+    cur.w += fw;
+    cur.h = Math.max(cur.h, f.h * SCALE);
+  }
+  if (cur.frames.length) rows.push(cur);
+  else rows.push({ name: it.name + '  <EMPTY>', frames: [], w: 0, h: 12, kind: it.kind });
+}
+
+let totalH = PAD;
+for (const r of rows) totalH += LABEL_H + r.h + PAD;
+let totalW = PAD * 2;
+for (const r of rows) totalW = Math.max(totalW, r.w + PAD * 2);
+totalW = Math.max(totalW, 420);
+
+const cv = document.getElementById('out');
+cv.width = Math.ceil(totalW);
+cv.height = Math.ceil(totalH + 30);
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+if (BG === 'sky') { ctx.fillStyle = '#5c94fc'; ctx.fillRect(0, 0, cv.width, cv.height); }
+else if (BG === 'dark') { ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, cv.width, cv.height); }
+else {
+  const S = 8;
+  for (let y = 0; y < cv.height; y += S) {
+    for (let x = 0; x < cv.width; x += S) {
+      ctx.fillStyle = ((x / S + y / S) & 1) ? '#232630' : '#1a1c24';
+      ctx.fillRect(x, y, S, S);
+    }
+  }
+}
+
+ctx.font = '600 12px ui-monospace, Menlo, monospace';
+ctx.textBaseline = 'top';
+
+let y = PAD;
+ctx.fillStyle = '#8fa6ff';
+ctx.fillText(`${modPath}   —   ${items.length} exports, ${rows.reduce((a, r) => a + r.frames.length, 0)} frames   (scale ${SCALE}x)`, PAD, y);
+y += 22;
+
+for (const r of rows) {
+  ctx.fillStyle = '#c8d3f5';
+  const dims = r.frames.length ? `  [${r.frames[0].w}x${r.frames[0].h}]` : '';
+  ctx.fillText(`${r.name}${dims}  ${r.kind === 'anim' ? '(anim)' : ''}`, PAD, y);
+  y += LABEL_H;
+  let x = PAD;
+  for (const f of r.frames) {
+    const dw = f.w * SCALE, dh = f.h * SCALE;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,.16)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x - 0.5, y + (r.h - dh) - 0.5, dw + 1, dh + 1);
+    ctx.restore();
+    ctx.drawImage(f.canvas, 0, 0, f.w, f.h, x, y + (r.h - dh), dw, dh);
+    x += dw + GAP;
+  }
+  y += r.h + PAD;
+}
+
+window.__PREVIEW_READY = true;
+window.__PREVIEW_COUNT = items.length;
+</script>
+</body>
+</html>

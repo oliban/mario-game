@@ -1,0 +1,10 @@
+node_modules/
+
+# Generated capture artifacts — every PNG here is reproducible with
+#   node tools/sheet.mjs <module>      (art contact sheets)
+#   npm run shots                      (gameplay scenes)
+shots/
+!shots/showcase/
+
+.DS_Store
+*.log
