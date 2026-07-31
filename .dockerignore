@@ -8,3 +8,4 @@ tools
 package-lock.json
 .DS_Store
 _j*.js
+**/tmpjudge
