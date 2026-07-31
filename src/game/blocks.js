@@ -487,7 +487,12 @@ export class BlockSystem {
     const w = this.world;
     const px = tx * TILE;
     const py = ty * TILE;
-    let e = w.spawn(item, px, py, { fromBlock: true, tx, ty });
+    // The level's `contents` entry keeps everything that is not the payload as
+    // spawn options, and the item needs them: a beanstalk without its `warp`
+    // grows to nowhere.
+    const ov = w.contents && typeof w.contents.get === 'function' ? w.contents.get(key(tx, ty)) : null;
+    const extra = ov && ov.opts ? ov.opts : null;
+    let e = w.spawn(item, px, py, { fromBlock: true, tx, ty, ...(extra || {}) });
     if (!e) {
       if (!w.art[item]) return null;
       e = new FallbackItem(w, item, px, py);

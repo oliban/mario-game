@@ -193,6 +193,13 @@ const P = {
   deathGravity: pnum(0.1875, 'playerDeathGravity', 'deathGravity'),
   deathFreeze: pnum(30, 'playerDeathFreeze', 'deathFreeze', 'deathPause'),
 
+  // Beanstalk. The climb is slower than the flagpole slide — SMB's vine is a
+  // deliberate, unhurried ascent — and letting go gives a small hop so you clear
+  // the vine instead of being caught again on the way down.
+  climbSpeed: pnum(1.0, 'vineClimbSpeed', 'climbSpeed', 'ladderSpeed'),
+  vineHop: pnum(-2.0, 'vineReleaseRise', 'vineHop'),
+  vinePush: pnum(1.0, 'vineReleasePush', 'vinePush'),
+
   flagSlide: pnum(2.0, 'flagpoleSlide', 'flagSlideSpeed', 'poleSlideSpeed'),
   flagWalk: pnum(1.0, 'flagWalkSpeed', 'levelEndWalkSpeed', 'walkOffSpeed'),
 
@@ -695,6 +702,8 @@ export default class Player extends EntityBase {
     this._updateStar();
     this._pruneFireballs();
 
+    this._checkVines();
+
     switch (this.state) {
       case 'normal':
         this._updateNormal();
@@ -717,6 +726,9 @@ export default class Player extends EntityBase {
       case 'flagwalk':
       case 'walkoff':
         this._updateWalkOff();
+        break;
+      case 'climb':
+        this._updateClimb();
         break;
       case 'pipe':
         this._updatePipe();
@@ -1660,6 +1672,106 @@ export default class Player extends EntityBase {
     sfx(this.world, 'pipe', 'warp', 'powerdown');
   }
 
+  // -------------------------------------------------------------------------
+  // Vines. The beanstalk is intangible, so nothing latches Mario onto it
+  // through the collision loop — he looks for it himself each frame.
+  // -------------------------------------------------------------------------
+
+  _checkVines() {
+    if (this.state !== 'normal') return;
+    // A vine you just let go of must not re-grab on the same frame, or jumping
+    // off is impossible: you leave and are caught again before you clear it.
+    if (this._vineCooldown > 0) {
+      this._vineCooldown--;
+      return;
+    }
+    const list = this.world && this.world.climbables;
+    if (!Array.isArray(list) || !list.length) return;
+    for (const v of list) {
+      if (!v || v.removed) continue;
+      if (typeof v.canClimb === 'function' && v.canClimb(this)) {
+        this.grabVine(v);
+        return;
+      }
+    }
+  }
+
+  grabVine(v) {
+    if (!v || this.state === 'climb' || this.state === 'dying') return;
+    if (this._vineCooldown > 0) return;
+    this.state = 'climb';
+    this.stateTimer = 0;
+    this.climbVine = v;
+    this.vx = 0;
+    this.vy = 0;
+    this.grounded = false;
+    this.ducking = false;
+    this.onPlatform = null;
+    this._launchFrame = false;
+    this.controlsLocked = false;
+    if (typeof v.climbX === 'function') this.x = v.climbX() - this.w / 2;
+    sfx(this.world, 'vine', 'climb', 'pipe');
+  }
+
+  releaseVine(vy = 0, vx = 0) {
+    this.climbVine = null;
+    this._vineCooldown = 12;
+    this.state = 'normal';
+    this.stateTimer = 0;
+    this.grounded = false;
+    this.vy = vy;
+    this.vx = vx;
+  }
+
+  _updateClimb() {
+    const v = this.climbVine;
+    if (!v || v.removed) {
+      this.releaseVine(0, 0);
+      return;
+    }
+
+    // Jump lets go, with a small push in the direction you are holding — the
+    // only way off a beanstalk that is not the top or the bottom.
+    if (this._pressed(BTN.JUMP)) {
+      const dir = this._down(BTN.RIGHT) ? 1 : this._down(BTN.LEFT) ? -1 : 0;
+      this.facing = dir || this.facing;
+      this.releaseVine(P.vineHop, dir * P.vinePush);
+      return;
+    }
+
+    const up = this._down(BTN.UP);
+    const down = this._down(BTN.DOWN);
+    if (up) this.y -= P.climbSpeed;
+    else if (down) this.y += P.climbSpeed;
+    this.climbTick = (this.climbTick | 0) + (up || down ? 1 : 0);
+
+    this.x = v.climbX() - this.w / 2;
+    this.vx = 0;
+    this.vy = 0;
+
+    // Off the top: this is the whole point of a beanstalk. The vine names the
+    // area it leads to and the world performs the same warp a pipe would.
+    // Trigger on the HEAD reaching the tip, which is also where the clamp below
+    // stops him — testing his feet instead means the clamp holds him one body
+    // height short of the condition and he climbs forever.
+    if (this.y <= v.y + 2) {
+      if (v.warp) {
+        this.state = 'done';
+        this.hidden = true;
+        this.climbVine = null;
+        if (typeof this.world.warp === 'function') this.world.warp(v.warp);
+        return;
+      }
+      this.y = v.y + 2;
+    }
+
+    // Sliding off the bottom just puts you back on your feet.
+    if (this.y + this.h >= v.baseY) {
+      this.y = v.baseY - this.h;
+      if (down) this.releaseVine(0, 0);
+    }
+  }
+
   _updatePipe() {
     const p = this._pipe;
     if (!p) {
@@ -1764,6 +1876,7 @@ export default class Player extends EntityBase {
 
   _poseKey() {
     if (this.state === 'dying') return 'die';
+    if (this.state === 'climb') return 'climb';
     if (this.state === 'flagpole' || this.state === 'flagflip') return 'climb';
     if (this.state === 'pipe' || this.state === 'pipeexit') return 'idle';
     if (this.state === 'flagwalk' || this.state === 'walkoff') return 'walk';

@@ -724,6 +724,7 @@ export class World {
 
     this.blocks.reset();
     this.entities.length = 0;
+    this.climbables = [];
     this.popups.length = 0;
     if (this.particles) {
       if (typeof this.particles.clear === 'function') this.particles.clear();
@@ -1469,7 +1470,19 @@ export class World {
     }
   }
 
+  // Vines are intangible — the entity/player collision loop skips them on
+  // purpose, or Mario would be shoved around by a beanstalk. They announce
+  // themselves here instead, and the player scans this list to latch on.
+  registerClimbable(e) {
+    if (!e) return;
+    if (!Array.isArray(this.climbables)) this.climbables = [];
+    if (this.climbables.indexOf(e) < 0) this.climbables.push(e);
+  }
+
   _compact() {
+    if (Array.isArray(this.climbables) && this.climbables.length) {
+      this.climbables = this.climbables.filter((e) => e && !e.removed);
+    }
     const list = this.entities;
     let n = 0;
     for (let i = 0; i < list.length; i++) {
