@@ -5,6 +5,7 @@ import input, { BTN } from '../../core/input.js';
 import * as ITEMS from '../../data/sprites/items.js';
 import { PHYS } from '../physics.js';
 import { fx, sfx } from './mushroom.js';
+import { playersOf } from './index.js';
 
 const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
 
@@ -89,9 +90,16 @@ export default class SpringBoard extends Entity {
     e.onPlatform = this;
   }
 
+  // Whoever is actually on the board drives it. The spring is a single-occupant
+  // state machine, so it picks one player rather than tracking both.
+  _occupant() {
+    for (const p of playersOf(this.world)) if (this.standing(p)) return p;
+    return this.world.player;
+  }
+
   update() {
     this.t++;
-    const player = this.world.player;
+    const player = this._occupant();
     const on = this.standing(player);
 
     switch (this.phase) {
@@ -110,13 +118,14 @@ export default class SpringBoard extends Entity {
         if (this.phaseT >= 3) {
           this.phase = 'release';
           this.phaseT = 0;
-          this.boost = input.down(BTN.JUMP);
+          // Read the pad of whoever is on the board, not always player one's.
+          this.boost = (player && player.pad ? player.pad : input).down(BTN.JUMP);
         }
         break;
       }
       case 'release': {
         this.phaseT++;
-        this.boost = this.boost || input.down(BTN.JUMP);
+        this.boost = this.boost || (player && player.pad ? player.pad : input).down(BTN.JUMP);
         this.setStage(Math.max(0, 3 - this.phaseT));
         if (this.phaseT >= 3) {
           this.setStage(0);
@@ -135,7 +144,7 @@ export default class SpringBoard extends Entity {
   }
 
   launch(player) {
-    const held = this.boost || input.down(BTN.JUMP);
+    const held = this.boost || (player && player.pad ? player.pad : input).down(BTN.JUMP);
     const v = (held ? SPRING_LAUNCH_HELD : SPRING_LAUNCH) * this.strength;
     player.y = this.y - player.h - 1;
     player.onPlatform = null;

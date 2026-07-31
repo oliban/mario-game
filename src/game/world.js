@@ -1427,9 +1427,18 @@ export class World {
     }
     if (this.time <= 0) {
       this.time = 0;
-      const p = this.player;
-      if (p && typeof p.die === 'function') p.die('timeup');
-      else this.onPlayerDeath(p);
+      // The clock is shared, so running it out takes BOTH brothers. Killing
+      // only world.player left the other one walking around a dead level.
+      const roster = this.players && this.players.length ? this.players : [this.player];
+      let killed = false;
+      for (const q of roster) {
+        if (!q || q.out || q.dead || q.state === 'dying') continue;
+        if (typeof q.die === 'function') {
+          q.die('timeup');
+          killed = true;
+        }
+      }
+      if (!killed) this.onPlayerDeath(this.player);
     }
   }
 

@@ -3,6 +3,7 @@ import { SCREEN_W } from '../../core/constants.js';
 import rng from '../../core/rng.js';
 import * as ENEMIES_B from '../../data/sprites/enemies-b.js';
 import { fx, spriteOf } from './mushroom.js';
+import { playersOf } from './index.js';
 
 const BALL_ROWS = [
   '..0000..',
@@ -82,8 +83,10 @@ export default class FireBar extends Entity {
     this.computePositions();
     if (!this.onScreenish()) return;
 
-    const p = this.world.player;
-    if (p && !p.dead && p.invulnerable !== true) {
+    // Every player burns, not just the lead one — player two used to walk
+    // straight through the bar.
+    for (const p of playersOf(this.world)) {
+      if (p.dead || p.invulnerable === true) continue;
       for (let i = 0; i < this.count; i++) {
         const bx = this._px[i] - 4;
         const by = this._py[i] - 4;

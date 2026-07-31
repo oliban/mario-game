@@ -1191,8 +1191,25 @@ export default class Player extends EntityBase {
     this._deathCause = cause;
     this._deathFreeze = cause === 'pit' ? 0 : P.deathFreeze;
     if (cause === 'pit') this.vy = 2;
-    music(this.world, null);
+    // In co-op the level keeps running while a brother is still standing, so
+    // one death must not silence the track — only the last one does.
+    if (!this._othersStanding()) music(this.world, null);
     sfx(this.world, 'death', 'die', 'mariodie');
+  }
+
+  // Is any OTHER player still in play? Reads the roster rather than
+  // world.player, which is just whichever brother is currently leading.
+  _othersStanding() {
+    const w = this.world;
+    if (!w) return false;
+    const roster =
+      Array.isArray(w.players) && w.players.length ? w.players : [w.player, w.player2];
+    for (const q of roster) {
+      if (!q || q === this) continue;
+      if (q.out || q.dead || q.state === 'dying') continue;
+      return true;
+    }
+    return false;
   }
 
   kill(style) {

@@ -3,6 +3,7 @@ import { makeSprite } from '../../core/gfx.js';
 import { TILE, SCREEN_W } from '../../core/constants.js';
 import * as ITEMS from '../../data/sprites/items.js';
 import { sfx } from './mushroom.js';
+import { playersOf } from './index.js';
 
 const PAL = {
   overworld: ['#1a1008', '#7a3000', '#c85a10', '#ffb050'],
@@ -127,8 +128,7 @@ export default class Platform extends Entity {
   }
 
   ridden() {
-    const p = this.world.player;
-    if (p && this.supports(p)) return true;
+    for (const p of playersOf(this.world)) if (this.supports(p)) return true;
     return false;
   }
 
@@ -152,8 +152,9 @@ export default class Platform extends Entity {
     const dx = this.deltaX;
     const dy = this.deltaY;
     const riders = [];
-    const p = this.world.player;
-    if (p && this.supports(p)) riders.push(p);
+    // Both brothers ride. Carrying only world.player slid the platform out from
+    // under player two.
+    for (const p of playersOf(this.world)) if (this.supports(p)) riders.push(p);
     for (const e of this.world.entities || []) {
       if (e === this || e.removed || e.isPlatform) continue;
       if (e.ridesPlatforms && this.supports(e)) riders.push(e);
