@@ -567,6 +567,7 @@ export class World {
     this.player2 = null;
     this.coop = false;
     this.coopPad = null;
+    this._collidingPlayer = null;
 
     this.score = 0;
     this.coins = 0;
@@ -1388,10 +1389,12 @@ export class World {
       this._updateEntities();
       for (const q of roster) {
         if (!q || q.dead) continue;
+        this._collidingPlayer = q;
         this._playerEntityCollisions(q);
         this._collectTiles(q);
         this._checkHiddenBlocks(q);
         this._checkCheckpoint(q);
+        this._collidingPlayer = null;
       }
       this._compact();
     }
@@ -1672,7 +1675,14 @@ export class World {
   }
 
   hurtPlayer(a, b) {
-    const p = this.player;
+    // Co-op: enemies call hurtPlayer(this) without naming a victim, so the world
+    // remembers whose collision pass is running. Without this every hit landed on
+    // player 1 — Luigi could walk into a shell and Mario would take the damage.
+    const roster = this.players && this.players.length ? this.players : [this.player];
+    let p = null;
+    if (roster.includes(a)) p = a;
+    else if (roster.includes(b)) p = b;
+    if (!p) p = this._collidingPlayer || this.player;
     const src = a === p ? b : a;
     if (!p || p.dead) return false;
     if (typeof p.hurt === 'function') return p.hurt(src) !== false;

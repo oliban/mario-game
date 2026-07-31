@@ -1649,42 +1649,53 @@ const B_NECK = [
 
 // 1 — contact A: near arm at the back of its swing. Seam and sleeve a column
 // left of the hanging pose, fist dropped behind the hip at x11-12.
+//
+// The FAR arm runs antiphase to it and is therefore FORWARD here: the forearm
+// crosses in front of the bib, so only a short sleeve, a cuff and the fist show
+// at x1-x3 and they sit HIGH (row 17). Below the fist the far arm is gone and
+// the bib's own light column (x2) reads through — the arm has swung off it.
 const BW_ARM_BACK = [
   '..076666666650..',
   '.076696669f7650.',
   '.065aa9999f7650.',
-  '.065ad999df7650.',
-  '.065aa9998f7650.',
-  '.001a999880320..',
-  '.021a998880210..',
+  '.001ad999df7650.',
+  '.021aa9998f7650.',
+  '.0a99999880320..',
+  '.0a99998880210..',
   '..0a999988880...',
   '..0a9988899880..',
 ];
 // 2 — down A: neck rows in. Forearm swings clear of the ribs and the fist rides
 // at x12-13 with a column of sky behind it.
+// The far fist is a row lower than at contact and its knuckles have rolled into
+// the key light (slot 3 instead of slot 1) — the hand is turning over at the top
+// of the forward swing, not repeating frame 1 a pixel down.
 const BW_ARM_DOWNA = [
   ...B_NECK,
   '..076666666650..',
   '.0766966696f760.',
   '.065aa99999f7650',
-  '.065ad999d0.0760',
-  '.065aa99980.0760',
-  '.001a999880.0320',
-  '.021a998880.0210',
+  '.001ad999d0.0760',
+  '.032aa99980.0760',
+  '.0a99999880.0320',
+  '.0a99998880.0210',
   '..0a99999988800.',
   '..0a9988899880..',
 ];
 // 3 — passing A: shoulder pulled forward by the swing, sleeve running out to
 // x14, fist at RIB height (x13-14) — halfway up, not up.
+// The far arm has crossed to the BACK half of its swing: the elbow steps out past
+// the torso to x0, the forearm carries its own outline at x3, and the fist has
+// dropped to hip height with its knuckles still lit.
 const BW_ARM_RISE = [
   '..076666666650..',
   '.0766966696f7660',
   '.065aa99999f7660',
   '.065ad999d9f7220',
-  '.065a99999880...',
-  '.001a99998880...',
-  '.021a99988880...',
-  '..0a9999998880..',
+  '0655a99999880...',
+  '0650a99998880...',
+  '0010a99988880...',
+  '03109999998880..',
   '..0a9988899880..',
 ];
 // 4 — contact B: front of the swing. The fist has climbed to CHEST height at

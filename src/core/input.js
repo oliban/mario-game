@@ -22,7 +22,7 @@ const KEYMAP_P1 = {
   KeyK: BTN.JUMP,
   KeyX: BTN.RUN,
   KeyJ: BTN.RUN,
-  ShiftRight: BTN.RUN,
+  Period: BTN.RUN,
   Enter: BTN.START,
   Escape: BTN.START,
   Tab: BTN.SELECT,

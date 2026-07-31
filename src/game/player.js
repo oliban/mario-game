@@ -14,6 +14,7 @@ import { Anim } from '../core/gfx.js';
 import * as EntityMod from './entity.js';
 import * as Phys from './physics.js';
 import * as MarioArt from '../data/sprites/mario.js';
+import * as LuigiArt from '../data/sprites/luigi.js';
 
 const EntityBase = EntityMod.default || EntityMod.Entity;
 
@@ -325,7 +326,13 @@ const SET_RAW = {
   fire: MarioArt.FIRE_MARIO || MarioArt.MARIO_FIRE || MarioArt.FIRE,
 };
 
-function setFor(power) {
+const LUIGI_RAW = LuigiArt.LUIGI_SETS || LuigiArt.default || null;
+
+function setFor(power, luigi) {
+  if (luigi && LUIGI_RAW) {
+    const alt = LUIGI_RAW[power] || LUIGI_RAW.small || LUIGI_RAW.big || LUIGI_RAW.fire;
+    if (alt) return normalizeSet(alt);
+  }
   const raw = SET_RAW[power] || SET_RAW.small || SET_RAW.big || SET_RAW.fire;
   return normalizeSet(raw);
 }
@@ -1799,7 +1806,7 @@ export default class Player extends EntityBase {
     if (this.state === 'growing' || this.state === 'shrinking') {
       set = this._flickerSet();
     } else {
-      set = setFor(this.power);
+      set = setFor(this.power, this.isLuigi);
     }
     const anim = pickAnim(set, key);
     if (!anim) return null;
