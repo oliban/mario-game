@@ -620,7 +620,6 @@ export class World {
       // start row $06 or $00 down to the floor). x-3 getting the short one is six
       // tiles too short.
       castleTall: poseArt(sceneryMod && sceneryMod.CASTLE_TALL, ['sprite', 'idle', 'tall']),
-      castleSmall: poseArt(sceneryMod && sceneryMod.CASTLE_SMALL, ['sprite', 'idle', 'small']),
     };
 
     this.particles = opts.particles !== undefined ? opts.particles : buildParticles();

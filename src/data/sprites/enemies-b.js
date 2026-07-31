@@ -691,37 +691,38 @@ export const FIREBAR = {
 };
 
 /* ------------------------------------------------------------------ *
- *  HAMMER BRO — 16x24. A TURTLE SOLDIER, and the read is enforced by
- *  hierarchy rather than by detail. Six of the eleven head rows are HELMET
- *  and only five are face, so the thing on top is armour and the thing under
- *  it is an animal. The whole figure is laid out in four bands that never
- *  share a value range:
+ *  HAMMER BRO — 16x24. A TURTLE SOLDIER. The read is carried by four bands
+ *  that share no hue and no value range, and slot 0 is reserved for the OUTER
+ *  contour: interior seams are cut with slot 1 (#0b4210), which is 51 RGB off
+ *  pure black and still 250 luminance clear of the plastron. That is what took
+ *  the frames from 36-41% pure black down to 28-33%, at or under every other
+ *  16x24 character in the project.
  *
- *    HELMET   rows 0-5   bright greens 4/3 rolling to 2/1 at the turn, sitting
- *                        on a brim that flares two columns wider than the dome
- *                        and a row 5 that is SOLID slot 0 across all fourteen
- *                        columns. That black band is the separator: helmet and
- *                        face cannot fuse across it.
- *    FACE     rows 6-10  Koopa gold (5 lit / d mid / 7 shade). A slot-0 brow
- *                        slash sits directly on top of the eye — the only pure
- *                        white on the whole sprite is a 2x2 sclera with the
- *                        pupil driven forward and down. The muzzle is NOT
- *                        white: it is a gold wedge (5/d) hooking three columns
- *                        clear of the cheek, cut off from it by a slot-0 mouth
- *                        line, so the head has exactly one white mass and the
- *                        beak reads by silhouette instead of by value.
- *    TORSO    rows 11-18 SHELL on the back (x1-x5) | slot-0 seam column (x6) |
- *                        PLASTRON (x7-x11) | ARM (x13-x14). The shell is a
- *                        proper dome: a slot-4 rim down its upper-left flank,
- *                        two slot-1 scute seams across it, and a slot-4 skirt
- *                        band where it turns under on row 18.
+ *    HELMET   rows 0-5   its OWN ramp — 9 lit / b mid over a slot-1 underside.
+ *                        The helmet greens sit 78 and 80 RGB units off the
+ *                        shell greens at the matching step, so armour and
+ *                        animal are two objects rather than one green mass.
+ *                        The brim is an EDGE, not a slab: slot 1 across the
+ *                        span with slot 0 only on the flared tips.
+ *    FACE     rows 6-10  Koopa gold (5 lit / d mid / 7 shade). The eye is a
+ *                        3px slot-6 sclera with a single forward-and-down
+ *                        pupil, ringed by slot-7 shade so it reads as an eye
+ *                        and not a socket — the eye zone carries 1 black pixel
+ *                        where it used to carry 9. The BEAK is continuous skin
+ *                        with the cheek and tapers 3px -> 2px, with the mouth
+ *                        cut as a 1px slot-0 slit at its root; it is a beak by
+ *                        silhouette, not a detached gold blob.
+ *    TORSO    rows 11-18 SHELL (x1-x5) | slot-1 seam (x6) | PLASTRON (x7-x11)
+ *                        | ARM (x13-x14). The shell's leading contour steps
+ *                        x1,x0,x0,x0,x0,x1,x1,x2 so the dome CURVES in
+ *                        silhouette instead of standing as a flat wall.
  *    LEGS     rows 19-23 green shins ending in SKIN feet — the same gold as the
  *                        hands and face, which is what stops the lower half
  *                        being one undifferentiated green brick.
  *
- *  Every limb has a transparent notch where it leaves the body (x12 on the
- *  walk arm, x11 on the raised throwing arm), so filling the sprite solid
- *  black still shows arms, a beak and a hammer clear of the torso outline.
+ *  Every limb has a transparent notch where it leaves the body, so filling the
+ *  sprite solid black still shows a beak, an arm and a hammer clear of the
+ *  torso outline in all four frames.
  * ------------------------------------------------------------------ */
 
 // Skin is Koopa gold, NOT human flesh — #f8d5ac is what made this read as a
@@ -762,7 +763,7 @@ const BRO_WALK_A = [
   '.00011111110000.',
   '....055dd70.....',
   '...057667d70....',
-  '...05760d75550..',
+  '...05760d755d0..',
   '...05ddd70dd0...',
   '....07777700....',
   '.044211888d00330',
@@ -783,8 +784,9 @@ const BRO_WALK_A = [
 // PASSING pose. Three things move at once and none of them is a recolour:
 //   * the whole animal drops one row — row 0 goes empty — so the walk has a bob;
 //   * the arms SWAP. Frame A's lead arm hangs at the hip; here the fist is
-//     cocked up at the shoulder (rows 12-13, x12-x14) and the forearm folds back
-//     into the torso by row 15, so the right edge of the silhouette changes;
+//     cocked up at x13-x14 on rows 13-14 over a transparent x12 notch, and the
+//     limb steps back in — forearm x13-x14, elbow x12-x13, shoulder x11 — so
+//     the raised arm is a connected diagonal, not a floating lump;
 //   * the legs go from a wide contact to a gathered pass and the REAR foot
 //     lifts clear of the floor — its sole lands on row 22 while the lead sole
 //     stays on row 23. Frame A plants both soles on 23, wide apart.
@@ -799,7 +801,7 @@ const BRO_WALK_B = [
   '.00011111110000.',
   '....055dd70.....',
   '...057667d70....',
-  '...05760d75550..',
+  '...05760d755d0..',
   '...05ddd70dd0...',
   '....07777700....',
   '.044211888d0.00.',
@@ -817,28 +819,29 @@ const BRO_WALK_B = [
 ];
 
 // WIND-UP. The pose differs from the walk in the BODY before it differs in the
-// props: the Bro sinks three rows into a crouch — the helmet crown falls from
-// row 0 to row 3, the torso loses two rows, the knees splay — while both soles
+// props: the Bro sinks four rows into a crouch — the helmet crown falls from
+// row 0 to row 4, the torso loses two rows, the knees splay — while both soles
 // stay pinned to row 23.
-// The raised arm is a real limb held CLEAR of the head. Column x11 is
-// transparent from row 4 to row 8, so the haft, the gold fist gripping it on
-// rows 7-8 and the forearm below all read as a separate mass; the mallet head
-// spans six columns against the haft's three, so even as a solid black shape
-// it is a hammer on a stick and not a pole.
+// The raised arm is held CLEAR of the head by a transparent x11 running from
+// row 4 to row 8, so the haft and the 2x2 gold fist gripping it on rows 6-7
+// read as a separate mass. The haft is slot c BROWN, not skin gold, so the
+// stick, the hand and the steel head are three materials; the mallet head
+// spans six columns against the haft's one, so even filled solid black it is
+// a hammer on a stick and not a pole.
 //        0123456789abcdef
 const BRO_THROW_A = [
   '..........000000',
   '.........0ffeea0',
   '.........0feeaa0',
   '.........0eaaa0.',
-  '...000000...0c0.',
-  '.04499bbb0..0c0.',
-  '04999bbb110.0550',
-  '0999bbbb110.05d0',
-  '000111111100.000',
+  '....000000..0c0.',
+  '..04499bbb0.0c0.',
+  '.04999bbb10.0550',
+  '.0999bbbb10.05d0',
+  '.00011111100.000',
   '...055dd70......',
   '..057667d70.....',
-  '..05760d75550...',
+  '..05760d755d0...',
   '..05ddd70dd0....',
   '...07777700.....',
   '.044211888d0.030',
@@ -854,14 +857,13 @@ const BRO_THROW_A = [
 ];
 
 // RELEASE. The counter-pose: the crouch UNLOADS. The helmet climbs two rows
-// back up (crown on row 1 against the wind-up's row 3), the spine straightens,
+// back up (crown on row 2 against the wind-up's row 4), the spine straightens,
 // the torso gains a row and the lead leg lunges two columns further out than in
 // the wind-up. The hand is EMPTY — the arm has swung down and forward and ends
-// in a gold fist at x14 on rows 14-15, held off the ribs by a transparent notch
-// at x12-x13 — while the hammer has left it entirely: it tumbles free in the
-// top-right corner with two clear transparent columns (x8-x9, then x10-x11
-// lower down) between it and the helmet, so nothing about the two shapes reads
-// as still connected.
+// in a gold fist at x13-x14 on rows 15-16, held off the ribs by a transparent
+// notch at x12 above it — while the hammer has left it entirely: it tumbles
+// free in the top-right corner with a clear transparent column between it and
+// the helmet, so nothing about the two shapes reads as still connected.
 //        0123456789abcdef
 const BRO_THROW_B = [
   '...........0000.',
@@ -874,7 +876,7 @@ const BRO_THROW_B = [
   '.00011111110000.',
   '....055dd70.....',
   '...057667d70....',
-  '...05760d75550..',
+  '...05760d755d0..',
   '...05ddd70dd0...',
   '....07777700....',
   '.044211888d0.030',
