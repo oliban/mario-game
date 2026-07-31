@@ -150,6 +150,7 @@ class Game {
       onLevelComplete: (w) => this.onLevelComplete(w),
       onGameOver: (w) => this.onGameOver(w),
       onLifeLost: (w) => this.onLifeLost(w),
+      onWarpLevel: (id, to) => this.onWarpLevel(id, to),
     });
     this.world.setParticles(particles);
     this.world.setAudio(audioFacade);
@@ -362,6 +363,24 @@ class Game {
         fromCheckpoint: this.world.checkpointReached,
         resetPlayer: true,
       });
+      await screens.showIntro(this.world, { label: this.playerLabel() });
+    })();
+    return true;
+  }
+
+  // A pipe that leads out of the level entirely (the warp zone). The slot's
+  // level id moves with the player, so dying in world 2 restarts world 2 rather
+  // than dumping you back where the pipe was.
+  onWarpLevel(id, to) {
+    (async () => {
+      const s = this.slots && this.slots[this.turn];
+      if (s) {
+        s.levelId = id;
+        s.checkpoint = false;
+        this.saveSlot();
+      }
+      const ok = await this.loadLevel(id, (to && to.area) || null, { fromCheckpoint: false });
+      if (!ok) return;
       await screens.showIntro(this.world, { label: this.playerLabel() });
     })();
     return true;

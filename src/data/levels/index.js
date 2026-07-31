@@ -16,15 +16,23 @@ import L11 from './1-1.js';
 import L12 from './1-2.js';
 import L13 from './1-3.js';
 import L14 from './1-4.js';
+import L21 from './2-1.js';
+import L22 from './2-2.js';
+import L23 from './2-3.js';
+import L24 from './2-4.js';
 
 export const LEVELS = {
   '1-1': L11,
   '1-2': L12,
   '1-3': L13,
   '1-4': L14,
+  '2-1': L21,
+  '2-2': L22,
+  '2-3': L23,
+  '2-4': L24,
 };
 
-export const ORDER = ['1-1', '1-2', '1-3', '1-4'];
+export const ORDER = ['1-1', '1-2', '1-3', '1-4', '2-1', '2-2', '2-3', '2-4'];
 
 function normalize(id) {
   if (id == null) return null;

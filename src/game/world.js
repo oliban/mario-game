@@ -598,6 +598,7 @@ export class World {
     this.onLevelComplete = opts.onLevelComplete || null;
     this.onGameOver = opts.onGameOver || null;
     this.onLifeLost = opts.onLifeLost || null;
+    this.onWarpLevel = opts.onWarpLevel || null;
 
     this.registry = buildRegistry();
     this.tileArt = buildTileArt();
@@ -1634,6 +1635,18 @@ export class World {
   warp(wdef) {
     const to = wdef && wdef.to;
     if (!to) return false;
+
+    // A warp that names a LEVEL leaves this level entirely, which only the host
+    // can do — it owns level ids, the HUD world number and the intro screen. The
+    // world just reports the destination and stops.
+    if (to.level) {
+      if (typeof this.onWarpLevel === 'function') {
+        this.onWarpLevel(to.level, to);
+        return true;
+      }
+      return false;
+    }
+
     const area = to.area === 'main' || to.area == null ? null : to.area;
     this.loadLevel(this.rootLevel, area, {
       subArea: true,
@@ -2052,7 +2065,34 @@ export class World {
         /* ignore */
       }
     }
+    this._drawSigns(ctx, cam);
     this._drawPopups(ctx, cam);
+  }
+
+  // Level text baked into world space: `signs: [{ x, y, text }]` in TILE
+  // coordinates. SMB's warp zone paints its world numbers straight onto the
+  // background, and this is that — it scrolls with the level, unlike the HUD.
+  _drawSigns(ctx, cam) {
+    const signs = this.level && this.level.signs;
+    if (!Array.isArray(signs) || !signs.length) return;
+    if (!this._textResolved) {
+      this._textResolved = true;
+      this._text = buildTextDrawer();
+    }
+    const draw = this._text;
+    if (!draw) return;
+    for (const s of signs) {
+      if (!s || !s.text) continue;
+      const sx = Math.floor(s.x * TILE - cam.x);
+      const sy = Math.floor(s.y * TILE - cam.y);
+      if (sx < -256 || sx > SCREEN_W + 256) continue;
+      try {
+        draw(ctx, String(s.text), sx, sy);
+      } catch (err) {
+        this._text = null;
+        return;
+      }
+    }
   }
 
   _drawPopups(ctx, cam) {

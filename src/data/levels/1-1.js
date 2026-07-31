@@ -77,6 +77,56 @@ const BONUS = {
   ],
 };
 
+// The warp zone, reached by the first pipe at col 28. SMB hides its warp zones
+// behind a ceiling run or a vine; this one is deliberately on the very first
+// pipe, because its job is to get a tester into any level in two seconds.
+//
+// Each pipe is a two-tile stub standing on the floor at row 11, and the label
+// above it is a `signs` entry — level text painted into world space, which is
+// how SMB writes its world numbers onto the warp-zone backdrop.
+const WARP = {
+  id: '1-1w',
+  name: 'WARP ZONE',
+  theme: 'underground',
+  music: 'underground',
+  width: 26,
+  height: 15,
+  spawn: { x: 2, y: 10 },
+  tiles: [
+    '##########################',
+    '##########################',
+    '##[]######################',
+    '#.{}.....................#',
+    '#........................#',
+    '#........................#',
+    '#........................#',
+    '#........................#',
+    '#........................#',
+    '#........................#',
+    '#........................#',
+    '#....[]..[]..[]..[]..[]..#',
+    '#....{}..{}..{}..{}..{}..#',
+    '##########################',
+    '##########################',
+  ],
+  entities: [],
+  signs: [
+    { x: 5.75, y: 5, text: 'WARP ZONE' },
+    { x: 5.25, y: 9, text: '1-1' },
+    { x: 9.25, y: 9, text: '2-1' },
+    { x: 13.25, y: 9, text: '2-2' },
+    { x: 17.25, y: 9, text: '2-3' },
+    { x: 21.25, y: 9, text: '2-4' },
+  ],
+  warps: [
+    { from: { x: 5, y: 11 }, dir: 'down', to: { level: '1-1' } },
+    { from: { x: 9, y: 11 }, dir: 'down', to: { level: '2-1' } },
+    { from: { x: 13, y: 11 }, dir: 'down', to: { level: '2-2' } },
+    { from: { x: 17, y: 11 }, dir: 'down', to: { level: '2-3' } },
+    { from: { x: 21, y: 11 }, dir: 'down', to: { level: '2-4' } },
+  ],
+};
+
 export default {
   id: '1-1',
   name: 'WORLD 1-1',
@@ -112,8 +162,10 @@ export default {
   ],
   warps: [
     { from: { x: 57, y: 9 }, dir: 'down', to: { area: '1-1b', x: 2.5, y: 3, exit: 'down' } },
+    // The first pipe in the game is the tester's door into every other level.
+    { from: { x: 28, y: 11 }, dir: 'down', to: { area: '1-1w', x: 2.5, y: 3, exit: 'down' } },
   ],
-  areas: { '1-1b': BONUS },
+  areas: { '1-1b': BONUS, '1-1w': WARP },
   flagpole: { x: 198 },
   // The castle base is cut open at 202-204 so the walk-off can actually reach
   // the door: the player is hidden at castle.x * 16 + 22, i.e. inside col 204.
