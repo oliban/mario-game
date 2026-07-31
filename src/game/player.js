@@ -368,8 +368,10 @@ function stillAnim(sprite) {
 
 const POSE_ALIASES = {
   idle: ['idle', 'stand', 'standing', 'still', 'stop'],
-  walk: ['walk', 'walking', 'run', 'move'],
-  run: ['run', 'walk', 'walking'],
+  // walk6 is the smoother six-frame cycle; the three-frame `walk` stays as the
+  // fallback so a sprite set that never authored walk6 still animates.
+  walk: ['walk6', 'walk', 'walking', 'move'],
+  run: ['run', 'walk6', 'walk', 'walking'],
   skid: ['skid', 'turn', 'brake', 'slide', 'skidding'],
   jump: ['jump', 'rise', 'air', 'jumping'],
   fall: ['fall', 'falling', 'jump', 'air'],
@@ -1754,7 +1756,16 @@ export default class Player extends EntityBase {
     if (this.ducking) return 'duck';
     if (!this.grounded) return this.vy < 0 ? 'jump' : 'fall';
     if (this.skidding) return 'skid';
-    if (Math.abs(this.vx) > 0.06) return 'walk';
+    if (Math.abs(this.vx) > 0.06) {
+      // Hysteresis across the walk/run boundary. Holding the pad at almost
+      // exactly maxWalk is common, and without a dead band the gait flips
+      // between two differently-drawn cycles every frame and reads as a stutter.
+      const sp = Math.abs(this.vx);
+      if (this._runGait) this._runGait = sp >= P.maxWalk * 0.86;
+      else this._runGait = sp > P.maxWalk * 1.04;
+      return this._runGait ? 'run' : 'walk';
+    }
+    this._runGait = false;
     return 'idle';
   }
 
@@ -1767,6 +1778,7 @@ export default class Player extends EntityBase {
     else this.swimTick = 99;
 
     switch (key) {
+      case 'run':
       case 'walk': {
         // SMB scales the leg cycle with speed: a full run cycles ~3x a slow walk.
         const t = clamp(Math.abs(this.vx) / P.maxRun, 0, 1);

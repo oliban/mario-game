@@ -570,10 +570,13 @@ const TITLE = {
   logoY: 38,
   copyY: 134,
   menuX: 88,
-  menuY: 156,
+  menuY: 152,
   menuStep: 16,
   cursorX: 72,
-  topY: 212,
+  // The last menu row ends at menuY + 3*menuStep + 8. Anything less than a full
+  // 8px of clear space below that and the TOP line reads as a fifth, broken menu
+  // entry rather than a score.
+  topY: 220,
 };
 
 export const menuItems = () => [t('onePlayer'), t('twoPlayer'), t('harryMode'), t('options')];
@@ -806,10 +809,12 @@ export class TitleScreen {
     // The menu sits over live scenery — hills and bushes are close in value to
     // grey text and swallow it whole. A dim panel behind the block is the whole
     // fix; without it the front door of the game is unreadable.
+    // The panel has to reach past the TOP line too — it sits over the same hills,
+    // and backing only the menu left the score stranded on a bush.
     const panelY = TITLE.menuY - 6;
-    const panelH = this.items.length * TITLE.menuStep + 10;
+    const panelH = TITLE.topY + 12 - panelY;
     ctx.save();
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = 0.72;
     fillRect(ctx, '#000000', 0, panelY, SCREEN_W, panelH);
     ctx.restore();
 
