@@ -1051,8 +1051,10 @@ export class World {
     p.y = (sp.y + 1) * TILE - p.h;
     this._settlePlayer(p);
 
+    if (this.player) this.player.out = false;
     const l = this.player2;
     if (l) {
+      l.out = false;
       l.world = this;
       const lx = Math.max(0, px - TILE);
       const ly = (sp.y + 1) * TILE - l.h;
@@ -1644,8 +1646,39 @@ export class World {
   // -------------------------------------------------------------------------
   // Death — the player animates it and reports back when it is done.
   // -------------------------------------------------------------------------
-  onPlayerDeath() {
+  onPlayerDeath(who) {
     if (this.state === 'gameover') return;
+
+    // Co-op: one brother dying does not end the round. He drops out and the
+    // survivor plays on; only when BOTH are out does the level restart. The lead
+    // player (and therefore the camera, HUD and block bumps) becomes whoever is
+    // still standing.
+    const roster = [this.player, this.player2].filter(Boolean);
+    if (this.coop && roster.length > 1) {
+      const victim = roster.includes(who) ? who : this.player;
+      if (victim) {
+        victim.out = true;
+        victim.hidden = true;
+        victim.removed = true;
+      }
+      const alive = roster.filter((q) => q && !q.out);
+      if (alive.length > 0) {
+        this.players = alive;
+        if (this.player && this.player.out) {
+          this.player = alive[0];
+          this.cam.player = this.player;
+        }
+        this._deadTicks = 0;
+        return;
+      }
+      // Nobody left — restore the roster so the restart brings both back.
+      for (const q of roster) if (q) q.out = false;
+      this.player = roster[0];
+      this.player2 = roster[1] || null;
+      this.players = roster;
+      this.cam.player = this.player;
+    }
+
     if (this.lives <= 0) {
       this.state = 'gameover';
       this.music('game-over');

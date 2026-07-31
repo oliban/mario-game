@@ -1681,6 +1681,7 @@ const BW_ARM_DOWNA = [
   '.0a99998880.0210',
   '..0a99999988800.',
   '..0a9988899880..',
+  '.0aa98888999880.',
 ];
 // 3 — passing A: shoulder pulled forward by the swing, sleeve running out to
 // x14, fist at RIB height (x13-14) — halfway up, not up.
@@ -1700,30 +1701,37 @@ const BW_ARM_RISE = [
 ];
 // 4 — contact B: front of the swing. The fist has climbed to CHEST height at
 // x14-15 and the arm folds back into the body two rows below it.
+// The FAR arm is at the opposite extreme: fully BACK. It is the longest the far
+// arm gets — the elbow breaks the silhouette at x0 a row earlier than at passing
+// and the fist has fallen all the way to the pelvis row (20), four rows below
+// where it sits at contact A.
 const BW_ARM_FWD = [
   '..0766666666650.',
   '.0766966696f7622',
   '.065aa99999f7621',
-  '.065ad999d9880..',
-  '.065a99999880...',
-  '.001a99998880...',
-  '.021a99988880...',
-  '..0a9999998880..',
+  '0655ad999d9880..',
+  '0650a99999880...',
+  '0650a99998880...',
+  '0010a99988880...',
+  '02109999998880..',
   '..0a9988899880..',
 ];
 // 5 — down B: neck rows again, forearm tucked back along the ribs, fist falling
 // through x12-13 on the return.
+// The far arm has started back up: still outboard at x0 but the fist has climbed
+// a row off the pelvis, and the sleeve below it is gone.
 const BW_ARM_DOWNB = [
   ...B_NECK,
   '..076666666650..',
   '.0766966696f760.',
   '.065aa99999f7650',
   '.065ad999d9f7650',
-  '.065aa999980760.',
-  '.001a9998880320.',
-  '.021a9988880210.',
+  '0010aa999980760.',
+  '0210a9998880320.',
+  '.0a999988880210.',
   '..0a999988880...',
   '..0a9988899880..',
+  '.0a998888999880.',
 ];
 // 6 — passing B: elbow folded back behind the ribs, the seam running four rows
 // down the flank, fist trailing at x11-12.
