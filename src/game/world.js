@@ -725,6 +725,7 @@ export class World {
     this.blocks.reset();
     this.entities.length = 0;
     this.climbables = [];
+    this._bridge = null;
     this.popups.length = 0;
     if (this.particles) {
       if (typeof this.particles.clear === 'function') this.particles.clear();
@@ -788,6 +789,10 @@ export class World {
     const seen = new Set([46, 85]); // air, and 'U' used blocks (runtime only)
     for (let i = 0; i < map.length; i++) seen.add(map[i]);
     for (const code of seen) this._makeRec(code);
+
+    // Does this level tile its water? A water-themed level that does gets
+    // tile-accurate swimming, which is what lets 2-2 have a dry shore.
+    this.hasWaterTiles = seen.has(95) || seen.has(126); // '_' and '~'
 
     // Emptied blocks fall back to the solid stone tile when tiles.js has no
     // dedicated "used" art — never to a bare rectangle.
@@ -1393,6 +1398,7 @@ export class World {
 
     // SMB holds the whole level still while Mario's death arc plays.
     if (!dying) {
+      this._updateBridgeFall();
       this.blocks.update();
       this._updateEntities();
       for (const q of roster) {
@@ -1590,12 +1596,96 @@ export class World {
           this.sfx('axe');
           this.shake(2.4, 14);
           this.freeze(10);
-          if (typeof p.walkOff === 'function') p.walkOff(this.castleX);
-          this.levelComplete(p);
+          // The axe drops the bridge out from under Bowser. Only if there is no
+          // bridge to drop does the level end on the spot.
+          if (!this._startBridgeFall(tx, ty, p)) {
+            if (typeof p.walkOff === 'function') p.walkOff(this.castleX);
+            this.levelComplete(p);
+          }
           return;
         }
       }
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // The axe, the bridge and Bowser.
+  //
+  // The bridge is found rather than declared, so this works for any castle that
+  // puts an axe on the same row as the span: walk left from the axe, skip the
+  // gap, and take the first run of solid tiles. It then unbuilds itself one
+  // tile at a time from the axe end towards Bowser, exactly the direction the
+  // original collapses in.
+  // -------------------------------------------------------------------------
+
+  _startBridgeFall(tx, ty, p) {
+    let x = tx - 1;
+    const limit = Math.max(0, tx - 20);
+    while (x >= limit && !this._solidTile(x, ty)) x--;
+    if (x < limit) return null;
+    const right = x;
+    while (x >= 0 && this._solidTile(x, ty)) x--;
+    const left = x + 1;
+    if (right - left < 2) return null;
+
+    const cols = [];
+    for (let c = right; c >= left; c--) cols.push(c);
+    this._bridge = { cols, y: ty, timer: 0, player: p || null, bowserDropped: false };
+    if (p) p.controlsLocked = true;
+    return this._bridge;
+  }
+
+  _solidTile(tx, ty) {
+    const r = this.recAt(tx, ty);
+    return !!(r && r.solid);
+  }
+
+  _bowser() {
+    const list = this.entities;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      if (e && !e.removed && typeof e.onAxe === 'function') return e;
+    }
+    return null;
+  }
+
+  _updateBridgeFall() {
+    const b = this._bridge;
+    if (!b) return;
+    b.timer++;
+    if (b.timer % 3 !== 0) return;
+
+    if (b.cols.length) {
+      const c = b.cols.shift();
+      this.setTile(c, b.y, '.');
+      this.fx('brickShards', c * TILE + TILE * 0.5, b.y * TILE + TILE * 0.5);
+      this.sfx('block-bump');
+      // Once the planks under him are gone, the boss goes with them.
+      const boss = this._bowser();
+      if (!b.bowserDropped && boss) {
+        const bx = (boss.x + boss.w * 0.5) / TILE;
+        if (c <= bx + 1) {
+          b.bowserDropped = true;
+          this._safe(boss, 'onAxe');
+        }
+      }
+      return;
+    }
+
+    // Bridge gone. Anything still standing on it falls anyway.
+    const boss = this._bowser();
+    if (!b.bowserDropped && boss) {
+      b.bowserDropped = true;
+      this._safe(boss, 'onAxe');
+    }
+    if ((b.timer | 0) < 90) return;
+    this._bridge = null;
+    const p = b.player || this.player;
+    if (p) {
+      p.controlsLocked = false;
+      if (typeof p.walkOff === 'function') p.walkOff(this.castleX);
+    }
+    this.levelComplete(p);
   }
 
   // Mario keeps the midway checkpoint for the rest of his lives on this level.

@@ -1145,11 +1145,21 @@ export default class Player extends EntityBase {
   }
 
   _checkWater() {
+    // Three samples up the body, not one: a coin or a block sitting inside the
+    // water is a dry tile, and sampling only the middle made swimming flicker
+    // off for the frames it took to pass through one.
+    const cx = this.x + this.w / 2;
+    const wet = (fy) => {
+      const t = this._tile(cx, this.y + this.h * fy);
+      return !!(t && (t.liquid || /water/i.test(t.name || '')));
+    };
+    if (wet(0.5) || wet(0.15) || wet(0.85)) return true;
+    // The theme is only a fallback, for a water level that never tiled its
+    // water. Letting it win outright meant a water level could not have a
+    // shore: the flagpole at the end of 2-2 would be swum, not walked.
     const level = this.world.level;
-    if (level && level.theme === 'water') return true;
-    const t = this._tile(this.x + this.w / 2, this.y + this.h * 0.5);
-    if (!t) return false;
-    return !!(t.liquid || /water/i.test(t.name || ''));
+    if (level && level.theme === 'water' && !this.world.hasWaterTiles) return true;
+    return false;
   }
 
   // -------------------------------------------------------------------------
