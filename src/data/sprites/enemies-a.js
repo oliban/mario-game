@@ -31,9 +31,21 @@ import { INK } from '../palette.js';
 // because the lip carries slot 2 at cols 4-6 and 9-12 in every frame. The lit
 // foot tone (a) measures 113 / 122 / 96 RGB units from the overworld, underground
 // and castle outlines, so the soles survive a black room in all three palettes.
+// Two measured defects fixed here, both of which made this read as one lump of
+// brown at gameplay scale:
+//   slot 1 was '#3a1608', only 33 RGB from INK.outline — and outline-against-
+//     cap-dark is the most common adjacency in the sprite, so the dome had no
+//     outline at all and vanished outright against a dark room. Now 50 apart,
+//     with the cap-dark -> cap-mid ramp step still healthy at 35.
+//   slots 9/a were '#4a2408' / '#7d4416', 21 and 27 RGB from the cap ramp, so
+//     the boots were painted out of the cap and read as two more lumps of it.
+//     The fix is separation, not hue: a cool lavender cleared the cap ramp but
+//     read as slippers. This neutral dark leather measures 68/63/74 against the
+//     three cap tones and 100 against the outline, so it still holds up in a
+//     black room.
 const GOOMBA_PAL = [
-  INK.outline, '#3a1608', '#6b2708', '#963d10', '#c05a1c', '#f09a48',
-  '#e8b878', '#ffffff', '#0b0705', '#4a2408', '#7d4416', '#b07a42', '#f8d5ac',
+  INK.outline, '#4a1c0a', '#6b2708', '#963d10', '#c05a1c', '#f09a48',
+  '#e8b878', '#ffffff', '#0b0705', '#1c1610', '#5a4a3a', '#b07a42', '#f8d5ac',
 ];
 
 // MATERIAL SEPARATION. The underground Goomba shares its level with the Buzzy
@@ -63,78 +75,103 @@ const GOOMBA_UNDER_PAL = [
 // but the specular. Face shadow (b) clears the cap's bright tone by 45 units,
 // which is the one adjacency that matters: those two slots are neighbours all
 // along the lip.
+// The feet are LEATHER, not stone. Slots 9/a used to be '#2c241c' / '#544838',
+// which sit 13 and 8 RGB units from the cap's own '#332c24' / '#524840' — the
+// boots were painted out of the cap ramp, so at 1x they read as two more lumps
+// of cap. Driven warm they now measure 30 from cap-dark and 52 from cap-mid (67
+// from cap-lit), the foot ramp itself steps 61 units 9->a, and the lit sole
+// stays 120 RGB off the castle outline so it survives a black room.
 const GOOMBA_CASTLE_PAL = [
   '#14100c', '#332c24', '#524840', '#786a5a', '#9c8c76', '#c4b498',
-  '#e8cf9a', '#ffffff', '#0a0806', '#2c241c', '#544838', '#c2a066', '#f8e8c0',
+  '#e8cf9a', '#ffffff', '#0a0806', '#4a2a10', '#7a4c1e', '#c2a066', '#f8e8c0',
 ];
 
+// A CAP THAT FLARES AND A BODY THAT TAPERS. The last pass was called a figure in
+// a wide-brimmed hat, and it was: the dome ran straight down at 14 columns, hit a
+// 16-wide slab, and then dropped to a box of SIX identical 12-wide rows. Nothing
+// in the black fill separated head from jaw, and the stem was 75% of the cap.
+//
+// The occupied width per row now runs
+//   6, 10, 12, 14, 14, 16, 16, 16, 12, 12, 12, 12, 10, 10(split), 12(split),
+//   12(split)
+// — the cap opens continuously from a 6-column crown to a 16-column rim, the
+// body steps IN twice below the rim, and then it SPLITS and splays back out
+// into two wide flat pads with a four-column hole of floor between them. The
+// longest run of equal widths in the body is four rows, not six. Black-filled
+// that is: narrow crown, flared cap, waisted head, two feet — the pinch at row
+// 12 plus the gap at rows 13-15 is what a hat brim can never have.
+//
+// THE RIM SURVIVES A BLACK ROOM. Row 7 is the overhang's underside, and its
+// flanks used to be bare slot 0 — INK.outline, 32 RGB from black, 25 in the
+// underground palette. At a 40-RGB visibility threshold row 7 collapsed from 16
+// occupied columns to 10 and the sprite's visible width fell to 14, i.e. the one
+// feature that stops the meatball read did not exist in exactly the two rooms
+// GOOMBA_UNDER and GOOMBA_CASTLE ship into. The flanks now read outward-to-inward
+// 0 / 1 / 2, and cap-mid measures 114 / 197 / 127 RGB from black across the three
+// palettes, so the overhang is visible on sky, on soot and on stone while still
+// stepping darker than the lip above it.
+//
 // THREE FORMS, NOT ONE LUMP — this used to be a single brown ball with a stripe
 // of eyes in it, which is why the first one read as a meatball. Every frame is
-// built from the same vertical plan:
+// built from the same vertical plan (row numbers are the CONTACT frames; the two
+// passes run the same plan one row lower with a dome row eaten out):
 //
 //   row  0     crown, 6 columns of bare outline.
-//   rows 1-5   CAP DOME, flaring 10 -> 12 -> 14 and then running straight down as
-//              the tone ramps 5 -> 1. The specular is a fixed blob at cols 4-6.
-//   row  6     CAP LIP. Sixteen columns — ONE PIXEL PROUD OF THE DOME ON EACH
-//              FLANK — painted from the two darkest cap tones. Slot 2 is laid in
-//              at cols 2-6 AND cols 9-12, directly over both brow arms, so the
-//              brow reads against the same 48-luminance step on either side; the
-//              lip only falls to slot 1 at the flanks, where it turns away.
-//   row  7     the overhang's UNDERSIDE: bare slot 0 at cols 0-2 and 13-15, where
-//              the lip juts out past the head and there is nothing behind it, and
-//              between them the lip's cast shadow (slot b) carrying the outer
-//              arms of the brow in ink at cols 4-6 and 9-11.
-//   rows 8-12  FACE, inset to cols 2-13 — FOUR COLUMNS NARROWER THAN THE LIP.
-//   row  13    the jaw's underside, which the tops of the feet break through.
-//   rows 14-15 two stubby feet with a two-column hole of sky between them.
+//   rows 1-4   CAP DOME, flaring 10 -> 12 -> 14 as the tone ramps 5 -> 1. The
+//              specular is a fixed blob at cols 4-6.
+//   row  5     the cap's shoulder, first full-width row, painted from cap mid.
+//   row  6     CAP LIP, sixteen columns of the two darkest cap tones.
+//   row  7     the overhang's UNDERSIDE. Slot 0 / 1 / 2 outward-to-inward on each
+//              flank — NOT bare outline, which is what used to make this row
+//              disappear against soot and stone — and between them the lip's cast
+//              shadow (slot b) carrying the brow arms in ink at cols 4-6 / 9-11.
+//   rows 8-9   the head's upper sides, 14 columns: the CAP WRAPS DOWN around the
+//              face in slot 1 at cols 2-3 and 12-13, so the boundary between cap
+//              and face is an arc rather than a ruled horizontal line and the
+//              head is one rounded form instead of a hat sitting on a card.
+//   rows 10-11 12 columns, the face at its widest.
+//   row  12    the jaw, 10 columns — the waist.
+//   rows 13-15 TWO FEET, splaying back out to cols 0-5 and 10-15 with a four
+//              column hole of floor between them.
 //
-// Occupied width per row runs 6, 10, 12, 14, 14, 14, 16, 16, 12, 12, 12, 12, 12,
-// 12, 10(split), 10(split). Filled solid black that is a broad cap stepping down
-// to a narrower head stepping down to two separated stubs — a mushroom, from the
-// silhouette alone, and widest at the cap by six columns over the feet.
+// Occupied width per row runs 6, 10, 12, 14, 14, 16, 16, 16, 14, 14, 12, 12, 10,
+// 10(split), 12(split), 12(split). Filled solid black that is a narrow crown, a
+// cap flaring to full width, a head waisting IN by six columns, and then two
+// separated pads — a pinch plus a split, neither of which a brimmed hat has.
 //
-// THE FACE — FOUR ISLANDS OF INK, NEVER ONE SMEAR. Flood-fill slot 8 with
-// 8-connectivity over the whole sprite and it returns the brow (8px), the left
-// pupil (2px), the right pupil (2px) and the mouth (4px, plus two 1px corners on
-// the contacts) as SEPARATE components in every frame. That is enforced by the
-// layout, not by luck:
+// THE FACE — SEPARATE ISLANDS OF INK, NEVER ONE SMEAR:
 //
 //   row  7   brow arms, ink at cols 4-6 and 9-11, high on each flank.
 //   row  8   eye whites at cols 4-6 / 9-11 with the nose bridge — ink at cols 7-8
 //            only — driven down between them. Arms high, bridge low: the angry V.
-//            The whites stop at col 4 and col 11, so cols 3 and 12 stay face and
-//            each eye keeps a cheek margin instead of running into the outline.
-//   row  9   pupils, 2px each at cols 4-5 and 10-11, two clear columns away from
-//            the bridge so they cannot touch it even diagonally, with white
-//            inboard of each and white directly above.
-//   row 10   CHEEK BAND. No ink at all. This is the row that stops the eyes and
-//            the mouth fusing, and it is where the face's rim modelling is
-//            widest: slot c at cols 3-4, slot b at cols 11-12.
-//   row 11   the mouth: a 4px ink bar at cols 6-9 with a white FANG at each corner
-//            (cols 5 and 10) breaking the bar into a shape.
-//   row 12   the chin. On the contacts the mouth's two down-turned corners land
-//            here as single ink pixels at cols 4 and 11 — a column outboard of the
-//            fangs and a row below, which is the frown — and they touch nothing.
+//   row  9   pupils, ONE pixel each dead-centre of its eye at cols 5 and 10, with
+//            white on both sides and white directly above, and two clear columns
+//            from the bridge so they cannot touch it even diagonally.
+//   row 10   CHEEK BAND. No ink at all — the row that stops the eyes and the
+//            mouth fusing. Slot c at cols 4-5, slot b at cols 10-11: the
+//            modelling now sits INSIDE the face, not stacked in its two edge
+//            columns the way the rim-lit version had it.
+//   row 11   the mouth: a 4px ink bar at cols 6-9 with a white FANG at each
+//            corner (cols 5 and 10) breaking the bar into a shape.
+//   row 12   the jaw, with the frown's two down-turned corners landing in ink at
+//            cols 5 and 10, directly under the fangs.
 //
-// Slot c runs down col 3 and slot b down col 12 from the brow to the jaw, so the
-// head is lit consistently from the upper left over its whole height: 14 of the
-// 50 face cells (28%) carry a modelling tone, against 4 in the version that was
-// called an unlit card.
+// Vertical falloff, which the rim-lit version had none of: row 8 is white over
+// face mid, row 10 carries the lit slot c on the left and the shadow slot b on
+// the right, and row 12 drops to cap-dark shoulders around a face-mid jaw. Brow
+// and chin are no longer the same value.
 //
-// THE CYCLE. 0 CONTACT both feet planted at their widest. 1 PASS the cap eats a
-// dome row and its crown drops a pixel — the body sinks — while the leading foot
-// leaves the floor, its sole tilting into the darker foot tone, and the trailing
-// leg carries the weight; the frown stretches to a 6px bar. 2 CONTACT planted
-// again a column inboard and he SQUINTS: row 8's whites are gone entirely, so the
-// eye is one row deep instead of two. 3 PASS the mirror of 1 with the trailing
-// foot in the air.
+// THE CYCLE. 0 CONTACT both feet planted at their widest. 1 PASS the whole body
+// sinks a row and the cap eats a dome row with it, the trailing leg compresses to
+// a single planted row while the leading foot lifts clear of the floor, and the
+// frown stretches to a 6px bar. 2 CONTACT planted again with the stance drawn in
+// a column on each side, and he SQUINTS: row 8's whites are gone entirely. 3 PASS
+// the mirror of 1 with the trailing foot in the air and the eyes pulled outboard,
+// glancing down the line of travel.
 //
-// THE CAP DOES NOT BOIL. Slot 5 is frozen at cols 4-6 in all four frames — rows
-// 2-4 on the contacts, rows 3-4 on the passes, which is the same cap-relative
-// spot one row down and one row shorter because the dome squashes. The light does
-// not travel, the object does; the locomotion is carried by the feet and the
-// squint, which are the parts a viewer tracks. Adjacent-frame union diffs measure
-// 30.6%, 29.4%, 37.1% and 32.1%.
+// THE CAP DOES NOT BOIL. Slot 5 is frozen at cols 4-6 in all four frames, one row
+// lower and one row shorter on the passes because the dome squashes. The light
+// does not travel, the object does.
 
 // CONTACT. Both feet planted, stance at its widest, crown at its highest.
 //        0123456789abcdef
@@ -144,17 +181,17 @@ const GOOMBA_A = [
   '..044554332210..',
   '.03455543322210.',
   '.02455433222110.',
-  '.01233322222110.',
+  '0122333322221110',
   '0122222112222110',
-  '000b888bb888b000',
-  '..0c77788777b0..',
-  '..0c88766788b0..',
-  '..0cc666666bb0..',
-  '..0cb788887bb0..',
-  '..0c86666668b0..',
-  '..0aa90000aa90..',
-  '..0aa90..0aa90..',
-  '..0a990..0a990..',
+  '012b888bb888b210',
+  '...0777887770...',
+  '...0787667870...',
+  '...0cc6666bb0...',
+  '...0b788887b0...',
+  '....08666680....',
+  '.0aa90....0aa90.',
+  '0aaa90....0aaa90',
+  '099990....099990',
 ];
 
 // PASS. The cap has eaten a dome row and its crown has dropped a pixel: the body
@@ -166,21 +203,21 @@ const GOOMBA_A = [
 //        0123456789abcdef
 const GOOMBA_B = [
   '................',
+  '................',
   '.....000000.....',
   '...0044332200...',
   '..044554332210..',
   '.02455433222110.',
-  '.01233322222110.',
-  '0112222212222110',
-  '000b888bb888b000',
-  '..0c77788777b0..',
-  '..0c88766788b0..',
-  '..0cc666666bb0..',
-  '..0c78888887b0..',
-  '..0c666666bbb0..',
-  '..00990000a990..',
-  '...0aa90.0a990..',
-  '...0a990........',
+  '0122333322221110',
+  '0122222112222110',
+  '012b888bb888b210',
+  '...0777887770...',
+  '...0787667870...',
+  '...0cc6666bb0...',
+  '...0788888870...',
+  '....06666660....',
+  '0aaa90....0aa90.',
+  '099990..........',
 ];
 
 // CONTACT. Planted again but a column inboard of frame 0. The cap is byte-for-
@@ -194,17 +231,17 @@ const GOOMBA_C = [
   '..044554332210..',
   '.03455543322210.',
   '.02455433222110.',
-  '.01233322222110.',
+  '0122333322221110',
   '0122222112222110',
-  '000b888bb888b000',
-  '..0c66688666b0..',
-  '..0c88766788b0..',
-  '..0cc666666bb0..',
-  '..0cb788887bb0..',
-  '..0c86666668b0..',
-  '..00aa9000aa90..',
-  '...0aa90.0aa90..',
-  '...0a990.0a990..',
+  '012b888bb888b210',
+  '...0666886660...',
+  '...0787667870...',
+  '...0cc6666bb0...',
+  '...0b788887b0...',
+  '....08666680....',
+  '..0aa90..0aa90..',
+  '.0aaa90..0aaa90.',
+  '.099990..099990.',
 ];
 
 // PASS, mirrored. Trailing (left) foot in the air and tucked, the leading right
@@ -214,21 +251,21 @@ const GOOMBA_C = [
 //        0123456789abcdef
 const GOOMBA_D = [
   '................',
+  '................',
   '.....000000.....',
   '...0044332200...',
   '..044554332210..',
   '.02455433222110.',
-  '.01233322222110.',
-  '0112222212222110',
-  '000b888bb888b000',
-  '..0c77688677b0..',
-  '..0c88766788b0..',
-  '..0cc666666bb0..',
-  '..0c78888887b0..',
-  '..0c666666bbb0..',
-  '..0a9900009900..',
-  '..0a990.0aa90...',
-  '........0a990...',
+  '0122333322221110',
+  '0122222112222110',
+  '012b888bb888b210',
+  '...0776886770...',
+  '...0787667870...',
+  '...0cc6666bb0...',
+  '...0788888870...',
+  '....06666660....',
+  '.0aa90....0aaa90',
+  '..........099990',
 ];
 
 // STOMPED. The same three forms with the middle one crushed out: the cap keeps a
@@ -243,11 +280,11 @@ const GOOMBA_FLAT_ROWS = [
   '....00000000....',
   '..044554332210..',
   '0122222112222110',
-  '000b888bb888b000',
-  '..0c77788777b0..',
-  '..0c88766788b0..',
-  '0aa0c66666bb0aa0',
-  '0000000000000000',
+  '012b888bb888b210',
+  '...0777887770...',
+  '...0787667870...',
+  '0aa0cc6666bb0aa0',
+  '0990........0990',
 ];
 
 // Every sprite in this module is authored at hitbox width, so the anchor is always (0, 0).
