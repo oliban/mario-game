@@ -1281,14 +1281,18 @@ export default class Player extends EntityBase {
 
   _awardChain(x, y, field) {
     const i = this[field];
-    this[field] = i + 1;
-    if (i >= STOMP_SCORES.length) {
+    const last = STOMP_SCORES.length - 1; // index 9 -> 8000
+    // Saturate the counter: past the 1-UP step the chain keeps paying the top
+    // value, it does not keep minting lives.
+    this[field] = Math.min(i + 1, STOMP_SCORES.length + 1);
+    if (i === STOMP_SCORES.length) {
+      // exactly one 1-UP per chain
       callAny(this.world, ['addLife', 'oneUp', 'gainLife', 'addLives'], 1);
       sfx(this.world, '1up', 'oneup');
       fx(this.world, 'powerupSparkle', x, y);
       return 0;
     }
-    const score = STOMP_SCORES[i];
+    const score = STOMP_SCORES[Math.min(i, last)];
     callAny(this.world, ['addScore', 'score', 'addPoints'], score, x, y);
     return score;
   }

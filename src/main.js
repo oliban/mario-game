@@ -309,6 +309,8 @@ class Game {
   // Hand over to the other player if they still have a game left. Returns false
   // when nobody else can play, which means a real game over.
   async passTurn() {
+    // Simultaneous co-op shares one life pool — there are no alternating turns.
+    if (this.world && this.world.coop) return false;
     if (this.playerCount < 2) return false;
     const other = this.turn === 0 ? 1 : 0;
     if (this.slots[other].over) return false;

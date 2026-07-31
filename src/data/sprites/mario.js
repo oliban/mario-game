@@ -1352,10 +1352,14 @@ const S_HEAD_NOD = [
 
 // 1 — contact A: near arm at the back of its swing. Seam and sleeve step a
 // column left of the hanging pose and the fist is tucked behind the hip x11-12.
+// The FAR arm runs antiphase, so it is FORWARD here: its fist has climbed off the
+// belt onto the SHOULDER row at x2-x3 and the hip line below it is clear of skin
+// entirely. At 16px this is the whole far swing — inboard and high at one contact,
+// outboard and low at the other.
 const SW_ARM_BACK = [
   '..076666666650..',
-  '.076696669f7650.',
-  '.021ad99d98320..',
+  '.021696669f7650.',
+  '.0a99d99d98320..',
 ];
 // 2 — down A: the neck row. The body has dropped out from under the head. The
 // forearm angles FORWARD off the elbow and the fist clears the hip at x13-14.
@@ -1363,22 +1367,25 @@ const SW_ARM_DOWNA = [
   '....01222100....',
   '..076666666650..',
   '.0766966966f760.',
-  '.065a999980.0760',
-  '.021ad99d9980320',
+  '.021a999980.0760',
+  '.0a99d99d9980320',
 ];
 // 3 — passing A: shoulder pulled forward by the swing, sleeve running out to
 // x14, fist still at belt height — the arm is halfway up, not up.
 const SW_ARM_RISE = [
   '..0766666666650.',
-  '.0766966966f7660',
+  '.0656966966f7660',
   '.021ad99d9980320',
 ];
 // 4 — contact B: front of the swing. The fist has climbed to CHEST height at
 // x13-14 and the belt line is clear of it entirely.
+// Near fist at chest height, so the far arm is at the opposite extreme: its fist
+// has dropped to the hip line AND stepped a column outboard, breaking the
+// silhouette at x0. Four pixels of travel from where it sits at contact A.
 const SW_ARM_FWD = [
   '..076666666650..',
   '.0766966966f7220',
-  '.021ad99d99880..',
+  '0210ad99d99880..',
 ];
 // 5 — down B: neck row again, but the forearm is tucked back against the ribs
 // and the fist has fallen to x12-13 — the return half of the swing.
@@ -1387,13 +1394,15 @@ const SW_ARM_DOWNB = [
   '..076666666650..',
   '.0766966966f760.',
   '.065a999998f760.',
-  '.021ad99d998320.',
+  '0210ad99d998320.',
 ];
-// 6 — passing B: elbow relaxed, sleeve short, fist trailing at x11-12.
+// 6 — passing B: elbow relaxed, sleeve short, fist trailing at x11-12. The far
+// fist has swung back inboard to x2-x3 and its knuckles have rolled into the key
+// light (slot 3) on the way up.
 const SW_ARM_TRAIL = [
   '..076666666650..',
   '.0766966966f760.',
-  '.021ad99d98320..',
+  '.032ad99d98320..',
 ];
 
 /* --- small walk legs ----------------------------------------------- */
@@ -1490,13 +1499,42 @@ const S_HEAD_DRIVE = [
   '...0122222100...',
 ];
 
+// Contact head for the small run: the skull loses a row of dome, the brim
+// thickens to three tones and the chin shortens, and the block carries a blank
+// first row so the crown lands two pixels lower than at the apex. Redrawn, not
+// translated — the strike drives the head into the shoulders.
+const S_HEAD_DRIVE_NOD = [
+  '................',
+  '.......000000...',
+  '.....07ee76650..',
+  '....06665555550.',
+  '..04421202323210',
+  '..04432202222210',
+  '..0442244444210.',
+  '....01222100....',
+];
+
+// Flight head: the chin comes up and the face pulls back a column under a cap
+// that stays forward. The nose steps out and in a row earlier and the cheekbone
+// takes a second pixel of skin light.
+const S_HEAD_DRIVE_UP = [
+  '.......000000...',
+  '.....07ee76650..',
+  '....07ee7666650.',
+  '....06655555550.',
+  '..0442200233210.',
+  '..0443320222210.',
+  '..0443244444210.',
+  '..0122222100....',
+];
+
 /* --- small run torsos --------------------------------------------- */
 
 // 1 — contact A: near arm slammed back, fist behind the hip at x11-12.
 const SR_ARM_BACK = [
   '...076666666650.',
-  '.076696669f7650.',
-  '.021ad99d98320..',
+  '.021696669f7650.',
+  '.0a99d99d98320..',
 ];
 // 2 — down A: neck row, elbow bent, fist already up at RIB height (x13-14) —
 // the run pumps through the bottom of the swing instead of hanging there.
@@ -1504,22 +1542,22 @@ const SR_ARM_DOWNA = [
   '....01222100....',
   '...076666666650.',
   '.0766966966f7650',
-  '.065a99999880220',
-  '.021ad99d99880..',
+  '.021a99999880220',
+  '.0a99d99d99880..',
 ];
 // 3 — airborne A: top of the pump. The fist has climbed onto the SHOULDER row
 // at x13-14 and breaks the silhouette above the chest.
 const SR_ARM_AIR_A = [
   '..07666666665220',
   '.0766966966f7650',
-  '.021ad99d99880..',
+  '0310ad99d99880..',
 ];
 // 4 — contact B: fist dropping back through chest height, elbow still folded,
 // hip mass widened by the twist.
 const SR_ARM_FWD = [
   '...076666666650.',
   '.0766966966f7220',
-  '.021ad99d998880.',
+  '0210ad99d998880.',
 ];
 // 5 — down B: forearm tucked against the ribs, the fist rolled palm-back into a
 // 3px mass at x11-13 at the bottom of the return.
@@ -1528,25 +1566,28 @@ const SR_ARM_DOWNB = [
   '...076666666650.',
   '.0766966966f760.',
   '.065a999998f760.',
-  '.021ad99d983220.',
+  '0210ad99d983220.',
 ];
 // 6 — airborne B: shoulder narrowed and only one bib strap left in view — the
 // torso has twisted away with the arm at the top of its BACK swing.
 const SR_ARM_AIR_B = [
   '...07666666650..',
   '.076696666f7650.',
-  '.021ad99d98320..',
+  '.032ad99d98320..',
 ];
 
 /* --- small run legs ------------------------------------------------ */
 
 // 1 — contact A: five columns of sky between the boots and the lead foot out
 // at x15. The walk's widest stride is three columns and stops at x14.
+// Exactly ONE ink run on row 15: the lead sole. The trailing boot is already a
+// row clear of the floor, so there is no double-support phase here — the walk's
+// contact plants both soles, the run's never does.
 const SR_LEG_CONTACT_A = [
   '..0a9999999980..',
-  '09880....0a9980.',
-  '01cb0.....01ccb0',
-  '0bccb0...0bcccb0',
+  '09880.....0a9980',
+  '01ccb0....01ccb0',
+  '.........0bcccb0',
 ];
 // 2 — down A: no double support. The rear boot is already two rows clear of the
 // floor while the lead leg eats the landing.
@@ -1568,9 +1609,9 @@ const SR_LEG_AIR_A = [
 // shy of the reach the near leg had.
 const SR_LEG_CONTACT_B = [
   '..0a9999999980..',
-  '.0a980...09980..',
+  '.0a980....09980.',
   '01ccb0....01cb0.',
-  '0bcccb0...0bccb0',
+  '.........0bccb0.',
 ];
 // 5 — down B: far leg planted, near leg folded up behind it.
 const SR_LEG_DOWN_B = [
@@ -1588,12 +1629,12 @@ const SR_LEG_AIR_B = [
   '................',
 ];
 
-const SMALL_RUN_1 = sm([BLANK, ...S_HEAD_LEAN, ...SR_ARM_BACK, ...SR_LEG_CONTACT_A], 'run1');
+const SMALL_RUN_1 = sm([BLANK, ...S_HEAD_DRIVE_NOD, ...SR_ARM_BACK, ...SR_LEG_CONTACT_A], 'run1', 16);
 const SMALL_RUN_2 = sm([...S_HEAD_DRIVE, ...SR_ARM_DOWNA, ...SR_LEG_DOWN_A], 'run2');
-const SMALL_RUN_3 = sm([...S_HEAD_DRIVE, ...SR_ARM_AIR_A, ...SR_LEG_AIR_A], 'run3');
-const SMALL_RUN_4 = sm([BLANK, ...S_HEAD_LEAN, ...SR_ARM_FWD, ...SR_LEG_CONTACT_B], 'run4');
+const SMALL_RUN_3 = sm([...S_HEAD_DRIVE_UP, ...SR_ARM_AIR_A, ...SR_LEG_AIR_A], 'run3');
+const SMALL_RUN_4 = sm([BLANK, ...S_HEAD_DRIVE_NOD, ...SR_ARM_FWD, ...SR_LEG_CONTACT_B], 'run4', 16);
 const SMALL_RUN_5 = sm([...S_HEAD_DRIVE, ...SR_ARM_DOWNB, ...SR_LEG_DOWN_B], 'run5');
-const SMALL_RUN_6 = sm([...S_HEAD_DRIVE, ...SR_ARM_AIR_B, ...SR_LEG_AIR_B], 'run6');
+const SMALL_RUN_6 = sm([...S_HEAD_DRIVE_UP, ...SR_ARM_AIR_B, ...SR_LEG_AIR_B], 'run6');
 
 SMALL_MARIO.run = new Anim(
   [SMALL_RUN_1, SMALL_RUN_2, SMALL_RUN_3, SMALL_RUN_4, SMALL_RUN_5, SMALL_RUN_6],
@@ -1766,7 +1807,6 @@ const BW_LEG_CONTACT_A = [
 // peeled up so its sole clears the ground line by a row.
 const BW_LEG_DOWN_A = [
   '.09880..0a99980.',
-  '.0980....0a9980.',
   '099800...0a9980.',
   '09880....0a99980',
   '08880....0999980',
@@ -1807,7 +1847,6 @@ const BW_LEG_CONTACT_B = [
 // 5 — down B: far leg planted, near leg peeled up onto its toe behind it.
 const BW_LEG_DOWN_B = [
   '.0a980..099980..',
-  '.0a80...09980...',
   '0a9980..09980...',
   '0a9980..099980..',
   '088880..098880..',
@@ -1823,7 +1862,7 @@ const BW_LEG_PASS_B = [
   '..0a980.099980..',
   '..0a80..09980...',
   '..0a980.099980..',
-  '..0a9980.09980..',
+  '..0a980..09980..',
   '..01ccb0.099980.',
   '.0ccccb0.098880.',
   '.0bbbbb0.088880.',
@@ -1876,18 +1915,60 @@ const B_HEAD_DRIVE = [
   '....01222110....',
 ];
 
+// Contact head for the run. The cap is still driven two pixels ahead of the face,
+// but the skull is COMPRESSED into eleven rows — crown row lost, brim thickened to
+// three tones, the two chin rows merged into one — and the block carries a blank
+// first row, so the crown lands two pixels lower than it does anywhere else in the
+// cycle while the jaw stays welded to the collar. The strike drives the head down
+// into the shoulders; it is not the same head slid.
+const B_HEAD_DRIVE_NOD = [
+  '................',
+  '.......000000...',
+  '.....07ee76650..',
+  '....07ee7666650.',
+  '....07766666650.',
+  '....06665555550.',
+  '..044111223210..',
+  '..04422002332210',
+  '..04433202222210',
+  '..0443224444410.',
+  '...01222444410..',
+  '....012222100...',
+];
+
+// Flight head. At the apex the chin comes UP: the whole face pulls back a column
+// under a cap that stays forward, the nose steps out a row EARLIER and pulls in a
+// row earlier, the cheekbone catches a second pixel of skin light and the jaw and
+// chin shorten. Crown at row 0 — the highest the head gets all cycle.
+const B_HEAD_DRIVE_UP = [
+  '.......000000...',
+  '.....07ee76650..',
+  '....07ee7666650.',
+  '....07776666550.',
+  '....06655555550.',
+  '..04411222332210',
+  '..0442200233210.',
+  '..0443320222210.',
+  '..0443244444210.',
+  '..01222444410...',
+  '..0122222100....',
+  '...012221100....',
+];
+
 /* --- big run torsos ------------------------------------------------ */
 
 // 1 — contact A: arm cocked all the way back with the elbow HIGH, so the fist
 // sits at chest height behind the ribs rather than hanging at the belt.
+// The FAR arm is at the opposite end of its pump: driven FORWARD across the bib,
+// so only a cuff and the fist show at x2-x3 and they sit high on the ribs.
 const BR_ARM_BACK = [
   '...07666666650..',
   '.0766966696f650.',
-  '.065aa9999f7650.',
-  '.065ad999d0320..',
-  '.065aa99980210..',
-  '.001a99988880...',
-  '.021a99988880...',
+  '.001aa9999f7650.',
+  '.021ad999d0320..',
+  '.0a99999980210..',
+  '.0a9999988880...',
+  '..0a999988880...',
   '..0a999998880...',
   '..0a9988899880..',
 ];
@@ -1896,38 +1977,43 @@ const BR_ARM_DOWNA = [
   ...B_NECK,
   '...07666666650..',
   '.0766966696f7650',
-  '.065aa99999f7220',
-  '.065ad999d98020.',
-  '.065a99999880...',
-  '.001a99998880...',
-  '.021a99988880...',
+  '.001aa99999f7220',
+  '.032ad999d98020.',
+  '.0a9999999880...',
+  '.0a9999998880...',
+  '..0a999988880...',
   '..0a9999998880..',
   '..0a9988899880..',
 ];
 // 3 — airborne A: top of the pump. The fist breaks the silhouette ON the
 // shoulder row at x13-14 — a height the walk never reaches.
+// Seven rows, not nine: the two pelvis rows have moved down into the LEG block so
+// the crotch can open two rows higher than it does at contact. The far arm is on
+// the back half of its pump — elbow out past the silhouette at x0, fist at the
+// bottom of the swing.
 const BR_ARM_AIR_A = [
   '..07666666665220',
   '.0766966696f7650',
   '.065aa99999f7650',
   '.065ad999d99880.',
-  '.065a99999880...',
-  '.001a99998880...',
-  '.021a99988880...',
-  '..0a9999998880..',
-  '..0a9988899880..',
+  '0655a99999880...',
+  '0010a99998880...',
+  '0210a99988880...',
 ];
 // 4 — contact B: fist punched forward to x14-15 and the shoulder line pitched
 // a full column ahead of the belt.
+// Near fist punched forward, so the FAR arm is at the very back of its pump: the
+// longest it gets, elbow breaking the silhouette a row earlier than at passing and
+// the fist dropped onto the pelvis line.
 const BR_ARM_FWD = [
   '...0766666666650',
   '.0766966696f7622',
   '.065aa99999f7621',
-  '.065ad999d9880..',
-  '.065a99999880...',
-  '.001a99998880...',
-  '.021a99988880...',
-  '..0a9999998880..',
+  '0650ad999d9880..',
+  '0655a99999880...',
+  '0650a99998880...',
+  '0010a99988880...',
+  '03209999998880..',
   '..0a9988899880..',
 ];
 // 5 — down B: forearm folded back along the flank, seam running four rows down
@@ -1937,42 +2023,45 @@ const BR_ARM_DOWNB = [
   '...07666666650..',
   '.0766966696f760.',
   '.065aa99999f7650',
-  '.065ad999d9f7650',
-  '.065aa99998f760.',
-  '.001a9998880320.',
-  '.021a9988880210.',
+  '.065ad999d0.0320',
+  '0010aa99990.0210',
+  '0210a99988880...',
+  '.0a9999888880...',
   '..0a999988880...',
   '..0a9988899880..',
 ];
 // 6 — airborne B: shoulder narrowed to ten columns and only one bib strap left
 // in view — the whole torso has twisted with the arm at the back of its pump.
+// Seven rows: the pelvis has moved into the leg block here too. The far arm is on
+// its way back FORWARD — cuff and fist have climbed to the ribs at x2-x3 again.
 const BR_ARM_AIR_B = [
   '...0766666650...',
   '.076696666f7650.',
   '.065aa9999f7650.',
   '.065ad999df7650.',
-  '.065aa9998f7650.',
-  '.001a999880320..',
-  '.021a998880210..',
-  '..0a999988880...',
-  '..0a9988899880..',
+  '.001aa9998f7650.',
+  '.021a999880320..',
+  '.0a99998880210..',
 ];
 
 /* --- big run legs --------------------------------------------------- */
 
 // 1 — contact A: near foot strikes and takes everything; the far leg is already
 // extended behind with its sole two rows clear of the ground.
+// The stride is genuinely longer than the walk's: the gap between the thighs opens
+// to FIVE columns (the walk tops out at four) and the lead shin reaches x15, where
+// the walk's stops at x14. The trailing sole is three rows clear of the floor.
 const BR_LEG_CONTACT_A = [
   '.0a98800a99980..',
-  '.09980...0a9980.',
-  '099800...0a9980.',
-  '09880....0a9980.',
+  '099880..0a99980.',
+  '09880...0a999980',
   '08880....0a99980',
-  '01cb0....0999980',
-  '0cccb0...0888880',
-  '0bbbb0...01ccb0.',
-  '.........0cccb0.',
-  '........0bcccb0.',
+  '01cb0.....0a9980',
+  '0cccb0....0a9980',
+  '0bbbb0....099980',
+  '..........01ccb0',
+  '.........0ccccb0',
+  '........0bccccb0',
 ];
 // 2 — down A: deepest point of the cycle. The far leg has swung through, knee
 // folded, boot four rows off the floor.
@@ -1989,15 +2078,21 @@ const BR_LEG_DOWN_A = [
 ];
 // 3 — airborne A: the last two rows are EMPTY. Near leg thrown back behind the
 // hip after the push-off, far knee driven up in front, nothing on the floor.
+// Thirteen rows: the pelvis has come DOWN out of the arm block, so the crotch —
+// and with it the whole hip line — opens two rows HIGHER than at contact. The body
+// genuinely rises into the flight phase instead of the boots merely tucking, and
+// the last two rows are still empty so nothing is touching the floor.
 const BR_LEG_AIR_A = [
-  '..0a9999999980..',
-  '.0a98800999980..',
+  '..0a9999998880..',
+  '..0a9988899880..',
+  '.0a9880.099980..',
   '0a9980...09980..',
   '0a980....09980..',
   '09880....09980..',
   '08880....01cb0..',
-  '01cb0....0cccb0.',
-  '0cccb0..0bcccb0.',
+  '08880....0cccb0.',
+  '01cb0...0bcccb0.',
+  '0cccb0..........',
   '0bbbb0..........',
   '................',
   '................',
@@ -2006,13 +2101,13 @@ const BR_LEG_AIR_A = [
 // foot was in frame 1, and the near leg trails clear of the ground behind it.
 const BR_LEG_CONTACT_B = [
   '.0a98800999980..',
-  '.0a980...09980..',
-  '0a9980...09980..',
+  '0a9980..0999980.',
   '0a9980...099980.',
   '088880...098880.',
-  '01ccb0...088880.',
-  '0cccb0...01cb0..',
-  '0bcccb0..0cccb0.',
+  '01ccb0....09980.',
+  '0cccb0....09980.',
+  '0bcccb0...01cb0.',
+  '.........01ccb0.',
   '.........0cccb0.',
   '........0bcccb0.',
 ];
@@ -2032,25 +2127,27 @@ const BR_LEG_DOWN_B = [
 // 6 — airborne B: floating again. Far leg thrown back, near knee driven up in
 // front with its boot a full row higher than the trailing one.
 const BR_LEG_AIR_B = [
-  '..0a9999999980..',
-  '.0998800a99980..',
+  '..0a999988880...',
+  '..0a9988899880..',
+  '.099880.0a99980.',
   '09980....0a9980.',
   '0980.....0a9980.',
-  '09880....01ccb0.',
+  '09880....0a9980.',
+  '08880....01ccb0.',
   '08880....0cccb0.',
   '01cb0...0bcccb0.',
-  '0cccb0..0bbbbb0.',
+  '0cccb0..........',
   '0bbbb0..........',
   '................',
   '................',
 ];
 
-const BIG_RUN_1 = bg([BLANK, ...B_HEAD_LEAN, ...BR_ARM_BACK, ...BR_LEG_CONTACT_A], 'run1');
+const BIG_RUN_1 = bg([BLANK, ...B_HEAD_DRIVE_NOD, ...BR_ARM_BACK, ...BR_LEG_CONTACT_A], 'run1');
 const BIG_RUN_2 = bg([...B_HEAD_DRIVE, ...BR_ARM_DOWNA, ...BR_LEG_DOWN_A], 'run2');
-const BIG_RUN_3 = bg([...B_HEAD_DRIVE, ...BR_ARM_AIR_A, ...BR_LEG_AIR_A], 'run3');
-const BIG_RUN_4 = bg([BLANK, ...B_HEAD_LEAN, ...BR_ARM_FWD, ...BR_LEG_CONTACT_B], 'run4');
+const BIG_RUN_3 = bg([...B_HEAD_DRIVE_UP, ...BR_ARM_AIR_A, ...BR_LEG_AIR_A], 'run3');
+const BIG_RUN_4 = bg([BLANK, ...B_HEAD_DRIVE_NOD, ...BR_ARM_FWD, ...BR_LEG_CONTACT_B], 'run4');
 const BIG_RUN_5 = bg([...B_HEAD_DRIVE, ...BR_ARM_DOWNB, ...BR_LEG_DOWN_B], 'run5');
-const BIG_RUN_6 = bg([...B_HEAD_DRIVE, ...BR_ARM_AIR_B, ...BR_LEG_AIR_B], 'run6');
+const BIG_RUN_6 = bg([...B_HEAD_DRIVE_UP, ...BR_ARM_AIR_B, ...BR_LEG_AIR_B], 'run6');
 
 BIG_MARIO.run = new Anim(
   [BIG_RUN_1, BIG_RUN_2, BIG_RUN_3, BIG_RUN_4, BIG_RUN_5, BIG_RUN_6],

@@ -615,6 +615,11 @@ export class World {
       // scenery.js authors a proper 80x80 castle; without this it was never drawn
       // and levels had to fake one out of solid castle-brick tiles.
       castle: poseArt(sceneryMod && sceneryMod.CASTLE_BIG, ['sprite', 'idle', 'big']),
+      // SMB ships TWO end-of-level castles, both 5 tiles wide and differing only in
+      // height: 5x5 for x-1 and x-2, and 5x11 for x-3 (CastleObject renders from
+      // start row $06 or $00 down to the floor). x-3 getting the short one is six
+      // tiles too short.
+      castleTall: poseArt(sceneryMod && sceneryMod.CASTLE_TALL, ['sprite', 'idle', 'tall']),
       castleSmall: poseArt(sceneryMod && sceneryMod.CASTLE_SMALL, ['sprite', 'idle', 'small']),
     };
 
@@ -1532,9 +1537,11 @@ export class World {
 
     p.vy = -6.4;
     p.grounded = false;
-    const i = (p.stompChain = (p.stompChain | 0) + 1) - 1;
+    const i = p.stompChain | 0;
+    p.stompChain = Math.min(i + 1, STOMP_CHAIN.length + 1);
     if (i < STOMP_CHAIN.length) this.addScore(STOMP_CHAIN[i], e.x + e.w * 0.5, e.y);
-    else this.addLife(1, e.x + e.w * 0.5, e.y);
+    else if (i === STOMP_CHAIN.length) this.addLife(1, e.x + e.w * 0.5, e.y);
+    else this.addScore(STOMP_CHAIN[STOMP_CHAIN.length - 1], e.x + e.w * 0.5, e.y);
   }
 
   // Free-standing coins, hazard tiles and the castle axe.
@@ -1665,17 +1672,23 @@ export class World {
       if (alive.length > 0) {
         this.players = alive;
         if (this.player && this.player.out) {
-          this.player = alive[0];
+          // Swap the slots rather than overwriting the lead, otherwise
+          // player and player2 alias the survivor and it updates twice.
+          const survivor = alive[0];
+          const fallen = this.player;
+          this.player = survivor;
+          this.player2 = fallen === survivor ? null : fallen;
           this.cam.player = this.player;
         }
         this._deadTicks = 0;
         return;
       }
       // Nobody left — restore the roster so the restart brings both back.
-      for (const q of roster) if (q) q.out = false;
-      this.player = roster[0];
-      this.player2 = roster[1] || null;
-      this.players = roster;
+      const unique = [...new Set(roster)].filter(Boolean);
+      for (const q of unique) q.out = false;
+      this.player = unique[0];
+      this.player2 = unique[1] || null;
+      this.players = unique;
       this.cam.player = this.player;
     }
 
@@ -1769,6 +1782,7 @@ export class World {
   _updateLevelEnd() {
     this.endTimer++;
     const p = this.player;
+    const roster = this.players && this.players.length ? this.players : p ? [p] : [];
     for (const q of roster) if (q) this._safe(q, 'update');
     this.blocks.update();
     this._updateEntities();
@@ -1877,7 +1891,12 @@ export class World {
   // the walk-in lines up with the arch.
   _drawCastle(ctx, cam) {
     if (this.castleX == null) return;
-    const s = artFrame(this.art.castle, this.tick);
+    // x-3 ends with the tall castle; every other level gets the short one. A level
+    // may override with castle.tall.
+    const cs = (this.level && this.level.castle) || (this.rootLevel && this.rootLevel.castle) || null;
+    const wantTall = cs && cs.tall != null ? !!cs.tall : this.levelNum === 3;
+    const art = (wantTall && this.art.castleTall) || this.art.castle;
+    const s = artFrame(art, this.tick);
     if (!s) return;
     const tx = Math.floor(this.castleX / TILE);
     // Find the floor by walking UP from the bottom to the first gap. Scanning down

@@ -24,39 +24,90 @@ import { makeSprite, Anim } from '../../core/gfx.js';
 //   8 mane deep      9 mane mid       a mane lit       b bone shadow
 //   c bone lit       d scute shadow   e scute mid      f scute lit
 // ---------------------------------------------------------------------------
-// SMB1's Bowser is a GREEN creature with an ORANGE mane and a tan plated
-// belly: slots 1-4 are the deep pine carapace, 5-7 the bright grass hide,
-// 8-a the hair, d-f the plastron scutes.
-//
-// The two green ramps are deliberately disjoint. Carapace 1-4 climbs
-// 0b4020 -> 4ecb85 in four even steps, and no adjacent pair inside slots 0-4
-// is closer than 55 RGB units, so the shadow side of the shell cannot fuse
-// into the outline the way a near-black pair would. Hide 5-7 is a separate,
-// much yellower ramp, and slot 7 covers roughly a quarter of the hide — it
-// runs the upper-left of the skull, the muzzle, the collar, the thigh tops
-// and the shins, so the body reads as rounded mass rather than a flat fill
-// with a shadow edge.
+// Four materials, four disjoint hue families, so nothing fuses at 1x:
+//   1-4  GREEN carapace and skull      5-7  ORANGE hide: muzzle, limbs, tail
+//   8-a  RED mane                      d-f  TAN plastron scutes
+//   b-c  BONE: horns, fangs, claws, carapace spikes
+// Hide slot 6 (d4600c) and scute slot e (eeb03a) are the closest pair in the
+// table and still sit 100 RGB units apart, so the belly plates never bleed
+// into the arm or the thigh that overlap them. Slot 1 is a real green, not a
+// near-black — the shell's rim ring is drawn in it and has to stay legibly
+// green against slot 0 rather than dissolving into the outline.
 
 const BOWSER_PAL = [
-  '#150f09', '#08421b', '#137833', '#2ba851',
-  '#6bd965', '#9c3c04', '#dd7010', '#ff9c30',
-  '#7a0f00', '#c02000', '#f04a08', '#b2aa98',
-  '#fff6e2', '#c07a20', '#ffd06a', '#fff0b0',
+  '#150f09', '#06381a', '#0f6b2c', '#1c9440',
+  '#46c95c', '#8ceb85', '#7a2600', '#d4600c',
+  '#ff9024', '#7a1000', '#d92a00', '#ffd21e',
+  '#b2aa98', '#fff6e2', '#8a5a12', '#e0b565',
 ];
 
-// Composition, authored facing RIGHT (the renderer mirrors him):
-//   * the spiked carapace is the big mass BEHIND him, cols 1-16, four bone
-//     spikes welded to its rim — two off the crown, two off the back edge —
-//     every one of them clearing the dome outline by three columns so the
-//     silhouette has teeth in it;
-//   * the skull is thrust FORWARD past the chest, cols 17-31, so the muzzle
-//     overhangs the belly and the head is the first thing that reads;
-//   * the plastron is a banded tan slab, cols 18-29, four dark scute seams
-//     across it, wedged between the shell and the near arm;
-//   * two thick legs and a counter-swinging tail hang off the bottom, and the
-//     gap between them is genuine background, not a filled skirt.
+// COMPOSITION, authored facing RIGHT (the renderer mirrors him). The test this
+// is built to pass: fill every non-transparent pixel black and he must still be
+// Bowser. So every one of these reads as a break in the outer contour, not as
+// interior colour:
+//   * the carapace is the mass BEHIND him, cols 4-16, ringed by a slot-1 rim
+//     and quartered by scute seams. FOUR bone spikes are welded to that rim —
+//     two off the crown at cols 3-5 and 9-11, two off the back edge at cols
+//     1-3 — each clearing the dome by three columns, with three clear rows
+//     between the back pair so the gap survives the outline;
+//   * the two horns stand four columns apart on the skull, so the notch
+//     between them is background even after the outline closes in;
+//   * the skull runs cols 17-31 and the plastron only 17-27, so the muzzle
+//     overhangs the belly and cols 30-31 under the jaw are open sky;
+//   * the legs are ten columns each and land five columns apart — the crotch
+//     is genuine background, not a filled skirt — and the tail clears the
+//     rear foot by three more.
+//
+// The whole figure is outlined by dilation: nothing that touches sky is left
+// without a slot-0 edge, and no enclosed pinhole is left unfilled.
 
+// PASSING POSE. Weight is forward over the lead foot, both soles planted on
+// row 30, tail hanging back and low, near claw swinging at the hip.
 const BOWSER_WALK_A = [
+  '.................0000...0000....',
+  '.................0dd0...0dd0....',
+  '................0ddc0...0dcd0...',
+  '.............000dddcc000dddc0...',
+  '............0a999dcc55444dcc50..',
+  '............09999a905444450550..',
+  '.......00...a99999900044000440..',
+  '......0dd0.aa9999995bb44bb4440..',
+  '.....0dddd0.09999995b044b04440..',
+  '.....0cccccaa99099954433333330..',
+  '......033332a990999544388888880.',
+  '.....0322211aa99999544387777660.',
+  '....0322211aaa99999544387777660.',
+  '....03211112a099999544380000000.',
+  '...033111221109999954438dd6dd60.',
+  '.00d33222211a99999443300cd0dc0..',
+  '0ddc3322211199999ffff0..........',
+  '.00c3322211232fffffff0..........',
+  '...03111111221feeeeee0..........',
+  '....0322222111ffffffee0000000...',
+  '....0322222111fffffee0.0777770..',
+  '...03222222111feeeeee0.ddddd70..',
+  '.00d3111111111fffffee0.cdddc60..',
+  '0ddc3221111111fffeeee0..077660..',
+  '.00c3211111110feeeeee0..0dddd0..',
+  '...0210111110.000eeee0...cddc...',
+  '.00870.08888800..088880000......',
+  '08760..07777770..077777770......',
+  '0000..087777760..0777777670.....',
+  '.....0877766dd0...07766677dd0...',
+  '....08776666cd0..087666666cd0...',
+  '....00000000000..000000000000...',
+];
+
+// CONTACT POSE — a different drawing, not frame A slid sideways. No two parts
+// carry the same offset, which is the only way to guarantee it is not a
+// translation: the carapace ROCKS back and down (-1, +1) while the skull and
+// mane only bob (0, +1) and the plastron does not move at all. Because the
+// shell's shading is evaluated in screen space, the specular crescent slides
+// across the carapace as it rocks instead of riding along with it. The legs
+// have swapped roles — the trailing leg has swung forward and its sole has
+// left the ground two rows early — and the tail has swung UP against them.
+const BOWSER_WALK_B = [
+  '................................',
   '....................0000..0000..',
   '...............000000cc0.00cc0..',
   '.............000aa90ccb000ccb00.',
@@ -64,68 +115,38 @@ const BOWSER_WALK_A = [
   '...........00aa99933ccbb33ccbb30',
   '..........00aa999044333333322220',
   '..........0aa9998043111111112220',
-  '....0000..00aa999031cc01cc011220',
-  '....0cc0000aa9998031c001c0011220',
-  '...00cb00cc0aa999022111117766500',
-  '...0ccbb0cbaa9998022177666666650',
-  '...0ccbbccbbaa999002566665666650',
-  '...00434ccbaa9998005500cc000cc00',
-  '000044344233aa999880566cb666cb50',
-  '0ccb333322222aa99980055555555000',
-  '0ccb4343233322aa9990ddddddddd000',
-  '0bbb42332332122aa99ffeeeee076650',
-  '0003222222111111110ffeeeee076650',
-  '000332332221221110ddddddd0cccc50',
-  '0ccb23321221221110ffeeeee0bbbb50',
-  '0ccb22111111111110ffeeeeee076650',
-  '0bbb22212221111100dddddddd076650',
-  '000212212211111100ffeeeeed076650',
-  '..001111111111100ffeeeeee0cc0cc0',
-  '..000221111111000ddd666660bb0bb0',
-  '.0066511111115500ffe766666550000',
-  '00766500766665500000076666550...',
-  '07665500766665500...0766665500..',
-  '05665000766666550000076666655000',
-  '0055000766666cc0cc00766666cc0cc0',
-  '.000005666665bb0bb05666665bb0bb0',
-  '.....000000000000000000000000000',
+  '.0000.....00aa999031cc01cc011220',
+  '.0cc0..0000aa9998031c001c0011220',
+  '.0cb00.0cc00aa999022111117766500',
+  '.0ccb000cb0aa9998022177666666650',
+  '.0ccb111ccb1aa999002566666655650',
+  '00001444ccbaa9998005500cc000cc00',
+  'ccb143333233aa999880566cb666cb50',
+  'ccb1433332333aa99980d55555555000',
+  'bbb14222222211aa999ffeeeeddd000.',
+  '000133333332221aa99feeeee076650.',
+  '..0143233322122100ddddddd076650.',
+  '..0133232222122100ffeeee0ccccb0.',
+  '000133222222121000ffeeee0bbbb50.',
+  'ccb132111111121000ddddddd076650.',
+  'ccb112222222211000ffeeeed076650.',
+  'bbb12222212221000ffeeeee0cc0cc0.',
+  '07661222212215500dddd6660bb0bb0.',
+  '00550122212165500ffee7666655000.',
+  '.0000011111666550000007666550...',
+  '.....0007666666cc0...076665500..',
+  '......056666665cb0..00766665500.',
+  '......000000000000.007666666cc0.',
+  '...................056666665cb0.',
+  '...................000000000000.',
 ];
 
-const BOWSER_WALK_B = [
-  '................................',
-  '...................0000..0000...',
-  '..............000000cc0.00cc0...',
-  '............000aa90ccb000ccb00..',
-  '...........00aa9990ccbb00ccbb00.',
-  '..........00aa99933ccbb33ccbb30.',
-  '.........00aa999044333333322220.',
-  '.........0aa9998043111111112220.',
-  '....0000.00aa999031cc01cc011220.',
-  '....0cc000aa9998031c001c0011220.',
-  '...00cb00ccaa999022111117766500.',
-  '...0ccbb0caa9998022177666666650.',
-  '...0ccbbccbaa999002566665666650.',
-  '...00434ccaa9998005500cc000cc00.',
-  '00004434423aa999880566cb666cb50.',
-  '0ccb33332222aa99980055555555000.',
-  '0ccb434323332aa99900ddddddddd00.',
-  '0bbb4233233212aa990ffeeee076650.',
-  '0003222222111111110ffeeee076650.',
-  '000332332221221110dddddd0cccc50.',
-  '0ccb23321221221110ffeeee0bbbb50.',
-  '0ccb22111111111110ffeeeee076650.',
-  '0bbb22212221111100ddddddd076650.',
-  '000212212211111150ffeeeee076650.',
-  '00761111111111165ff666660cc0cc0.',
-  '07665221111111665dd766660bb0bb0.',
-  '00665011111116666ffe76666550000.',
-  '.005500000766666cc0c766665500...',
-  '..0000..05666665bb0b76666655000.',
-  '........00000000000766666cc0cc0.',
-  '.................05666665bb0bb0.',
-  '.................00000000000000.',
-];
-
+// THE ROAR. The change is on the JAW, not somewhere down the chest: the upper
+// palate keeps its two fangs, the lower jaw drops four rows with two more
+// pointing back up at them, and the throat between is slot 8 — the deep red of
+// the mane, so the maw reads as flesh and not as a hole punched in the sprite.
+// The chin now ends eight rows below where it does in the walk, so the outer
+// silhouette is genuinely different. The near arm swings clear of it.
 const BOWSER_MOUTH_OPEN = [
   '....................0000..0000..',
   '...............000000cc0.00cc0..',
@@ -134,33 +155,37 @@ const BOWSER_MOUTH_OPEN = [
   '...........00aa99933ccbb33ccbb30',
   '..........00aa999044333333322220',
   '..........0aa9998043111111112220',
-  '....0000..00aa999031cc01cc011220',
-  '....0cc0000aa9998031c001c0011220',
-  '...00cb00cc0aa999022111117766500',
-  '...0ccbb0cbaa9998022177666666650',
-  '...0ccbbccbbaa999002566666666665',
-  '...00434ccbaa9998005588cc888cc85',
-  '000044344233aa999805888cb888cb85',
-  '0ccb333322222aa99985888888888880',
-  '0ccb4343233322aa99905cb888cb8850',
-  '0bbb42332332122aa99f566666666500',
-  '0003222222111111110ff5555555000.',
-  '000332332221221110ddddddddddd000',
-  '0ccb23321221221110ffeeeeee076650',
-  '0ccb22111111111110ffeeeee0cccc50',
-  '0bbb22212221111100ddddddd0bbbb50',
-  '000212212211111100ffeeeeed076650',
-  '..001111111111100ffeeeeeed076650',
-  '..000221111111000ddd666660cc0cc0',
-  '.0066511111115500ffe766660bb0bb0',
-  '00766500766665500000076666550000',
-  '07665500766665500...0766665500..',
-  '05665000766666550000076666655000',
-  '0055000766666cc0cc00766666cc0cc0',
-  '.000005666665bb0bb05666665bb0bb0',
-  '.....000000000000000000000000000',
+  '..0000....00aa999031cc01cc011220',
+  '..0cc0..000aa9998031c001c0011220',
+  '..0cb00.0cc0aa999022111117766500',
+  '..0ccb000cbaa9998022177666666650',
+  '..0ccb111ccbaa999002566666666665',
+  '000001444ccaa9998005588cc888cc85',
+  '0ccb14333323aa999805888cb888cb85',
+  '0ccb143333233aa99985888888888880',
+  '0bbb1422222221aa99905cb888cb8850',
+  '000013333333222aa99f566666666500',
+  '...014323332212210ffe55555550000',
+  '...013323222212210dddddddd076650',
+  '000013322222212100ffeeeee0ccccb0',
+  '0ccb13211111112100ffeeeee0bbbb50',
+  '0ccb11222222221100dddddddd076650',
+  '0bbb12222212221000ffeeeedd076650',
+  '00066122221221000ffeeeeed0cc0cc0',
+  '00766512221210000ddddd6660bb0bb0',
+  '07665501111155000ffeee7666655000',
+  '076650007666550000000007666550..',
+  '0055000076665500......076665500.',
+  '.0000000766665500....00766665500',
+  '.....007666666cc0...007666666cc0',
+  '.....056666665cb0...056666665cb0',
+  '.....000000000000...000000000000',
 ];
 
+// WIND-UP before the breath. The whole near arm is cocked: claws up at rows
+// 15-16 clear of the jaw line, the spiked cuff climbed to rows 17-18, so the
+// plastron below reads uninterrupted. He braces — the feet plant wider than
+// in either walk frame.
 const BOWSER_ARM_UP = [
   '....................0000..0000..',
   '...............000000cc0.00cc0..',
@@ -169,33 +194,37 @@ const BOWSER_ARM_UP = [
   '...........00aa99933ccbb33ccbb30',
   '..........00aa999044333333322220',
   '..........0aa9998043111111112220',
-  '....0000..00aa999031cc01cc011220',
-  '....0cc0000aa9998031c001c0011220',
-  '...00cb00cc0aa999022111117766500',
-  '...0ccbb0cbaa9998022177666666650',
-  '...0ccbbccbbaa999002566665666650',
-  '...00434ccbaa9998005500cc000cc00',
-  '000044344233aa999880566cb666cb50',
-  '0ccb333322222aa99980055555555000',
-  '0ccb4343233322aa9990ddddddddd000',
-  '0bbb42332332122aa99ffeeee0cc0cc0',
-  '0003222222111111110ffeeee0bb0bb0',
-  '000332332221221110ddddddd0cccc50',
-  '0ccb23321221221110ffeeeee0bbbb50',
-  '0ccb22111111111110ffeeeeee076650',
-  '0bbb22212221111100dddddddd076650',
-  '000212212211111100ffeeeeed076650',
-  '..001111111111100ffeeeeeed076650',
-  '..000221111111000dddd66666550000',
-  '.00665111111150.0ffee766666550..',
-  '007665076666550.00000076666550..',
-  '0766550766665500.....0766665500.',
-  '056650076666655000..007666665500',
-  '005500766666cc0cc0.00766666cc0cc',
-  '.00005666665bb0bb0.05666665bb0bb',
-  '....00000000000000.0000000000000',
+  '..0000....00aa999031cc01cc011220',
+  '..0cc0..000aa9998031c001c0011220',
+  '..0cb00.0cc0aa999022111117766500',
+  '..0ccb000cbaa9998022177666666650',
+  '..0ccb111ccbaa999002566666655650',
+  '000001444ccaa9998005500cc000cc00',
+  '0ccb14333323aa999880566cb666cb50',
+  '0ccb143333233aa99980055555555000',
+  '0bbb1422222221aa9990ddddd0cc0cc0',
+  '000013333333222aa99ffeeee0bb0bb0',
+  '...014323332212210ffeeeee0ccccb0',
+  '...013323222212210ddddddd0bbbb50',
+  '000013322222212100ffeeeeed076650',
+  '0ccb13211111112100ffeeeeed076650',
+  '0ccb11222222221100dddddddd076650',
+  '0bbb12222212221000ffeeeedd076650',
+  '00066122221221000ffeeeeeddd00000',
+  '007665122212100.0dddddd66665500.',
+  '07665571111150..0ffeeed76666550.',
+  '07665007666550..000000007666550.',
+  '005500076665500........076665500',
+  '.000000766665500......0076666550',
+  '....007666666cc0.....007666666cc',
+  '....056666665cb0.....056666665cb',
+  '....000000000000.....00000000000',
 ];
 
+// AIRBORNE — his signature SMB1 hop. Both legs fold up under the shell, the
+// soles come off row 30 entirely, the body rides a row higher, and the last
+// three rows of the frame hold nothing at all, so he is unmistakably off the
+// bridge.
 const BOWSER_HOP = [
   '...............000000cc0.00cc0..',
   '.............000aa90ccb000ccb00.',
@@ -203,34 +232,38 @@ const BOWSER_HOP = [
   '...........00aa99933ccbb33ccbb30',
   '..........00aa999044333333322220',
   '..........0aa9998043111111112220',
-  '....0000..00aa999031cc01cc011220',
-  '....0cc0000aa9998031c001c0011220',
-  '...00cb00cc0aa999022111117766500',
-  '...0ccbb0cbaa9998022177666666650',
-  '...0ccbbccbbaa999002566665666650',
-  '...00434ccbaa9998005500cc000cc00',
-  '000044344233aa999880566cb666cb50',
-  '0ccb333322222aa99980055555555000',
-  '0ccb4343233322aa9990ddddddddd000',
-  '0bbb42332332122aa99ffeeeee076650',
-  '0003222222111111110ffeeeee076650',
-  '000332332221221110ddddddd0cccc50',
-  '0ccb23321221221110ffeeeee0bbbb50',
-  '0ccb22111111111110ffeeeeee076650',
-  '0bbb22212221111100dddddddd076650',
-  '000212212211111100ffeeeeed076650',
-  '.0061111111111100ffeeeeee0cc0cc0',
-  '00766221111111000dd6666650bb0bb0',
-  '07665511111115500ff7666665500000',
-  '00665000766665500000766665500...',
-  '.005500076666655000076666655000.',
-  '..00000766666cc0cc0766666cc0cc0.',
-  '.....05666665bb0bb5666665bb0bb0.',
-  '.....00000000000000000000000000.',
+  '..0000....00aa999031cc01cc011220',
+  '..0cc0..000aa9998031c001c0011220',
+  '..0cb00.0cc0aa999022111117766500',
+  '..0ccb000cbaa9998022177666666650',
+  '..0ccb111ccbaa999002566666655650',
+  '000001444ccaa9998005500cc000cc00',
+  '0ccb14333323aa999880566cb666cb50',
+  '0ccb143333233aa99980055555555000',
+  '0bbb1422222221aa9990dddddddd0000',
+  '000013333333222aa99ffeeeed076650',
+  '...014323332212210ffeeeeed076650',
+  '...013323222212210ddddddd0ccccb0',
+  '000013322222212100ffeeeee0bbbb50',
+  '0ccb13211111112100ffeeeeed076650',
+  '0ccb11222222221100dddddddd076650',
+  '0bbb12222212221000ffeeeed0cc0cc0',
+  '00766122221221000ffeeeeed0bb0bb0',
+  '07665512221210000dddd66665500000',
+  '07665001111155000ffee76666550...',
+  '005500007666550000000076665500..',
+  '.0000000766665500...00766665500.',
+  '.....007666666cc0..007666666cc0.',
+  '.....056666665cb0..056666665cb0.',
+  '.....000000000000..000000000000.',
   '................................',
   '................................',
 ];
 
+// BLOWN OFF THE BRIDGE. The figure is SHEARED, three columns of rake applied
+// in steps down the body — skull back 2, jaw and mane back 1, hips none — so
+// the body axis leans instead of standing plumb. Eyes screwed shut behind a
+// lash line, jaw wrenched open, both legs kicked clear of the baseline.
 const BOWSER_FALLING = [
   '..................0000..0000....',
   '.............000000cc0.00cc0....',
@@ -239,29 +272,29 @@ const BOWSER_FALLING = [
   '.........00aa99933ccbb33ccbb30..',
   '........00aa999044333333322220..',
   '........0aa9998043111111112220..',
-  '..0000..00aa999043111111112220..',
-  '..0cc0000aa9998031100110011220..',
-  '..00cb00cc0aa999022111117766500.',
-  '..0ccbb0cbaa99980221776666666500',
-  '..0ccbbccbbaa9990025666666666650',
-  '..00434ccbaa9998005588cc888cc850',
-  '00044344233aa999805888cb888cb850',
-  '0ccb333322222aa99985888888888880',
-  '0ccb4343233322aa99905cb888cb8850',
-  '0bbb42332332122aa99f566660cc0cc0',
-  '0003222222111111110ff55550bb0bb0',
-  '000332332221221110ddddddd0cccc50',
-  '0ccb23321221221110ffeeeee0bbbb50',
-  '00ccb22111111111110ffeeeeee07665',
-  '.0bbb22212221111100dddddddd07665',
-  '.000212212211111100ffeeeeed07665',
-  '...001111111111100ffe66666507665',
-  '..0066221111111000ddd76666655000',
-  '.00766511111115000ffee766665500.',
-  '.0766550766666550000007666665500',
-  '.006650766666cc0cc000766666cc0cc',
-  '..00555666665bb0bb005666665bb0bb',
-  '...00000000000000000000000000000',
+  '0000....00aa999043111111112220..',
+  '0cc00..00aa9998031100110011220..',
+  '00cb00.0cc0aa999022111117766500.',
+  '.0ccb000cbaa99980221776666666500',
+  '.0ccb111ccbaa9990025666666666650',
+  '00001444ccaa9998005588cc888cc850',
+  'ccb14333323aa999805888cb888cb850',
+  '0ccb143333233aa99985888888888880',
+  '0bbb1422222221aa99905cb880cc0cc0',
+  '000013333333222aa99f566660bb0bb0',
+  '...014323332212210ffe55550ccccb0',
+  '...013323222212210ddddddd0bbbb50',
+  '.00013322222212100ffeeeeed076650',
+  '.0ccb13211111112100ffeeeeed07665',
+  '.0ccb11222222221100dddddddd07665',
+  '.0bbb12222212221000ffeeeedd07665',
+  '.00766122221221000ffeee666655000',
+  '.07665512221210000ddddd76666550.',
+  '.07665001111150000ffeeed76665500',
+  '.0055000766665500000000076666550',
+  '..000007666666cc0....007666666cc',
+  '.....056666665cb0....056666665cb',
+  '.....000000000000....00000000000',
   '................................',
   '................................',
 ];

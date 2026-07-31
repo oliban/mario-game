@@ -691,167 +691,203 @@ export const FIREBAR = {
 };
 
 /* ------------------------------------------------------------------ *
- *  HAMMER BRO — 16x24. A KOOPA, built as one: pale beak with a nostril,
- *  banded belly plate on the leading half, shell mass with a lit rim on
- *  the trailing half, notch-horned helmet with a hard brim.
+ *  HAMMER BRO — 16x24. A TURTLE SOLDIER, and the read is enforced by
+ *  hierarchy rather than by detail. Six of the eleven head rows are HELMET
+ *  and only five are face, so the thing on top is armour and the thing under
+ *  it is an animal. The whole figure is laid out in four bands that never
+ *  share a value range:
  *
- *  Head: a 2px-wide horn notch rising from each side of the helmet, a brim
- *  drawn in slot 1 with slot-0 corners so it has thickness instead of reading
- *  as a black stripe, a white sclera with a slot-0 pupil, and a pale beak
- *  wedge at the front of the jaw.
+ *    HELMET   rows 0-5   bright greens 4/3 rolling to 2/1 at the turn, sitting
+ *                        on a brim that flares two columns wider than the dome
+ *                        and a row 5 that is SOLID slot 0 across all fourteen
+ *                        columns. That black band is the separator: helmet and
+ *                        face cannot fuse across it.
+ *    FACE     rows 6-10  Koopa gold (5 lit / d mid / 7 shade). A slot-0 brow
+ *                        slash sits directly on top of the eye — the only pure
+ *                        white on the whole sprite is a 2x2 sclera with the
+ *                        pupil driven forward and down. The muzzle is NOT
+ *                        white: it is a gold wedge (5/d) hooking three columns
+ *                        clear of the cheek, cut off from it by a slot-0 mouth
+ *                        line, so the head has exactly one white mass and the
+ *                        beak reads by silhouette instead of by value.
+ *    TORSO    rows 11-18 SHELL on the back (x1-x5) | slot-0 seam column (x6) |
+ *                        PLASTRON (x7-x11) | ARM (x13-x14). The shell is a
+ *                        proper dome: a slot-4 rim down its upper-left flank,
+ *                        two slot-1 scute seams across it, and a slot-4 skirt
+ *                        band where it turns under on row 18.
+ *    LEGS     rows 19-23 green shins ending in SKIN feet — the same gold as the
+ *                        hands and face, which is what stops the lower half
+ *                        being one undifferentiated green brick.
  *
- *  walk: the head drops one row on the passing pose and the torso loses a row
- *  to absorb it, so the feet stay pinned to rows 22-23 — that is the bob. The
- *  arms genuinely swap: in A the lead arm hangs low at the hip, in B it is
- *  cocked high with the fist at the shoulder. The legs go from wide contact to
- *  gathered passing, the shell rim rocks one pixel, and every boot is three
- *  toned with a lit rim on the leading toe instead of being a black brick.
+ *  Every limb has a transparent notch where it leaves the body (x12 on the
+ *  walk arm, x11 on the raised throwing arm), so filling the sprite solid
+ *  black still shows arms, a beak and a hammer clear of the torso outline.
  * ------------------------------------------------------------------ */
 
 // Skin is Koopa gold, NOT human flesh — #f8d5ac is what made this read as a
 // bearded soldier. These are the exact skin tones enemies-a gives the Koopa
-// Troopa, so the two turtles are visibly the same species.
+// Troopa, so the two turtles are visibly the same species. Slot 6 (pure white)
+// is now spent ONLY on the eye: four pixels, nothing else on the sprite.
 const BRO_PAL = [
-  OUT,        // 0 outline
-  '#0b4210',  // 1 shell core shadow
+  OUT,        // 0 outline — outer contour only; interior seams use slot 1
+  '#0b4210',  // 1 shell core shadow / interior seam / helmet underside
   '#12751a',  // 2 shell shadow
   '#35a832',  // 3 shell mid / limbs
   '#6ed45c',  // 4 shell lit rim
   '#f8dc70',  // 5 skin lit
-  '#ffffff',  // 6 eye sclera / beak
+  '#ffffff',  // 6 eye sclera
   '#a8720c',  // 7 skin shade / scute seam
   '#fffbe8',  // 8 plastron lit
-  '#ddb45a',  // 9 plastron shade
+  '#2fb07a',  // 9 HELMET lit    — 78 RGB off the shell's lit rim
   '#3a4450',  // a hammer head core shadow  (same steel as HAMMER.spin)
-  '#707c8c',  // b hammer head shadow
+  '#12603a',  // b HELMET mid    — 80 RGB off the shell's mid green
   '#7a4a1c',  // c hammer haft mid
-  '#e8b830',  // d skin mid / haft lit
+  '#e8b830',  // d skin mid / plastron scute shade / haft lit
   '#aab4c4',  // e hammer head mid
   '#e8eef6',  // f hammer head specular
 ];
 
-// Contact pose. Cross-section of the torso, left to right: rear-arm sliver |
-// shell (lit rim at x2, curving into core shadow) | plastron seam | belly
-// plate with scute bands | lead arm.
+// CONTACT pose: stance at its widest, both soles planted on row 23, lead arm
+// hanging long at the hip. The arm is the part that used to vanish — it is now
+// held off the torso by a TRANSPARENT column at x12 from row 13 down, so the
+// elbow cuts a notch into the silhouette and the gold fist on rows 16-17
+// bulges past the ribs instead of being a stripe painted on them.
 //        0123456789abcdef
 const BRO_WALK_A = [
-  '....00....00....',
-  '...0440000440...',
-  '..044443333220..',
-  '.04444433332210.',
-  '.04444333322110.',
-  '..001111111100..',
-  '..0d55555555d0..',
-  '..0d555556055d0.',
-  '..07d55556656760',
-  '..00d555555d6660',
-  '.03221988889000.',
-  '0432219888890330',
-  '0432219777790330',
-  '0432219888890330',
-  '0432219777790550',
-  '0432219888890550',
-  '.03221977779030.',
-  '..022198888910..',
+  '.....000000.....',
+  '...0444333220...',
+  '..044433322210..',
+  '..043333222110..',
+  '.04433322221110.',
+  '.00000000000000.',
+  '...055ddd770....',
+  '...055000070....',
+  '...05d066070550.',
+  '...05d06007055d0',
+  '...07777700dd0..',
+  '.044210888890330',
+  '0443210888990330',
+  '043111077790.030',
+  '043221088890.030',
+  '042211077790.030',
+  '04211108890.0550',
+  '.0421107790.0d70',
+  '.044408890..000.',
   '..03320003320...',
-  '.03320...03320..',
-  '.03320...03320..',
-  '.03320..003320..',
-  '.033340033340...',
-  '.011110011110...',
+  '.03320..03320...',
+  '03320....03320..',
+  '055dd0...055ddd0',
+  '077770...0777770',
 ];
 
-// Passing pose. Helmet rows are pinned to frame A's; everything from the jaw
-// down is redrawn — torso up one, shell rocked left, arms swapped, legs
-// gathered under the hips.
+// PASSING pose. Three things move at once and none of them is a recolour:
+//   * the whole animal drops one row — row 0 goes empty — so the walk has a bob;
+//   * the arms SWAP. Frame A's lead arm hangs at the hip; here the fist is
+//     cocked up at the shoulder (rows 12-13, x12-x14) and the forearm folds back
+//     into the torso by row 15, so the right edge of the silhouette changes;
+//   * the legs go from a wide contact to a gathered pass and the REAR foot
+//     lifts clear of the floor — its sole lands on row 22 while the lead sole
+//     stays on row 23. Frame A plants both soles on 23, wide apart.
 //        0123456789abcdef
 const BRO_WALK_B = [
   '................',
-  '....00....00....',
-  '...0440000440...',
-  '..044443333220..',
-  '.04444433332210.',
-  '.04444333322110.',
-  '..001111111100..',
-  '..0d55555555d0..',
-  '..0d555556055d0.',
-  '..07d55556656760',
-  '..00d555555d6660',
-  '.03321988889000.',
-  '0443219888890550',
-  '0443219777790340',
-  '0443219888890330',
-  '044321977779010.',
-  '.03321988889010.',
-  '..032197777910..',
-  '...0033203320...',
-  '....033203320...',
-  '....033203320...',
-  '....033203320...',
-  '...03334033340..',
-  '...01111011110..',
+  '.....000000.....',
+  '...0444333220...',
+  '..044433322210..',
+  '..043333222110..',
+  '.04433322221110.',
+  '.00000000000000.',
+  '...055ddd770....',
+  '...055000070....',
+  '...05d066070550.',
+  '...05d06007055d0',
+  '...07777700dd0..',
+  '.0442108889055d0',
+  '044321088990dd70',
+  '0431110777900320',
+  '043221088890320.',
+  '042211077790....',
+  '04211108890.....',
+  '.044407790......',
+  '...0332003320...',
+  '..03320.03320...',
+  '.055dd0.03320...',
+  '.077770.055ddd0.',
+  '........0777770.',
 ];
 
-// Wind-up: hammer cocked overhead, haft running down past the helmet into a
-// raised fist. The Bro sinks into a crouch — feet stay on the same two rows,
-// the head drops four — so the pose loads before the release.
+// WIND-UP. The pose differs from the walk in the BODY before it differs in the
+// props: the Bro sinks three rows into a crouch — the helmet crown falls from
+// row 0 to row 3, the torso loses two rows, the knees splay — while both soles
+// stay pinned to row 23.
+// The raised arm is a real limb held CLEAR of the head. Column x11 is
+// transparent from row 4 to row 8, so the haft, the gold fist gripping it on
+// rows 7-8 and the forearm below all read as a separate mass; the mallet head
+// spans six columns against the haft's three, so even as a solid black shape
+// it is a hammer on a stick and not a pole.
 //        0123456789abcdef
 const BRO_THROW_A = [
   '..........00000.',
-  '.........0ffeeb0',
-  '.........0feeba0',
-  '...00...00eebaa0',
-  '..044000440bbaa0',
-  '.04444332210dc0.',
-  '.04443332210dc0.',
-  '..0011111000dc0.',
-  '..0d55555d00dc0.',
-  '..0d56055d05d70.',
-  '..07d566566055d0',
-  '...0d5555d6605d0',
-  '..00d5555d66000.',
-  '.032219888890...',
-  '04322198888910..',
-  '04322197777910..',
-  '04322198888910..',
-  '04322197777910..',
-  '.0322198888910..',
-  '..02219888890...',
-  '..03320003320...',
-  '.03320...03320..',
-  '033340...033340.',
-  '011110...011110.',
+  '..........0ffeb0',
+  '..........0feba0',
+  '....00000.0ebaa0',
+  '..04443320..0d0.',
+  '.0444333220.0d0.',
+  '.0433332210.0d0.',
+  '04433322210.05c0',
+  '00000000000.0dd0',
+  '..055ddd770.0320',
+  '..055000070.0320',
+  '..05d06607050320',
+  '..05d06007050320',
+  '..07777700d00320',
+  '.044210888900320',
+  '044321088990000.',
+  '043111077790....',
+  '043221088890....',
+  '04221107790.....',
+  '.044408890......',
+  '.03320003320....',
+  '03320...03320...',
+  '055dd0..055ddd0.',
+  '077770..0777770.',
 ];
 
-// Release: the hammer has left the fist and is already clearing the beak, the
-// arm is straight out at shoulder height and the lead leg lunges a pixel
-// further forward.
+// RELEASE. The counter-pose: the crouch UNLOADS. The helmet climbs two rows
+// back up (crown on row 1 against the wind-up's row 3), the spine straightens,
+// the torso gains a row and the lead leg lunges two columns further out than in
+// the wind-up. The hand is EMPTY — the arm has swung down and forward and ends
+// in a gold fist at x14 on rows 14-15, held off the ribs by a transparent notch
+// at x12-x13 — while the hammer has left it entirely: it tumbles free in the
+// top-right corner with two clear transparent columns (x8-x9, then x10-x11
+// lower down) between it and the helmet, so nothing about the two shapes reads
+// as still connected.
 //        0123456789abcdef
 const BRO_THROW_B = [
-  '..........00000.',
-  '.........0ffeeb0',
-  '...00...00feeba0',
-  '..044000440bbaa0',
-  '.04444332210dc0.',
-  '.0444433221000..',
-  '.04443332210....',
-  '..001111100.....',
-  '..0d55555d0.....',
-  '..0d56055d0.....',
-  '..07d5665660....',
-  '..00d5555d660...',
-  '.03221988889000.',
-  '04322198888905d0',
-  '0432219777790550',
-  '043221988889100.',
-  '04322197777910..',
-  '.0322198888910..',
-  '..022197777900..',
-  '..0320000033320.',
-  '.03320...033320.',
-  '.03320....033320',
-  '033340....033340',
-  '011110....011110',
+  '...........0000.',
+  '....00000.0feeb0',
+  '..04443320.0eba0',
+  '.0444333220.0dc0',
+  '.04333322210.00.',
+  '.04433322221110.',
+  '.00000000000000.',
+  '...055ddd770....',
+  '...055000070....',
+  '...05d066070550.',
+  '...05d06007055d0',
+  '...07777700dd0..',
+  '044210888890430.',
+  '0443108889900430',
+  '043110777790.050',
+  '043210888890.0d0',
+  '04211077790..00.',
+  '.044408890......',
+  '.0332003320.....',
+  '03320..03320....',
+  '03320...03320...',
+  '03320....03320..',
+  '055dd0...055ddd0',
+  '077770...0777770',
 ];
 
 export const HAMMER_BRO = {
