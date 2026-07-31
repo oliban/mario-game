@@ -761,6 +761,18 @@ export default class Player extends EntityBase {
     return !this.controlsLocked && input.pressed(b);
   }
 
+  // Up doubles as a jump button during normal play — it is what players reach for
+  // first. It must NOT while climbing, where Up means go up the vine/pole.
+  _climbing() {
+    return this.state === 'climb' || this.state === 'flagpole' || this.state === 'flagflip';
+  }
+  _jumpPressed() {
+    return this._pressed(BTN.JUMP) || (!this._climbing() && this._pressed(BTN.UP));
+  }
+  _jumpHeld() {
+    return this._down(BTN.JUMP) || (!this._climbing() && this._down(BTN.UP));
+  }
+
   // -------------------------------------------------------------------------
   // normal gameplay
   // -------------------------------------------------------------------------
@@ -782,7 +794,7 @@ export default class Player extends EntityBase {
     else this._groundAirHorizontal(dir, run);
 
     // --- jump / stroke ------------------------------------------------------
-    if (this._pressed(BTN.JUMP)) this.jumpBuffer = P.jumpBuffer;
+    if (this._jumpPressed()) this.jumpBuffer = P.jumpBuffer;
     if (this.jumpBuffer > 0) this.jumpBuffer--;
     if (this.grounded) this.coyote = P.coyote;
     else if (this.coyote > 0) this.coyote--;
@@ -817,7 +829,7 @@ export default class Player extends EntityBase {
       this._launchFrame = false;
     } else {
       const rising = this.vy < 0;
-      if (this.jumping && rising && this.jumpHeld && this._down(BTN.JUMP)) {
+      if (this.jumping && rising && this.jumpHeld && this._jumpHeld()) {
         this.vy += this._gHold;
       } else {
         if (rising) this.jumpHeld = false;
@@ -1200,7 +1212,7 @@ export default class Player extends EntityBase {
   // Called by the collision system when the player lands on an enemy that
   // absorbed the stomp. Returns the score awarded.
   stompBounce(entity) {
-    const held = this._down(BTN.JUMP);
+    const held = this._jumpHeld();
     this.vy = stompBounceFor(held);
     this.jumping = true;
     this.jumpHeld = held;
@@ -1239,7 +1251,7 @@ export default class Player extends EntityBase {
     this.coyote = 0;
     this.jumpBuffer = 0;
     this.jumping = true;
-    this.jumpHeld = this._down(BTN.JUMP);
+    this.jumpHeld = this._jumpHeld();
     const row = jumpRowFor(Math.abs(this.vx));
     this._gHold = row.gHold;
     this._gFall = row.gFall;

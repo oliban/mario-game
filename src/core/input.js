@@ -9,17 +9,17 @@ export const BTN = {
   SELECT: 'select',
 };
 
-// A key may drive several buttons. Up is both the climb/enter direction AND a jump,
-// because that is what players reach for first and holding UP has no other meaning
-// while airborne.
+// Up stays a pure DIRECTION here. Mario treats it as a jump during gameplay (see
+// player._jumpPressed), but menus read JUMP as 'confirm', so mapping the two
+// together made pressing Up to move the cursor also pick the highlighted item.
 const KEYMAP = {
   ArrowLeft: BTN.LEFT,
   ArrowRight: BTN.RIGHT,
-  ArrowUp: [BTN.UP, BTN.JUMP],
+  ArrowUp: BTN.UP,
   ArrowDown: BTN.DOWN,
   KeyA: BTN.LEFT,
   KeyD: BTN.RIGHT,
-  KeyW: [BTN.UP, BTN.JUMP],
+  KeyW: BTN.UP,
   KeyS: BTN.DOWN,
   Space: BTN.JUMP,
   KeyK: BTN.JUMP,
