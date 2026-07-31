@@ -18,12 +18,19 @@ import { INK } from '../palette.js';
 // b face shadow (what the cap lip casts)   c face lit
 //
 // A GOOMBA IS A MUSHROOM WITH A FACE, and a mushroom is two materials, not one.
-// The whole cap ramp (1-4) is now driven BELOW the face: cap mid '#6b2708' reads
-// at luminance 56 against the face's 191, and the cap's brightest body tone
-// '#c05a1c' (98) is still darker than the face's own SHADOW '#b07a42' (128). So
+// The whole cap ramp (1-4) is driven BELOW the face: cap mid '#6b2708' reads at
+// luminance 56 against the face's 191, and the cap's brightest body tone
+// '#c05a1c' (113) is still darker than the face's own SHADOW '#b07a42' (132). So
 // wherever cap meets face there is a value cliff, which is what stops the two
 // forms fusing into one brown ball. Slot 5 is the wet-cap specular and is the
-// only cap slot allowed to out-shine the face; it covers four pixels.
+// only cap slot allowed to out-shine the face; it covers seven pixels on a
+// contact frame and four on a pass, always in the same cap-relative place.
+//
+// The face's own ink (8, luminance 8) is read against face mid (191) and against
+// the cap lip it sits under (slot 2, 56) — a 48-luminance step on BOTH brow arms,
+// because the lip carries slot 2 at cols 4-6 and 9-12 in every frame. The lit
+// foot tone (a) measures 113 / 122 / 96 RGB units from the overworld, underground
+// and castle outlines, so the soles survive a black room in all three palettes.
 const GOOMBA_PAL = [
   INK.outline, '#3a1608', '#6b2708', '#963d10', '#c05a1c', '#f09a48',
   '#e8b878', '#ffffff', '#0b0705', '#4a2408', '#7d4416', '#b07a42', '#f8d5ac',
@@ -39,9 +46,13 @@ const GOOMBA_PAL = [
 // Slots 1-4 are untouched for exactly that reason. What changed is the FACE:
 // it used to be '#9aa4bc', a value that sat between the cap's lit and bright
 // tones, so cap and face were the same slate and the thing was a grey ball. The
-// face is now a warm bone, 96 RGB units off the cap's brightest tone, so the two
-// forms part company by hue as well as by value — and bone is nowhere near
-// Buzzy's navy either.
+// face is now a warm bone: 57 RGB units off the cap's brightest body tone (80 off
+// the specular), and 87 units at the one adjacency that actually matters — cap
+// slot 2 '#626a86' against face-shadow slot b '#a89c7c' along the lip, which are
+// the two slots that touch, row 6 against row 7. Cap 4 and face 6 never meet on
+// the sheet: slot 4 lives on rows 2-4 and slot 6 on rows 8-12. The separation
+// that carries the read is hue as much as value — bone against slate, and slate
+// is nowhere near Buzzy's navy either.
 const GOOMBA_UNDER_PAL = [
   '#0a0c14', '#3c4258', '#626a86', '#8a92ac', '#b8c0d4', '#e8ecfc',
   '#e0d4b0', '#ffffff', '#141a2c', '#242a3c', '#454e68', '#a89c7c', '#f6efd2',
@@ -58,21 +69,21 @@ const GOOMBA_CASTLE_PAL = [
 ];
 
 // THREE FORMS, NOT ONE LUMP — this used to be a single brown ball with a stripe
-// of eyes in it, which is why the last one read as a meatball. Every frame is
-// now built from the same vertical plan:
+// of eyes in it, which is why the first one read as a meatball. Every frame is
+// built from the same vertical plan:
 //
 //   row  0     crown, 6 columns of bare outline.
 //   rows 1-5   CAP DOME, flaring 10 -> 12 -> 14 and then running straight down as
-//              the tone ramps 5 -> 1. The specular is a three-row blob in the
-//              upper-left quadrant, the only place the cap out-values the face.
+//              the tone ramps 5 -> 1. The specular is a fixed blob at cols 4-6.
 //   row  6     CAP LIP. Sixteen columns — ONE PIXEL PROUD OF THE DOME ON EACH
-//              FLANK — painted from the two darkest cap tones, lit along its
-//              upper-left. This overhanging ridge is the whole point: without it
-//              a mushroom is a ball.
+//              FLANK — painted from the two darkest cap tones. Slot 2 is laid in
+//              at cols 2-6 AND cols 9-12, directly over both brow arms, so the
+//              brow reads against the same 48-luminance step on either side; the
+//              lip only falls to slot 1 at the flanks, where it turns away.
 //   row  7     the overhang's UNDERSIDE: bare slot 0 at cols 0-2 and 13-15, where
 //              the lip juts out past the head and there is nothing behind it, and
-//              between them the shadow the lip throws down onto the forehead
-//              (slot b) carrying the outer arms of the brow.
+//              between them the lip's cast shadow (slot b) carrying the outer
+//              arms of the brow in ink at cols 4-6 and 9-11.
 //   rows 8-12  FACE, inset to cols 2-13 — FOUR COLUMNS NARROWER THAN THE LIP.
 //   row  13    the jaw's underside, which the tops of the feet break through.
 //   rows 14-15 two stubby feet with a two-column hole of sky between them.
@@ -82,131 +93,160 @@ const GOOMBA_CASTLE_PAL = [
 // to a narrower head stepping down to two separated stubs — a mushroom, from the
 // silhouette alone, and widest at the cap by six columns over the feet.
 //
-// THE FACE. The brow is a chevron across two rows: an ink arm high on each flank
-// at row 7 and the bar they drive down into at row 8, sitting over the bridge —
-// outer-high, inner-low, which is the angry V. Below it each eye is a 4x2 white
-// block with a 2x1 pupil centred in it, white on all four sides of the pupil, the
-// pair separated by two columns of face. The mouth is an arc and not a bar: four
-// ink pixels across the middle on row 11 and the two down-turned corners a row
-// below and a column wider on row 12.
+// THE FACE — FOUR ISLANDS OF INK, NEVER ONE SMEAR. Flood-fill slot 8 with
+// 8-connectivity over the whole sprite and it returns the brow (8px), the left
+// pupil (2px), the right pupil (2px) and the mouth (4px, plus two 1px corners on
+// the contacts) as SEPARATE components in every frame. That is enforced by the
+// layout, not by luck:
+//
+//   row  7   brow arms, ink at cols 4-6 and 9-11, high on each flank.
+//   row  8   eye whites at cols 4-6 / 9-11 with the nose bridge — ink at cols 7-8
+//            only — driven down between them. Arms high, bridge low: the angry V.
+//            The whites stop at col 4 and col 11, so cols 3 and 12 stay face and
+//            each eye keeps a cheek margin instead of running into the outline.
+//   row  9   pupils, 2px each at cols 4-5 and 10-11, two clear columns away from
+//            the bridge so they cannot touch it even diagonally, with white
+//            inboard of each and white directly above.
+//   row 10   CHEEK BAND. No ink at all. This is the row that stops the eyes and
+//            the mouth fusing, and it is where the face's rim modelling is
+//            widest: slot c at cols 3-4, slot b at cols 11-12.
+//   row 11   the mouth: a 4px ink bar at cols 6-9 with a white FANG at each corner
+//            (cols 5 and 10) breaking the bar into a shape.
+//   row 12   the chin. On the contacts the mouth's two down-turned corners land
+//            here as single ink pixels at cols 4 and 11 — a column outboard of the
+//            fangs and a row below, which is the frown — and they touch nothing.
+//
+// Slot c runs down col 3 and slot b down col 12 from the brow to the jaw, so the
+// head is lit consistently from the upper left over its whole height: 14 of the
+// 50 face cells (28%) carry a modelling tone, against 4 in the version that was
+// called an unlit card.
 //
 // THE CYCLE. 0 CONTACT both feet planted at their widest. 1 PASS the cap eats a
 // dome row and its crown drops a pixel — the body sinks — while the leading foot
-// leaves the floor and tucks up into the jaw row, clear of row 15, and the
-// trailing leg carries the weight. 2 CONTACT planted again a column inboard, cap
-// specular rolled two columns right, eyes squinted. 3 PASS the mirror of 1 with
-// the trailing foot in the air, the pupils thrown forward and the frown stretched
-// wider. The specular travels cols 4-6 -> 5-7 -> 6-8 -> 5-8 around the loop.
-// Adjacent-frame union diffs measure 36.2%, 33.0%, 40.1% and 37.8%; the longest
-// identical consecutive row run is two rows between the contacts and three
-// between the passes.
+// leaves the floor, its sole tilting into the darker foot tone, and the trailing
+// leg carries the weight; the frown stretches to a 6px bar. 2 CONTACT planted
+// again a column inboard and he SQUINTS: row 8's whites are gone entirely, so the
+// eye is one row deep instead of two. 3 PASS the mirror of 1 with the trailing
+// foot in the air.
+//
+// THE CAP DOES NOT BOIL. Slot 5 is frozen at cols 4-6 in all four frames — rows
+// 2-4 on the contacts, rows 3-4 on the passes, which is the same cap-relative
+// spot one row down and one row shorter because the dome squashes. The light does
+// not travel, the object does; the locomotion is carried by the feet and the
+// squint, which are the parts a viewer tracks. Adjacent-frame union diffs measure
+// 30.6%, 29.4%, 37.1% and 32.1%.
 
 // CONTACT. Both feet planted, stance at its widest, crown at its highest.
 //        0123456789abcdef
 const GOOMBA_A = [
   '.....000000.....',
-  '...0045432200...',
-  '..034554332210..',
-  '.03455443322210.',
-  '.02344433322210.',
+  '...0044332200...',
+  '..044554332210..',
+  '.03455543322210.',
+  '.02455433222110.',
   '.01233322222110.',
-  '0122222111111110',
+  '0122222112222110',
   '000b888bb888b000',
-  '..0bbb8888bbb0..',
-  '..077776677770..',
-  '..078876678870..',
-  '..0c66888866b0..',
-  '..0c68666686b0..',
+  '..0c77788777b0..',
+  '..0c88766788b0..',
+  '..0cc666666bb0..',
+  '..0cb788887bb0..',
+  '..0c86666668b0..',
   '..0aa90000aa90..',
+  '..0aa90..0aa90..',
   '..0a990..0a990..',
-  '..00000..00000..',
 ];
 
 // PASS. The cap has eaten a dome row and its crown has dropped a pixel: the body
 // sinks onto the trailing (left) leg, whose shin now shows through the jaw row.
-// The leading foot is off the floor entirely — it lives in rows 13-14 and never
-// reaches row 15. The brow arms spread a column outboard and the frown grows two
-// down-turned corners, so he leans into the step.
+// The leading foot is off the floor entirely — it lives in rows 13-14, never
+// reaches row 15, and its sole tips into the darker foot tone as it lifts. The
+// frown stretches from a 4px bar with corners to a flat 6px bar with the fangs
+// pushed out to cols 4 and 11, so he grits into the step.
 //        0123456789abcdef
 const GOOMBA_B = [
   '................',
   '.....000000.....',
-  '...0044532200...',
-  '..034455332210..',
-  '.03445543322210.',
-  '.01223332222110.',
-  '0112222211111110',
-  '000888bbbb888000',
-  '..0bb888888bb0..',
-  '..077776677770..',
-  '..078876678870..',
-  '..0c66888866b0..',
-  '..0c68866886b0..',
+  '...0044332200...',
+  '..044554332210..',
+  '.02455433222110.',
+  '.01233322222110.',
+  '0112222212222110',
+  '000b888bb888b000',
+  '..0c77788777b0..',
+  '..0c88766788b0..',
+  '..0cc666666bb0..',
+  '..0c78888887b0..',
+  '..0c666666bbb0..',
   '..00990000a990..',
-  '...0a990.00000..',
-  '...00000........',
+  '...0aa90.0a990..',
+  '...0a990........',
 ];
 
-// CONTACT. Planted again but a column inboard of frame 0, the specular has
-// rolled two columns right across the dome, and he squints: both eyes lose their
-// outer column of white to the brow's shadow.
+// CONTACT. Planted again but a column inboard of frame 0. The cap is byte-for-
+// byte frame 0's cap — a mushroom that is not rolling has no reason to relight —
+// and the step is told by the stance and by the SQUINT: row 8 loses both bands of
+// white to the brow's shadow, so each eye is one row deep instead of two.
 //        0123456789abcdef
 const GOOMBA_C = [
   '.....000000.....',
-  '...0034453200...',
-  '..033445532210..',
-  '.03344554322210.',
-  '.02333444322210.',
-  '.01222333222110.',
-  '0111222221111110',
+  '...0044332200...',
+  '..044554332210..',
+  '.03455543322210.',
+  '.02455433222110.',
+  '.01233322222110.',
+  '0122222112222110',
   '000b888bb888b000',
-  '..0bbb8888bbb0..',
-  '..0b77766777b0..',
-  '..0b88766788b0..',
-  '..0c66888866b0..',
-  '..0c68666686b0..',
+  '..0c66688666b0..',
+  '..0c88766788b0..',
+  '..0cc666666bb0..',
+  '..0cb788887bb0..',
+  '..0c86666668b0..',
   '..00aa9000aa90..',
+  '...0aa90.0aa90..',
   '...0a990.0a990..',
-  '...00000.00000..',
 ];
 
 // PASS, mirrored. Trailing (left) foot in the air and tucked, the leading right
-// leg carrying the drop, the pupils thrown forward and the frown's corners a
-// column wider than in frame 1.
+// leg carrying the drop, the same stretched frown as frame 1, and the eye whites
+// pulled outboard — cols 4-5 and 10-11 on row 8 instead of 4-6 and 9-11 — so he
+// glances ahead down the line of travel.
 //        0123456789abcdef
 const GOOMBA_D = [
   '................',
   '.....000000.....',
-  '...0044553200...',
-  '..034455432210..',
-  '.03445443322210.',
-  '.01223322222110.',
-  '0122221111111110',
-  '000888bbbb888000',
-  '..0bb888888bb0..',
-  '..077776677770..',
-  '..077886677880..',
-  '..0c66888866b0..',
-  '..0c88666688b0..',
+  '...0044332200...',
+  '..044554332210..',
+  '.02455433222110.',
+  '.01233322222110.',
+  '0112222212222110',
+  '000b888bb888b000',
+  '..0c77688677b0..',
+  '..0c88766788b0..',
+  '..0cc666666bb0..',
+  '..0c78888887b0..',
+  '..0c666666bbb0..',
   '..0a9900009900..',
-  '..00000.0a990...',
-  '........00000...',
+  '..0a990.0aa90...',
+  '........0a990...',
 ];
 
 // STOMPED. The same three forms with the middle one crushed out: the cap keeps a
-// dome row, its full-width lip and the lip's underside, the face is down to a
-// brow and a pair of eyes, and the feet have squirted out sideways past the cap
-// into cols 1-2 and 13-14 — painted in the LIT foot tone so they still read in a
-// black room.
+// dome row, its full-width lip and the lip's underside, the face is down to the
+// brow, the bridge and a pair of eyes — the mouth is what the stomp squeezed away
+// — and the feet have squirted out sideways past the cap into cols 1-2 and 13-14,
+// painted in the LIT foot tone so they still read in a black room. The brow's ink
+// and the pupils' ink stay two separate islands here too: row 4 carries the
+// whites and the bridge, row 5 the pupils at cols 4-5 and 10-11.
 //        0123456789abcdef
 const GOOMBA_FLAT_ROWS = [
   '....00000000....',
-  '..034554332210..',
-  '0122222111111110',
-  '000888bbbb888000',
-  '..0bb888888bb0..',
-  '..078876678870..',
-  '0aa0668888660aa0',
+  '..044554332210..',
+  '0122222112222110',
+  '000b888bb888b000',
+  '..0c77788777b0..',
+  '..0c88766788b0..',
+  '0aa0c66666bb0aa0',
   '0000000000000000',
 ];
 
