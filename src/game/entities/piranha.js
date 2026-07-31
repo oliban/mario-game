@@ -6,7 +6,7 @@ import {
   frozen,
   hurtPlayer,
   isStarPlayer,
-  playerOf,
+  playersOf,
   addScore,
   fx,
   sfx,
@@ -66,11 +66,14 @@ export default class Piranha extends Entity {
     return this.mouthY;
   }
 
-  // It will not sprout under the player's feet.
+  // It will not sprout under a player's feet — EITHER player's. Checking only
+  // world.player let the plant grow through player two while he stood on the pipe.
   _playerNear() {
-    const p = playerOf(this.world);
-    if (!p) return false;
-    return Math.abs(p.centerX - (this.x + 8)) < SAFE_DIST + (p.w || 16) * 0.5;
+    for (const p of playersOf(this.world)) {
+      if (!p || p.dead || p.state === 'dying') continue;
+      if (Math.abs(p.centerX - (this.x + 8)) < SAFE_DIST + (p.w || 16) * 0.5) return true;
+    }
+    return false;
   }
 
   update() {

@@ -190,6 +190,17 @@ export function playerOf(world) {
   return (world && world.player) || null;
 }
 
+// Every player currently on the field. playerOf() returns only world.player,
+// which in co-op is one of the two brothers — fine for "who do I chase", wrong
+// for "is it safe to sprout here", where ignoring the other brother means
+// growing straight through him.
+export function playersOf(world) {
+  if (!world) return [];
+  const roster = world.players;
+  if (Array.isArray(roster) && roster.length) return roster.filter(Boolean);
+  return world.player ? [world.player] : [];
+}
+
 export function hurtPlayer(e) {
   const w = e && e.world;
   if (w && typeof w.hurtPlayer === 'function') w.hurtPlayer(e);
