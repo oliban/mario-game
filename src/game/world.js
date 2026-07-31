@@ -562,6 +562,11 @@ export class World {
     this.entities = [];
     this.popups = [];
     this.player = null;
+    // Co-op roster. players[0] is always `player`; a second entry is Luigi.
+    this.players = [];
+    this.player2 = null;
+    this.coop = false;
+    this.coopPad = null;
 
     this.score = 0;
     this.coins = 0;
@@ -1012,6 +1017,20 @@ export class World {
         this.player = null;
       }
     }
+    // Co-op: build Luigi on demand when the host asks for two players.
+    if (this.coop && !this.player2 && PlayerClass) {
+      try {
+        this.player2 = new PlayerClass(this, sp.x * TILE, sp.y * TILE, { player: 2 });
+        this.player2.pad = this.coopPad || null;
+        this.player2.isLuigi = true;
+      } catch (err) {
+        console.error('world: luigi construction failed', err);
+        this.player2 = null;
+      }
+    }
+    if (!this.coop) this.player2 = null;
+    this.players = [this.player, this.player2].filter(Boolean);
+
     const p = this.player;
     if (!p) return;
 
@@ -1030,6 +1049,24 @@ export class World {
     // A respawn resizes the hitbox, so re-anchor the feet afterwards.
     p.y = (sp.y + 1) * TILE - p.h;
     this._settlePlayer(p);
+
+    const l = this.player2;
+    if (l) {
+      l.world = this;
+      const lx = Math.max(0, px - TILE);
+      const ly = (sp.y + 1) * TILE - l.h;
+      if (typeof l.respawn === 'function') l.respawn(lx, ly, opts.resetPlayer ? 'small' : undefined);
+      else {
+        l.x = lx;
+        l.y = ly;
+        l.vx = 0;
+        l.vy = 0;
+        l.dead = false;
+        l.removed = false;
+      }
+      l.y = (sp.y + 1) * TILE - l.h;
+      this._settlePlayer(l);
+    }
   }
 
   _spawnLevelEntities(lvl) {
@@ -1324,7 +1361,10 @@ export class World {
 
   _updatePlaying() {
     const p = this.player;
-    const dying = !!(p && (p.dead || p.state === 'dying'));
+    const roster = this.players && this.players.length ? this.players : p ? [p] : [];
+    // In co-op the level only holds still when EVERY live brother is dying, so one
+    // player's death does not freeze the other mid-jump.
+    const dying = roster.length > 0 && roster.every((q) => q && (q.dead || q.state === 'dying'));
 
     // The player reports its own death once the fall animation clears the
     // screen. If it never does — a broken update, a death off the bottom of a
@@ -1340,17 +1380,18 @@ export class World {
       this._updateTimer();
     }
 
-    if (p) this._safe(p, 'update');
+    for (const q of roster) if (q) this._safe(q, 'update');
 
     // SMB holds the whole level still while Mario's death arc plays.
     if (!dying) {
       this.blocks.update();
       this._updateEntities();
-      if (p && !p.dead) {
-        this._playerEntityCollisions(p);
-        this._collectTiles(p);
-        this._checkHiddenBlocks(p);
-        this._checkCheckpoint(p);
+      for (const q of roster) {
+        if (!q || q.dead) continue;
+        this._playerEntityCollisions(q);
+        this._collectTiles(q);
+        this._checkHiddenBlocks(q);
+        this._checkCheckpoint(q);
       }
       this._compact();
     }
@@ -1685,7 +1726,7 @@ export class World {
   _updateLevelEnd() {
     this.endTimer++;
     const p = this.player;
-    if (p) this._safe(p, 'update');
+    for (const q of roster) if (q) this._safe(q, 'update');
     this.blocks.update();
     this._updateEntities();
     this._updateParticles();
@@ -1893,9 +1934,13 @@ export class World {
   }
 
   drawPlayer(ctx, cam) {
-    const p = this.player;
-    if (!p || p.removed) return;
-    this._drawEntity(ctx, cam, p);
+    // Luigi first so Mario reads on top when they overlap.
+    const roster = this.players && this.players.length ? this.players : [this.player];
+    for (let i = roster.length - 1; i >= 0; i--) {
+      const q = roster[i];
+      if (!q || q.removed) continue;
+      this._drawEntity(ctx, cam, q);
+    }
   }
 
   _drawEntity(ctx, cam, e) {

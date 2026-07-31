@@ -90,7 +90,18 @@ export class Camera {
   }
 
   follow() {
-    const p = this.player;
+    // In co-op the camera tracks whichever living brother is furthest right, so
+    // the leader is never pushed off the edge of the screen by the other.
+    let p = this.player;
+    const w = p && p.world;
+    if (w && w.coop && Array.isArray(w.players) && w.players.length > 1) {
+      let lead = null;
+      for (const q of w.players) {
+        if (!q || q.dead || q.removed) continue;
+        if (!lead || q.x > lead.x) lead = q;
+      }
+      if (lead) p = lead;
+    }
     if (p) {
       if (!this.locked) {
         const t = p.x + p.w * 0.5 - this.followX;

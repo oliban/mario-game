@@ -754,11 +754,18 @@ export default class Player extends EntityBase {
 
   // --- input wrappers so cutscenes can silence the pad ----------------------
 
+  get pad() {
+    return this._pad || input;
+  }
+  set pad(v) {
+    this._pad = v || null;
+  }
+
   _down(b) {
-    return !this.controlsLocked && input.down(b);
+    return !this.controlsLocked && this.pad.down(b);
   }
   _pressed(b) {
-    return !this.controlsLocked && input.pressed(b);
+    return !this.controlsLocked && this.pad.pressed(b);
   }
 
   // Up doubles as a jump button during normal play — it is what players reach for

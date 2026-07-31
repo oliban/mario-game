@@ -1,7 +1,7 @@
 import { SCREEN_W, SCREEN_H, LAYER, DT } from './core/constants.js';
 import { bakeAll, spriteCount } from './core/gfx.js';
 import { GameLoop } from './core/loop.js';
-import input, { BTN } from './core/input.js';
+import input, { BTN, pad2, updateAll } from './core/input.js';
 import rng from './core/rng.js';
 
 import renderer from './render/renderer.js';
@@ -281,6 +281,10 @@ class Game {
 
   async startGame(players = 1) {
     this.playerCount = players === 2 ? 2 : 1;
+    // Two-player is SIMULTANEOUS co-op: both brothers are live at once, Luigi on
+    // the second pad, rather than SMB's alternating turns.
+    this.world.coop = this.playerCount === 2;
+    this.world.coopPad = pad2;
     this.slots = [this.newSlot(), this.newSlot()];
     this.turn = 0;
     this.started = true;
@@ -399,7 +403,7 @@ class Game {
   update() {
     if (this.fatal) return;
     try {
-      input.update();
+      updateAll();
 
       if (input.pressed(BTN.START) && this.started && !screens.blocksWorld) {
         screens.togglePause();

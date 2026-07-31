@@ -9,28 +9,34 @@ export const BTN = {
   SELECT: 'select',
 };
 
-// Up stays a pure DIRECTION here. Mario treats it as a jump during gameplay (see
-// player._jumpPressed), but menus read JUMP as 'confirm', so mapping the two
-// together made pressing Up to move the cursor also pick the highlighted item.
-const KEYMAP = {
+// Two independent pads so both brothers can play at once. Up stays a pure
+// DIRECTION on both: Mario treats it as a jump during play (player._jumpPressed),
+// but menus read JUMP as "confirm", so binding the two together made pressing Up
+// to move the cursor also pick the highlighted item.
+const KEYMAP_P1 = {
   ArrowLeft: BTN.LEFT,
   ArrowRight: BTN.RIGHT,
   ArrowUp: BTN.UP,
   ArrowDown: BTN.DOWN,
-  KeyA: BTN.LEFT,
-  KeyD: BTN.RIGHT,
-  KeyW: BTN.UP,
-  KeyS: BTN.DOWN,
   Space: BTN.JUMP,
   KeyK: BTN.JUMP,
-  KeyZ: BTN.JUMP,
-  KeyJ: BTN.RUN,
   KeyX: BTN.RUN,
-  ShiftLeft: BTN.RUN,
+  KeyJ: BTN.RUN,
   ShiftRight: BTN.RUN,
   Enter: BTN.START,
   Escape: BTN.START,
   Tab: BTN.SELECT,
+};
+
+// Luigi: the ASDF cluster plus Z to run.
+const KEYMAP_P2 = {
+  KeyA: BTN.LEFT,
+  KeyD: BTN.RIGHT,
+  KeyW: BTN.UP,
+  KeyS: BTN.DOWN,
+  KeyF: BTN.JUMP,
+  KeyZ: BTN.RUN,
+  ShiftLeft: BTN.RUN,
 };
 
 const PADMAP = {
@@ -46,8 +52,11 @@ const PADMAP = {
   15: BTN.RIGHT,
 };
 
-class Input {
-  constructor() {
+export class Pad {
+  constructor(keymap, opts = {}) {
+    this.keymap = keymap;
+    this.gamepadIndex = opts.gamepad == null ? 0 : opts.gamepad;
+    this.useGamepad = opts.gamepad !== false;
     this.state = {};
     this.prev = {};
     this._raw = {};
@@ -60,61 +69,44 @@ class Input {
     this.anyPressedThisFrame = false;
   }
 
-  attach(target = window) {
-    const set = (code, down, e) => {
-      const b = KEYMAP[code];
-      if (!b) return;
-      if (Array.isArray(b)) for (const k of b) this._raw[k] = down;
-      else this._raw[b] = down;
-      e.preventDefault();
-    };
-    target.addEventListener('keydown', (e) => set(e.code, true, e));
-    target.addEventListener('keyup', (e) => set(e.code, false, e));
-    target.addEventListener('blur', () => {
-      for (const k in this._raw) this._raw[k] = false;
-    });
+  handleKey(code, down) {
+    const b = this.keymap[code];
+    if (!b) return false;
+    if (Array.isArray(b)) for (const k of b) this._raw[k] = down;
+    else this._raw[b] = down;
+    return true;
   }
 
-  pollGamepads() {
-    if (!navigator.getGamepads) return;
+  clear() {
+    for (const k in this._raw) this._raw[k] = false;
+  }
+
+  _pollGamepad(into) {
+    if (!this.useGamepad || !navigator.getGamepads) return;
     const pads = navigator.getGamepads();
-    for (const p of pads) {
-      if (!p) continue;
-      for (const i in PADMAP) {
-        if (p.buttons[i] && p.buttons[i].pressed) this._raw[PADMAP[i]] = true;
-      }
-      const ax = p.axes[0] || 0;
-      const ay = p.axes[1] || 0;
-      if (ax < -0.4) this._raw[BTN.LEFT] = true;
-      if (ax > 0.4) this._raw[BTN.RIGHT] = true;
-      if (ay < -0.4) this._raw[BTN.UP] = true;
-      if (ay > 0.4) this._raw[BTN.DOWN] = true;
+    const p = pads && pads[this.gamepadIndex];
+    if (!p) return;
+    for (const i in PADMAP) {
+      if (p.buttons[i] && p.buttons[i].pressed) into[PADMAP[i]] = true;
     }
+    const ax = p.axes[0] || 0;
+    const ay = p.axes[1] || 0;
+    if (ax < -0.4) into[BTN.LEFT] = true;
+    if (ax > 0.4) into[BTN.RIGHT] = true;
+    if (ay < -0.4) into[BTN.UP] = true;
+    if (ay > 0.4) into[BTN.DOWN] = true;
   }
 
   // Called once per fixed tick, before systems read input.
   update() {
-    const padDown = {};
-    for (const b of Object.values(BTN)) padDown[b] = this._raw[b];
-    if (navigator.getGamepads) {
-      const pads = navigator.getGamepads();
-      for (const p of pads) {
-        if (!p) continue;
-        for (const i in PADMAP) {
-          if (p.buttons[i] && p.buttons[i].pressed) padDown[PADMAP[i]] = true;
-        }
-        const ax = p.axes[0] || 0;
-        const ay = p.axes[1] || 0;
-        if (ax < -0.4) padDown[BTN.LEFT] = true;
-        if (ax > 0.4) padDown[BTN.RIGHT] = true;
-        if (ay < -0.4) padDown[BTN.UP] = true;
-        if (ay > 0.4) padDown[BTN.DOWN] = true;
-      }
-    }
+    const now = {};
+    for (const b of Object.values(BTN)) now[b] = this._raw[b];
+    this._pollGamepad(now);
+
     this.anyPressedThisFrame = false;
     for (const b of Object.values(BTN)) {
       this.prev[b] = this.state[b];
-      this.state[b] = this._forced ? !!this._forced[b] : padDown[b];
+      this.state[b] = this._forced ? !!this._forced[b] : now[b];
       if (this.state[b] && !this.prev[b]) this.anyPressedThisFrame = true;
     }
   }
@@ -138,5 +130,33 @@ class Input {
   }
 }
 
-export const input = new Input();
+export const input = new Pad(KEYMAP_P1, { gamepad: 0 });
+export const pad2 = new Pad(KEYMAP_P2, { gamepad: 1 });
+export const pads = [input, pad2];
+
+let attached = false;
+
+// One listener feeds both pads: a key belongs to whichever map claims it.
+export function attach(target = window) {
+  if (attached) return;
+  attached = true;
+  const set = (e, down) => {
+    let claimed = false;
+    for (const p of pads) if (p.handleKey(e.code, down)) claimed = true;
+    if (claimed) e.preventDefault();
+  };
+  target.addEventListener('keydown', (e) => set(e, true));
+  target.addEventListener('keyup', (e) => set(e, false));
+  target.addEventListener('blur', () => {
+    for (const p of pads) p.clear();
+  });
+}
+
+export function updateAll() {
+  for (const p of pads) p.update();
+}
+
+// Back-compat: main.js and the screens call input.attach(window).
+input.attach = attach;
+
 export default input;
