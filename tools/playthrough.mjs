@@ -571,6 +571,18 @@ if (wanted('warps')) {
               w = await window.__PT.load(id, areaId);
               dirty = false;
             }
+            // The sweep does not advance the level but it DOES advance the
+            // clock, and a flooded area makes every tile a node: 2-2 has 2382
+            // of them, so at 16 frames each the sweep burns ~630 seconds
+            // against a 400-second timer. The player died of the clock about
+            // two thirds of the way through, and every pipe after that point
+            // was reported as never firing. Hold the clock, and reload if he
+            // is in any state that cannot enter a pipe.
+            g.world.time = Math.max(g.world.time | 0, 300);
+            if (g.world.player.dead || g.world.player.state !== 'normal') {
+              w = await window.__PT.load(id, areaId);
+              g.world.time = 400;
+            }
             const base = g.world.level;
             const p = g.world.player;
             window.__PT.stand(s.x, s.y);
