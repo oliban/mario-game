@@ -1414,8 +1414,8 @@ export class World {
     // some(). Deliberate. A death arc runs for seconds and ends in a respawn, so
     // holding the level for it would strand the other brother; a size change is
     // ~35 frames, and pausing the enemies briefly for both is far less intrusive
-    // than letting a goomba walk through a frozen player. Flip this to every()
-    // if co-op should never hold still for one brother's mushroom.
+    // than letting a goomba walk through a frozen player. This is a WORLD gate
+    // only — see the collision loop below, which must NOT share it.
     const changing = roster.some((q) => q && (q.state === 'growing' || q.state === 'shrinking'));
 
     // The player reports its own death once the fall animation clears the
@@ -1439,8 +1439,28 @@ export class World {
       this._updateBridgeFall();
       this.blocks.update();
       this._updateEntities();
+    }
+
+    // Do NOT fold this back into the block above. The world gate and the
+    // collision gate are two different gates in SMB and only look like one
+    // because the original never has two brothers on screen at once:
+    //   - TimerControl (asm:11419) halts the WORLD — enemies, platforms, the
+    //     clock. It is global, which is what `changing` models.
+    //   - PlayerEnemyCollision gates itself separately on the PLAYER's own
+    //     state (asm:11301-11303, `lda GameEngineSubroutine / cmp #$08 /
+    //     bne NoPECol`) — per-player, not global.
+    // In simultaneous co-op they come apart. Sharing one condition makes the
+    // brother who is NOT transitioning intangible to every enemy for the whole
+    // ~35 frames while he keeps running at full speed: he walks clean through a
+    // goomba, or resolves the overlap on the resume frame and dies to an enemy
+    // he is already past. Neither is visible in single-player, which is why
+    // this reads as a harmless simplification and is not one.
+    // The transitioning brother needs no gate here — player.intangible and
+    // canBeHurt() already refuse every hit while state !== 'normal'.
+    if (!dying) {
       for (const q of roster) {
         if (!q || q.dead) continue;
+        if (q.state === 'growing' || q.state === 'shrinking') continue;
         this._collidingPlayer = q;
         this._playerEntityCollisions(q);
         this._collectTiles(q);
@@ -1448,8 +1468,9 @@ export class World {
         this._checkCheckpoint(q);
         this._collidingPlayer = null;
       }
-      this._compact();
     }
+
+    if (!dying && !changing) this._compact();
     this._updateParticles();
   }
 
