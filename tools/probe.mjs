@@ -163,18 +163,27 @@ try {
 console.log(JSON.stringify(result, null, 2));
 
 if (!custom) {
+  // Every figure is derived from reference/smbdis.asm, not eyeballed. The two jump
+  // heights come from PlayerYSpdData / JumpMForceData (asm:6014-6022) integrated by
+  // ImposeGravity (asm:7704), which moves BEFORE it applies gravity:
+  //   standing  v0 = $fc = -4, g = $20 = 0.125    -> 32 rising frames, 66 px   = 4.125 tiles
+  //   full run  v0 = $fb = -5, g = $28 = 0.15625  -> 32 rising frames, 82.5 px = 5.15625 tiles
+  // runJumpTiles is a HEIGHT, not a distance — see runJumpDistanceTiles for the reach.
   const ref = {
     maxWalkSpeed: 1.5625,
     maxRunSpeed: 2.5625,
     terminalVy: 4.5,
-    standingJumpTiles: 4.0,
-    runJumpTiles: 4.7,
+    standingJumpTiles: 4.125,
+    runJumpTiles: 5.15625,
   };
   console.log('\n--- vs Super Mario Bros. reference ---');
   for (const [k, want] of Object.entries(ref)) {
     const got = result[k];
     const delta = got == null ? NaN : Math.abs(got - want);
-    const tol = k.endsWith('Tiles') ? 0.45 : 0.02;
+    // stats() rounds y to whole pixels, so a tile measurement is only good to
+    // 1px = 0.0625 tiles. 0.45 on a 5-tile quantity was not a test — it would
+    // pass an engine that had drifted a third of a tile.
+    const tol = k.endsWith('Tiles') ? 0.07 : 0.02;
     console.log(
       `${k.padEnd(20)} got ${String(got).padEnd(10)} want ~${String(want).padEnd(8)} ${
         isNaN(delta) ? 'MISSING' : delta <= tol ? 'OK' : `OFF BY ${delta.toFixed(4)}`
