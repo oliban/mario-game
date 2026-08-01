@@ -102,6 +102,7 @@ export default {
   name: 'WORLD 5-2',
   time: 400,
   theme: 'overworld',
+  scenery: 'snow',
   music: 'overworld',
   width: 212,
   height: 15,

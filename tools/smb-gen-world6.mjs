@@ -104,6 +104,7 @@ export default {
   name: 'WORLD 6-1',
   time: 400,
   theme: 'overworld',
+  sky: 'night',
   music: 'overworld',
   width: ${L.width},
   height: 15,
@@ -121,8 +122,12 @@ ${entsBlock(L.entities)}
 `;
   writeFileSync(
     join(OUT, '6-1.js'),
-    header('6-1 — overworld', '// A plain, fast level: one pipe, one staircase, and the original leans on\n' +
-        '// its koopas rather than on geometry.') + tilesBlock(rows) + body
+    header('6-1 — overworld', '// A NIGHT level, and one I missed the first time: an AlterAreaAttributes at\n' +
+        '// column 6 sets colour control 4, which is black sky with no palette write —\n' +
+        '// so the foliage stays green, exactly as in 3-3.\n' +
+        '//\n' +
+        '// Otherwise plain and fast: one pipe, one staircase, and the original leans\n' +
+        '// on its koopas rather than on geometry.') + tilesBlock(rows) + body
   );
 }
 

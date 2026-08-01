@@ -7,8 +7,12 @@
 // not an approximation of them. Re-run the generator rather than editing by
 // hand.
 //
-// A plain, fast level: one pipe, one staircase, and the original leans on
-// its koopas rather than on geometry.
+// A NIGHT level, and one I missed the first time: an AlterAreaAttributes at
+// column 6 sets colour control 4, which is black sky with no palette write —
+// so the foliage stays green, exactly as in 3-3.
+//
+// Otherwise plain and fast: one pipe, one staircase, and the original leans
+// on its koopas rather than on geometry.
 // ---------------------------------------------------------------------------
 
 const TILES = [
@@ -34,6 +38,7 @@ export default {
   name: 'WORLD 6-1',
   time: 400,
   theme: 'overworld',
+  sky: 'night',
   music: 'overworld',
   width: 200,
   height: 15,

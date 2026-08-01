@@ -74,61 +74,76 @@ const BONUS = {
   ],
 };
 
-// The warp zone, reached by the first pipe at col 28. SMB hides its warp zones
-// behind a ceiling run or a vine; this one is deliberately on the very first
-// pipe, because its job is to get a tester into any level in two seconds.
+// The warp zone, reached by the first pipe at col 28. SMB hides its warp
+// zones behind a ceiling run or a vine; this one is deliberately on the very
+// first pipe, because its job is to get a tester into any level in two seconds.
 //
 // It is BUILT from the roster rather than written out, so every level that
-// exists has a pipe here and a new world needs no edit to this file. Each pipe
-// is a two-tile stub on the floor at row 11 and the label above it is a `signs`
-// entry — level text painted into world space, the way SMB writes its world
-// numbers onto the warp-zone backdrop.
-const WZ_FIRST = 5; // column of the first pipe
+// exists has a pipe here and a new world needs no edit to this file.
+//
+// The layout is FOUR ROWS OF EIGHT, not one long line. At one row it grew to
+// 135 columns once all 32 levels existed — eight and a half screens of walking,
+// which is the opposite of what the room is for. Eight per row keeps it at 39
+// columns, the width it had when there were only eight levels, and puts the
+// first sixteen on screen at once.
+//
+// Each row is a ledge with the pipes set FLUSH into it, so you walk along and
+// press down; the label sits one row above. The ledges alternate which end they
+// leave open, so you drop from one to the next in a zig-zag, and three rows is
+// inside a jump so you can always climb back.
+const WZ_FIRST = 5; // column of the first pipe in a row
 const WZ_STEP = 4; // columns between pipe left edges
+const WZ_PER_ROW = 8; // pipes per ledge
+const WZ_ROWS = [4, 7, 10, 13]; // ledge rows, top to bottom
 
 function buildWarpZone(order) {
-  const width = WZ_FIRST + order.length * WZ_STEP + 2;
-  const pipeCols = order.map((_, i) => WZ_FIRST + i * WZ_STEP);
-  const blank = (fill) => fill.repeat(width);
-  const room = (mid) => '#' + mid + '#';
-  const open = () => room('.'.repeat(width - 2));
+  const rows = [];
+  for (let i = 0; i < order.length; i += WZ_PER_ROW) rows.push(order.slice(i, i + WZ_PER_ROW));
+  const width = WZ_FIRST + WZ_PER_ROW * WZ_STEP + 2;
+  const colOf = (i) => WZ_FIRST + i * WZ_STEP;
 
-  const pipeRow = (left, right) => {
-    const row = '.'.repeat(width).split('');
-    for (const c of pipeCols) {
-      row[c] = left;
-      row[c + 1] = right;
-    }
-    row[0] = '#';
-    row[width - 1] = '#';
-    return row.join('');
+  const g = [];
+  for (let y = 0; y < 15; y++) g.push(new Array(width).fill('.'));
+  const put = (x, y, ch) => {
+    if (x >= 0 && x < width && y >= 0 && y < 15) g[y][x] = ch;
   };
 
-  const tiles = [
-    blank('#'),
-    blank('#'),
-    '##[]' + '#'.repeat(width - 4),
-    '#.{}' + '.'.repeat(width - 5) + '#',
-    open(),
-    open(),
-    open(),
-    open(),
-    open(),
-    open(),
-    open(),
-    pipeRow('[', ']'),
-    pipeRow('{', '}'),
-    blank('#'),
-    blank('#'),
-  ];
-
-  const title = 'WARP ZONE';
-  const signs = [{ x: (width - title.length) / 2, y: 5, text: title }];
-  for (let i = 0; i < order.length; i++) {
-    // Centre the three-glyph label on the two-tile pipe: 24px of text over 32px
-    // of pipe leaves 4px, which is a quarter of a tile.
-    signs.push({ x: pipeCols[i] + 0.25, y: 9, text: order[i] });
+  for (let x = 0; x < width; x++) {
+    put(x, 0, '#');
+    put(x, 1, '#');
+    put(x, 14, '#');
   }
+  for (let y = 2; y < 14; y++) {
+    put(0, y, '#');
+    put(width - 1, y, '#');
+  }
+  // The pipe you arrive through, set INTO the ceiling at the top left. Only its
+  // lip is drawn: a body hanging into row 2 would put big Mario's head inside it
+  // where the warp sets him down.
+  put(2, 1, '[');
+  put(3, 1, ']');
+
+  const signs = [];
+  rows.forEach((ids, r) => {
+    const ly = WZ_ROWS[r];
+    // Open end alternates so the drop to the next ledge is always ahead of you.
+    const openRight = r % 2 === 0;
+    const x0 = openRight ? 1 : 4;
+    const x1 = openRight ? width - 5 : width - 2;
+    if (ly < 14) for (let x = x0; x < x1; x++) put(x, ly, '#');
+    ids.forEach((id, i) => {
+      const c = colOf(i);
+      put(c, ly, '[');
+      put(c + 1, ly, ']');
+      if (ly + 1 < 14) {
+        put(c, ly + 1, '{');
+        put(c + 1, ly + 1, '}');
+      }
+      // Centre the three-glyph label on the two-tile pipe: 24px of text over
+      // 32px of pipe leaves 4px, which is a quarter of a tile.
+      signs.push({ x: c + 0.25, y: ly - 1, text: id });
+    });
+  });
 
   return {
     id: '1-1w',
@@ -137,15 +152,13 @@ function buildWarpZone(order) {
     music: 'underground',
     width,
     height: 15,
-    spawn: { x: 2, y: 10 },
-    tiles,
+    spawn: { x: 2, y: 3 },
+    tiles: g.map((r) => r.join('')),
     entities: [],
     signs,
-    warps: order.map((id, i) => ({
-      from: { x: pipeCols[i], y: 11 },
-      dir: 'down',
-      to: { level: id },
-    })),
+    warps: rows.flatMap((ids, r) =>
+      ids.map((id, i) => ({ from: { x: colOf(i), y: WZ_ROWS[r] }, dir: 'down', to: { level: id } }))
+    ),
   };
 }
 

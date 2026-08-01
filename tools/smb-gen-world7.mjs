@@ -107,6 +107,7 @@ export default {
   name: 'WORLD 7-1',
   time: 400,
   theme: 'overworld',
+  scenery: 'snow',
   music: 'overworld',
   width: ${L.width},
   height: 15,
