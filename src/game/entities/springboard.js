@@ -9,12 +9,22 @@ import { playersOf } from './index.js';
 
 const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
 
-// Launch speeds are derived from the gravity Mario actually rises under, so the
-// advertised heights (4 tiles / 8 tiles) hold whatever the jump table says.
+// Launch speeds are derived from the gravity Mario actually rises under. The
+// distinction matters: he only falls at the reduced hold-gravity while the jump
+// button is DOWN, so the small bounce — taken with the button up — climbs under
+// full gravity and has to be solved for that, or it delivers a third of its
+// advertised height.
+//
+// The held launch is solved for 10 tiles rather than the original's advertised
+// 8. Measured against the wall the spring exists to clear (2-1, columns 190-191,
+// top at row 3): 8 tiles put his feet at row 3.1 and 9 tiles at 3.1 again — a
+// tenth of a tile short of standing on it, which read as the jump being broken.
+// 10 lands him on top with margin to spare.
 const ROW = (PHYS.jumpTable && PHYS.jumpTable[0]) || null;
 const RISE_G = num(ROW && ROW.gHold, 0.125);
-export const SPRING_LAUNCH = -Math.sqrt(2 * RISE_G * 4 * TILE);
-export const SPRING_LAUNCH_HELD = -Math.sqrt(2 * RISE_G * 8 * TILE);
+const FALL_G = num(PHYS.gravity || PHYS.playerGravity, 0.4375);
+export const SPRING_LAUNCH = -Math.sqrt(2 * FALL_G * 4 * TILE);
+export const SPRING_LAUNCH_HELD = -Math.sqrt(2 * RISE_G * 10 * TILE);
 
 const SPRING_PAL = ['#1a1008', '#0d5c14', '#18a028', '#7cf07a'];
 
