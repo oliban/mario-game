@@ -1069,7 +1069,14 @@ export default class Player extends EntityBase {
 
     // head bump — the collider zeroes upward velocity against a ceiling; some
     // colliders only reposition, so a direct probe backs it up.
-    if (!this.grounded && vyBefore < 0 && this._bumpLock === 0 && (this.vy >= 0 || this._headSolid())) {
+    //
+    // Being airborne is NOT part of the test. In a corridor with no headroom the
+    // jump is stopped by the ceiling on its own launch frame: the body never
+    // leaves the floor, _confirmGround puts `grounded` straight back, and gating
+    // on it swallowed exactly the bump the player was aiming for. `vyBefore < 0`
+    // is the real signal — only a jump or a bounce drives vy negative, and a
+    // grounded frame carries GROUND_STICK instead.
+    if (vyBefore < 0 && this._bumpLock === 0 && (this.vy >= 0 || this._headSolid())) {
       this._bumpHead();
     }
 
