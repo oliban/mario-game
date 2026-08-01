@@ -1081,7 +1081,36 @@ const CAUSTICS_B = [
 
 // A bubble climbing the right-hand side, two pixels tall, one column of drift per
 // frame so it never traces the same line twice inside the loop.
-const WATER_BUBBLE = [[13, 12], [12, 8], [13, 4], [12, 0]];
+// SIXTEEN phases, not four, and NOT because the body needed more animation.
+//
+// The tile is 16px periodic, so every field drifting across it has to satisfy
+// N*d = 0 (mod 16) or the loop does not close. Over four frames:
+//
+//   CAUSTICS    x +2/frame -> 4x2  =  8 (mod 16) = 8   DOES NOT CLOSE
+//   CAUSTICS    y -1/frame -> 4x-1 = -4 (mod 16) = 12  DOES NOT CLOSE
+//   CAUSTICS_B  x -2/frame -> 8                        DOES NOT CLOSE
+//   CAUSTICS_B  y +1/frame -> 4                        DOES NOT CLOSE
+//   light shaft x -4/frame -> 4x-4 = -16 (mod 16) = 0  closes
+//
+// So both caustic sets jumped 8px sideways and 4px vertically every time the loop
+// wrapped, on the tile that covers a whole submerged screen, in all five themes. Only
+// the shaft was correct. It had been doing that since the tile was written.
+//
+// The fix is the FRAME COUNT, not the drifts, and that is deliberate: x needs a
+// multiple of 8 frames and y a multiple of 16, so 16 is the smallest count that closes
+// with the drifts untouched. Changing the drifts instead would have meant 4px/frame on
+// both axes — double the horizontal speed and quadruple the vertical — which turns the
+// caustics from a 2:1 lean into 45-degree streaks. This way frames 0-3 are BYTE-
+// IDENTICAL to the four that shipped before; the other twelve simply finish the cycle
+// the old set never completed. Nothing about how the water looks moment to moment
+// changes, and the jump is gone.
+//
+// A bubble climbing the right-hand side, two pixels tall, one column of drift per
+// frame so it never traces the same line twice inside the loop. Generated rather than
+// listed so it cannot fall out of step with the frame count again — and the formula
+// reproduces the original four exactly.
+const WATER_PHASES = 16;
+const WATER_BUBBLE = Array.from({ length: WATER_PHASES }, (_, f) => [13 - (f & 1), (12 - 4 * f) & 15]);
 
 function waterBody(phase) {
   const rows = [];
@@ -1121,7 +1150,7 @@ function waterBody(phase) {
   });
 }
 
-const R_WATER_BODY = [0, 1, 2, 3].map(waterBody);
+const R_WATER_BODY = Array.from({ length: WATER_PHASES }, (_, i) => waterBody(i));
 
 // One wavelength per tile, so four 4px phase shifts carry the crest a full 16px and
 // wrap. The renderer can also index by (tileX & 3) to put neighbouring tiles out of
@@ -1738,7 +1767,7 @@ export const waterDepth = (theme, tilesBelowSurface = 0) => {
 
 export const waterPhase = (theme, tileX = 0, tick = 0) => {
   const set = THEME_WATER_PHASES[theme] || THEME_WATER_PHASES.overworld;
-  return set[(tileX + (tick >> 3)) & 3];
+  return set[(tileX + (tick >> 3)) & (set.length - 1)];
 };
 
 // THEME_STAIR[theme] -> [variantA, variantB]. Two differently pitched stones, so a
@@ -2055,7 +2084,7 @@ export const animatedSpriteFor = (theme, id, tileX = 0, tileY = 0, tick = 0, abo
   if (id === TID.WATER_SURF) return waterPhase(theme, tileX, tick);
   if (id === TID.WATER_BODY) {
     const set = (THEME_WATER_BODIES[theme] || THEME_WATER_BODIES.overworld)[0];
-    return set[(tileX + (tick >> 3)) & 3];
+    return set[(tileX + (tick >> 3)) & (set.length - 1)];
   }
   return spriteFor(theme, id, tileX, tileY, above);
 };
@@ -2178,6 +2207,108 @@ function assertPalette() {
 // neighbour nudged sideways" is only worth writing down if something checks it:
 // the water body shipped with 86% of its pixels byte-identical across the whole
 // loop and a 7% per-frame delta, which is a cycle in name only.
+// LOOP CLOSURE, checked structurally rather than by frame deltas.
+//
+// A cyclic animation built by translating a field advances by the SAME displacement
+// every step, and the wrap from the last frame back to the first is just another step.
+// If the loop does not close, the wrap lurches by exactly the amount it failed to close
+// by. So: reduce each frame to a 1-D signature, recover the circular shift that maps
+// each frame onto the next, and require the wrap shift to equal the constant step.
+//
+// WHY NOT A FRAME-DELTA CHECK, which is the obvious thing and what was tried first:
+// it does not work. Measured against the two real defects this project has had —
+// the lava crest that jumped 8px every loop, and the water body's caustics that jumped
+// 8px sideways and 4px vertically — the buggy WRAP DELTA came out at 0.90 and 0.95 of
+// the median adjacent delta, i.e. BELOW its neighbours in both cases. A delta test
+// would have passed both bugs while flagging the question block's idle sweep, which
+// closes exactly (period 20, step 5, 4 x 5 = 20). Deltas are drowned by whatever else
+// in the tile is churning.
+//
+// THIS CHECK IS BLIND TO THE TILES THAT MOTIVATED IT. The lava body and the water body
+// are noise fields; a 1-D signature of noise has no clean translation to recover, so
+// the shifts come out non-uniform and the check ABSTAINS. Both do in fact close, but by
+// construction arithmetic (N * drift = 0 mod 16), not because anything here can see it.
+// What the check catches is a coherent FEATURE riding on the noise — the crest on the
+// lava surface, the caustics on the water — which is where both real bugs lived. Do not
+// read a pass as proof that a generated field closes; check the arithmetic for that.
+const SIG_SLOTS = SLOTS;
+
+// Mean luminance along a column ('x') or a row ('y'), and the silhouette profile —
+// the topmost opaque row of each column. The silhouette is what catches a crest or a
+// waterline, which a luminance average buries under the body noise beneath it.
+function animSig(sprite, axis) {
+  const h = sprite.rows.length;
+  const w = sprite.rows[0].length;
+  const clear = (c) => c === '.' || c === ' ';
+  if (axis === 'top') {
+    const out = new Array(w).fill(h);
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) if (!clear(sprite.rows[y][x])) { out[x] = y; break; }
+    }
+    return out;
+  }
+  const n = axis === 'x' ? w : h;
+  const m = axis === 'x' ? h : w;
+  const out = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    for (let j = 0; j < m; j++) {
+      const ch = axis === 'x' ? sprite.rows[j][i] : sprite.rows[i][j];
+      if (clear(ch)) continue;
+      const c = sprite.palette[SIG_SLOTS.indexOf(ch)];
+      if (c != null) sum += lumOf(c);
+    }
+    out[i] = sum / m;
+  }
+  return out;
+}
+
+// The circular shift of `a` that best explains `b`.
+function bestCircularShift(a, b) {
+  const n = a.length;
+  let best = 0;
+  let err = Infinity;
+  for (let s = 0; s < n; s++) {
+    let e = 0;
+    for (let i = 0; i < n; i++) e += Math.abs(a[(i - s + n) % n] - b[i]);
+    if (e < err) { err = e; best = s; }
+  }
+  return best;
+}
+
+// Returns a description of the fault, or null. TWO GUARDS, both of which exist because
+// the first version of this check produced nonsense without them:
+//   * a ONE-SHOT is exempt. `new Anim([...], holds, false)` ends where it ends; the
+//     wrap is not a transition anyone sees.
+//   * fewer than FOUR frames abstains. At n = 2 there is exactly one adjacent
+//     transition and the wrap is by definition its inverse, so every ordinary
+//     two-frame oscillation "fails" — nine sprite-module animations did exactly that
+//     before this guard. n = 3 gives two, still too few to tell an oscillation from a
+//     translation.
+//   * an axis whose step is a constant ZERO abstains. The signature does not move, so
+//     the wrap matching it is vacuous — that alone turned 21 apparent passes into 5.
+function loopClosureFault(anim) {
+  if (!anim || anim.loop === false) return null;
+  const f = anim.frames;
+  if (!f || f.length < 4) return null;
+  for (const axis of ['x', 'y', 'top']) {
+    const sh = [];
+    for (let i = 0; i < f.length; i++) {
+      sh.push(bestCircularShift(animSig(f[i], axis), animSig(f[(i + 1) % f.length], axis)));
+    }
+    const step = sh[0];
+    if (step === 0) continue;
+    let uniform = true;
+    for (let i = 1; i < sh.length - 1; i++) if (sh[i] !== step) uniform = false;
+    if (!uniform) continue;
+    const wrap = sh[sh.length - 1];
+    if (wrap !== step) {
+      return `${axis} advances ${step}px per frame but ${wrap}px across the wrap`;
+    }
+  }
+  return null;
+}
+
 function assertAnimation() {
   const fail = [];
   const stats = (anim) => {
@@ -2207,6 +2338,12 @@ function assertAnimation() {
       const s = stats(BUILT[t].anims[key]);
       if (s.min < 0.12) fail.push(`${t}.${key}: per-frame delta only ${(s.min * 100).toFixed(0)}%`);
       if (s.still > 0.72) fail.push(`${t}.${key}: ${(s.still * 100).toFixed(0)}% of the tile never moves`);
+    }
+    // Every animation the theme publishes, one-shots included — loopClosureFault
+    // exempts them itself rather than the caller having to know which is which.
+    for (const key of Object.keys(BUILT[t].anims)) {
+      const fault = loopClosureFault(BUILT[t].anims[key]);
+      if (fault) fail.push(`${t}.${key}: the loop does not close — ${fault}`);
     }
     // The question block's '?' must be byte-identical across its idle loop: an
     // idle animation that moves geometry the player reads as static makes a row of
