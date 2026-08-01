@@ -112,7 +112,44 @@ ${note}
   const sp = findSpawn(rows);
   const vine = L.meta.vine;
   const back = landingNear(rows, 160);
+  const wp = L.meta.warpPipe;
+  const out = landingNear(rows, 100);
   const body = `
+// The coin room under the pipe at column ${wp.x}, which the original's data flags as
+// a pipe that leads somewhere. Same shape as 1-1's: drop in through the ceiling,
+// leave by the side pipe, surface at column ${out}.
+const BONUS = {
+  id: '3-1b',
+  name: 'WORLD 3-1',
+  theme: 'underground',
+  music: 'underground',
+  width: 20,
+  height: 15,
+  spawn: { x: 2, y: 10 },
+  tiles: [
+    '####################',
+    '####################',
+    '##[]################',
+    '#.{}..............##',
+    '#.................##',
+    '#.................##',
+    '#.................##',
+    '#.................##',
+    '#...oooooooooo....##',
+    '#...oooooooooo..<>##',
+    '#...oooooooooo..<>##',
+    '####################',
+    '####################',
+    '####################',
+    '####################',
+  ],
+  entities: [],
+  // from.x is the '<' column: the trigger and the clip both key off it.
+  warps: [
+    { from: { x: 16, y: 10 }, dir: 'right', to: { area: 'main', x: ${out}.5, y: 12, exit: 'up' } },
+  ],
+};
+
 // The sky above the beanstalk at column ${vine.x}. You come down again at column ${back},
 // past the second staircase.
 const SKY = {
@@ -162,7 +199,10 @@ ${contentsBlock(L.contents)}
   entities: [
 ${entsBlock(L.entities)}
   ],
-  areas: { '3-1c': SKY },
+  warps: [
+    { from: { x: ${wp.x}, y: ${wp.top} }, dir: 'down', to: { area: '3-1b', x: 2.5, y: 3, exit: 'down' } },
+  ],
+  areas: { '3-1b': BONUS, '3-1c': SKY },
   flagpole: { x: ${L.meta.flagpole.x} },
   castle: { x: ${L.meta.castle.x} },
 };
@@ -181,10 +221,8 @@ ${entsBlock(L.entities)}
         ", the bridge over the water\n" +
         '// at 77 and both drowning pools are the original\'s.\n' +
         '//\n' +
-        '// DEVIATION: the pipe at column ' + L.meta.warpPipe.x + ' is flagged in the data as one that leads\n' +
-        '// somewhere, and in the original it drops into a coin room. We have no coin\n' +
-        '// room for it and will not invent one, so it is rendered as an ordinary pipe —\n' +
-        "// the same choice 2-1's warp pipe already gets."
+        '// The pipe at column ' + L.meta.warpPipe.x + ' is flagged in the data as one that leads somewhere,\n' +
+        "// and drops into a coin room built to 1-1's shape."
     ) +
       tilesBlock(rows) +
       body
