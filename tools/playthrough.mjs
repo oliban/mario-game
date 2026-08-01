@@ -463,9 +463,16 @@ if (wanted('bricks')) {
     for (const r of runs) {
       // Sample the middle of the run, then anything else in it that has a
       // different amount of standing room.
+      // bumpSpots models a size-agnostic body — effectively small Mario — but
+      // this check then stands BIG Mario on what it returns. A spot only one row
+      // under the brick puts his head in the brick's own row: he is inside it,
+      // rises 0px and breaks nothing. That is not the level failing, it is a
+      // place a two-tile body cannot occupy, so it is not a spot at all.
+      // 1-2's column of bricks at 54-55 leaves exactly a one-tile gap, which
+      // small Mario walks under and big Mario cannot enter.
       let picked = null;
       for (let x = r.x0; x <= r.x1 && !picked; x++) {
-        const spot = bumpSpots(a.graph, x, r.y).find((n) => n.x === x);
+        const spot = bumpSpots(a.graph, x, r.y).find((n) => n.x === x && n.y - r.y >= 2);
         if (spot) picked = { x, y: r.y, from: spot, gap: spot.y - r.y };
       }
       if (picked) specs.push(picked);

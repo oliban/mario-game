@@ -6,9 +6,10 @@
 // staircases, the flagpole and the castle are the original's own numbers, not
 // an approximation of them. Re-run the generator rather than editing by hand.
 //
-// DEVIATION: the original's leaping cheep-cheeps are spawned by two Frenzy
-// objects at columns 26 and 137. This engine has no frenzy spawner, so they are
-// placed explicitly across that span.
+// The leaping cheep-cheeps come from the original's own Frenzy objects at
+// columns 26 and 137, with the stop frenzy at 197. Almost every hand-placed
+// enemy in this area is flagged hard-mode-only and so is absent on a first
+// quest, exactly as in the original.
 // ---------------------------------------------------------------------------
 
 const TILES = [
@@ -40,21 +41,9 @@ export default {
   spawn: { x: 2, y: 11 },
   tiles: TILES,
   entities: [
-    {type: 'cheep',x: 28,y: 13,variant: 'red'},
-    {type: 'cheep',x: 39,y: 13,variant: 'red'},
-    {type: 'cheep',x: 50,y: 13,variant: 'red'},
-    {type: 'cheep',x: 61,y: 13,variant: 'red'},
-    {type: 'cheep',x: 72,y: 13,variant: 'red'},
-    {type: 'cheep',x: 83,y: 13,variant: 'red'},
-    {type: 'cheep',x: 94,y: 13,variant: 'red'},
-    {type: 'cheep',x: 105,y: 13,variant: 'red'},
-    {type: 'cheep',x: 116,y: 13,variant: 'red'},
-    {type: 'cheep',x: 127,y: 13,variant: 'red'},
-    {type: 'cheep',x: 138,y: 13,variant: 'red'},
-    {type: 'cheep',x: 149,y: 13,variant: 'red'},
-    {type: 'cheep',x: 160,y: 13,variant: 'red'},
-    {type: 'cheep',x: 171,y: 13,variant: 'red'},
-    {type: 'cheep',x: 182,y: 13,variant: 'red'},
+    {type: 'frenzy',x: 26,y: 2,kind: 'cheep'},
+    {type: 'frenzy',x: 137,y: 2,kind: 'cheep'},
+    {type: 'frenzy',x: 197,y: 2,kind: 'stop'},
   ],
   flagpole: { x: 225 },
   castle: { x: 230 },

@@ -38,11 +38,32 @@ const ENEMY_MAP = {
   0x0c: 'podoboo', 0x0d: 'piranha', 0x0e: 'koopa:green', 0x0f: 'koopa:red',
   0x10: 'koopa:green', 0x11: 'lakitu', 0x12: 'spiny', 0x2d: 'bowser',
 };
-const GROUPS = {
-  0x37: ['goomba', 3, 10], 0x38: ['goomba', 3, 6],
-  0x39: ['koopa:green', 3, 10], 0x3a: ['koopa:green', 3, 6],
-  0x3b: ['goomba', 2, 10], 0x3c: ['goomba', 2, 6],
-  0x3d: ['koopa:green', 2, 10], 0x3e: ['koopa:green', 2, 6],
+// HandleGroupEnemies, exactly: subtract $37, and the three bits that remain say
+// everything. Below 4 the group is goombas, 4 and up green koopas; d1 picks the
+// row (clear = y $b0 = SMB row 11, set = y $70 = row 7); d0 picks the count
+// (clear = 2, set = 3). The previous table had the wrong ids, the wrong counts
+// and the wrong rows, so every grouped enemy in the game was being dropped.
+function groupOf(id) {
+  if (id < 0x37 || id > 0x3e) return null;
+  const v = id - 0x37;
+  return {
+    type: v < 4 ? 'goomba' : 'koopa:green',
+    row: v & 0x02 ? 7 : 11,
+    count: v & 0x01 ? 3 : 2,
+  };
+}
+
+// $1b-$1f are FIREBARS, not enemy groups — the enemy init table puts
+// InitShortFirebar at $1b-$1e and InitLongFirebar at $1f. FirebarSpinSpdData
+// and FirebarSpinDirData, indexed by id - $1b, give the rest. Speeds are $28
+// and $38, so the fast ones run 1.4x; direction $10 means anticlockwise. The
+// long firebar is a short one with a second half duplicated onto it.
+const FIREBARS = {
+  0x1b: { count: 6, speed: 1, dir: 1 },
+  0x1c: { count: 6, speed: 1.4, dir: 1 },
+  0x1d: { count: 6, speed: 1, dir: -1 },
+  0x1e: { count: 6, speed: 1.4, dir: -1 },
+  0x1f: { count: 12, speed: 1, dir: 1 },
 };
 
 // Moving lifts are enemy-stream objects, not area objects: entries $24-$2c of
@@ -225,10 +246,11 @@ export function buildArea(levelId, opts = {}) {
 
   const meta = {
     pipes: [], flagpole: null, castle: null, axe: null, springs: [],
-    vine: null, warpPipe: null, waterPipe: null,
+    vine: null, warpPipe: null, waterPipe: null, sidePipes: [],
   };
   const contents = [];
   const frenzies = [];
+  const pipePlants = [];
 
   for (const o of objs) {
     const x = o.x;
@@ -237,12 +259,38 @@ export function buildArea(levelId, opts = {}) {
     switch (o.name) {
       case 'VerticalPipe':
       case 'VerticalPipe(warp)': {
+        // GetPipeHeight: the height is the low THREE bits of the parameter, and
+        // the pipe is that many rows below its lip. Every floor-standing pipe
+        // works out to bottom at SMB row 10, which is why filling to the floor
+        // looked right, but the parameter is the authority.
         const top = y;
-        const bottom = FLOOR_TOP - 1;
+        const bottom = Math.min(ROW(12), top + (n & 0x07));
         put(x, top, '['); put(x + 1, top, ']');
         for (let r = top + 1; r <= bottom; r++) { put(x, r, '{'); put(x + 1, r, '}'); }
         meta.pipes.push({ x, top, warp: o.name.includes('warp') });
         if (o.name.includes('warp')) meta.warpPipe = { x, top };
+        // The plant belongs to the PIPE, not to the enemy stream — VerticalPipe
+        // writes it into the enemy buffer itself, centred on the pipe. The one
+        // exception is hard-coded: `lda AreaNumber / ora WorldNumber / beq
+        // DrawPipe` means world 1-1 never gets a piranha plant, on any pipe.
+        if (levelId !== '1-1') pipePlants.push({ type: 'piranha', x: x + 0.5, y: top });
+        break;
+      }
+      // RenderSidewaysPipe: four columns, with the mouth on the LEFT (the parts
+      // are stored backwards horizontally) and a vertical shaft above the last
+      // two columns running from the top of the screen down. $05 is the shaft
+      // length, param - 2, so the pipe's own two rows are param-1 and param.
+      case 'ExitPipe':
+      case 'IntroPipe': {
+        const shaftLen = n - 2;
+        const top = ROW(shaftLen + 1);
+        for (let i = 0; i <= 3; i++) {
+          const ch = i === 0 ? '<' : i === 3 ? '>' : '-';
+          put(x + i, top, ch);
+          put(x + i, top + 1, ch);
+        }
+        for (let r = ROW(0); r < top; r++) { put(x + 2, r, '{'); put(x + 3, r, '}'); }
+        meta.sidePipes.push({ x, top });
         break;
       }
       case 'RowOfBricks': for (let i = 0; i <= n; i++) put(x + i, y, '='); break;
@@ -265,7 +313,12 @@ export function buildArea(levelId, opts = {}) {
       case 'Hole_Empty': for (let i = 0; i <= n; i++) fillCol(x + i, FLOOR_TOP, H - 1, '.'); break;
       case 'Hole_Water':
         // Waves on SMB row 10, water under them to the bottom of the buffer.
-        for (let i = 0; i <= n; i++) { put(x + i, ROW(10), '~'); fillCol(x + i, ROW(11), H - 1, '_'); }
+        // In a castle the same two metatiles are lava — it is the palette that
+        // differs, not the tiles, which is why 1-4's moat has to be lethal.
+        for (let i = 0; i <= n; i++) {
+          put(x + i, ROW(10), liquidTop);
+          fillCol(x + i, ROW(11), H - 1, liquidBody);
+        }
         break;
       // A bridge's row nybble is where its RAILING goes, and the railing is
       // metatile $0b, below the block buffer's bar — you walk straight through
@@ -340,9 +393,6 @@ export function buildArea(levelId, opts = {}) {
       case 'LoopCmd':
       case 'AlterAreaAttributes': // consumed by the schedule above
         break;
-      case 'IntroPipe':   // only in the title-screen demo area
-      case 'ExitPipe':    // only in the underground bonus rooms of world 1
-        break;
       default:
         // Anything that reaches here is a piece of the level going silently
         // missing. `node tools/smb-build.mjs --unhandled` lists them.
@@ -363,10 +413,22 @@ export function buildArea(levelId, opts = {}) {
   const ents = [];
   for (const e of enemies) {
     if (e.hardOnly) continue;
-    const gr = GROUPS[e.id];
+    const gr = groupOf(e.id);
     if (gr) {
-      const [type, count, row] = gr;
-      for (let i = 0; i < count; i++) ents.push({ type, x: e.x + i, y: row + 1 });
+      for (let i = 0; i < gr.count; i++) ents.push({ type: gr.type, x: e.x + i, y: gr.row + 1 });
+      continue;
+    }
+    const fb = FIREBARS[e.id];
+    if (fb) {
+      // A firebar's hub is its row exactly, +0. PositionEnemyObj sets
+      // Enemy_Y_Position to row * 16 with NO status-bar offset, where
+      // GetAreaObjYPosition adds 32 for objects — so an enemy row already sits
+      // two rows lower than the same object row, and our +1 for walkers is that
+      // offset minus the half tile CheckpointEnemyID adds to ids below $15.
+      // Firebars are above $15, so they get neither. Checked against 1-4: every
+      // firebar lands exactly on the EmptyBlock the original mounts it on
+      // (enemy row 6 vs object row 4, both our row 6).
+      ents.push({ type: 'firebar', x: e.x, y: e.y, ...fb });
       continue;
     }
     const lift = LIFTS[e.id];
@@ -376,13 +438,26 @@ export function buildArea(levelId, opts = {}) {
       continue;
     }
     const t = ENEMY_MAP[e.id];
-    if (!t) continue;
+    if (!t) {
+      // Same rule as the object stream: nothing disappears quietly. These are
+      // the ids we know carry no entity of their own.
+      //   $15 bowser's flame (our Bowser emits its own), $16 fireworks,
+      //   $17/$18 frenzy control, $2e powerup (spawned by a
+      //   block), $2f vine (spawned by a block), $30 flagpole flag and $31 star
+      //   flag (drawn by the flagpole/castle objects), $33 cannon (drawn by
+      //   AreaStyleObject), $34 warp-zone trigger, $35 toad.
+      if (![0x15, 0x16, 0x17, 0x18, 0x2e, 0x2f, 0x30, 0x31, 0x33, 0x34, 0x35].includes(e.id)) {
+        unhandled.set(`enemy $${e.id.toString(16)}`, (unhandled.get(`enemy $${e.id.toString(16)}`) || 0) + 1);
+      }
+      continue;
+    }
     // Enemies map with +1, not the objects' +2: the original's enemy row is the
     // row the body occupies, so a row-11 koopa stands ON the floor rather than
     // half-buried in its top course.
     ents.push({ type: t, x: e.x, y: e.y + 1 });
   }
   ents.push(...frenzies);
+  ents.push(...pipePlants);
 
   return { width, terrain, tiles: g.map((r) => r.join('')), meta, contents, entities: ents, objs, enemies };
 }

@@ -17,53 +17,23 @@ const OUT = join(ROOT, 'src', 'data', 'levels');
 
 
 const SOLID = new Set(['#', 'B', '=', 'S', 'U']);
-const ITEMS = new Set(['?', 'M', '1', 'C']);
 
-// DEVIATION, and one we would rather not have.
+// Item blocks stay where the original put them. Three separate heuristics here
+// used to relocate any block that sat more than a jump above its own ground,
+// and all three were wrong, because the premise was wrong.
 //
-// The original stacks item blocks: 2-1 puts a Hidden1Up on SMB row 3 and a
-// hidden coin block on SMB row 7 in the SAME column, and the row-7 block is the
-// step. You strike it from below, it turns into a used block, you stand on it,
-// and from there the 1-up is an ordinary jump away. This engine does exactly
-// that at runtime — a bumped question block becomes 'U', which is solid.
+// 2-1 is the case that exposed it: the original stacks a Hidden1Up on SMB row 3
+// over a hidden coin block on SMB row 7 in the SAME column, and 2-3's power-up
+// at column 102 hangs over open water. Both are struck from a moving jump — off
+// the used block in 2-1, off the bridge in 2-3 — which tools/playthrough.mjs's
+// `bumpSpots` cannot model, since it only looks for footing within one column
+// of the block. That is a limit of the checker, not a defect in the level, and
+// distorting the original's geometry to satisfy it makes the levels less
+// faithful without making them more playable.
 //
-// tools/reach.mjs cannot see it. Its grid takes solidity straight from LEGEND,
-// where 'C' and '1' are `solid: false`, so no standing node is ever created on
-// top of a hidden block and the upper one reads as unreachable. Until that
-// checker models a struck block as a platform, any item block more than a jump
-// above its own ground is dropped to four rows above it. It keeps its column
-// where it can; when the column is taken — and in 2-1 it is taken by the very
-// block the puzzle is built on — it steps one column aside rather than giving
-// up, which is what left 2-1's 1-up stranded before.
-function dropStrandedItems(g) {
-  for (let y = 0; y < g.length; y++) {
-    for (let x = 0; x < g[y].length; x++) {
-      if (!ITEMS.has(g[y][x])) continue;
-      let ground = -1;
-      for (let k = y + 1; k < g.length; k++) {
-        if (SOLID.has(g[k][x])) { ground = k; break; }
-      }
-      if (ground < 0 || ground - y <= 4) continue;
-      const ty = ground - 4;
-      for (const tx of [x, x + 1, x - 1]) {
-        if (tx < 0 || tx >= g[ty].length || g[ty][tx] !== '.') continue;
-        // Only useful if the new column has the same ground under it.
-        let g2 = -1;
-        for (let k = ty + 1; k < g.length; k++) {
-          if (SOLID.has(g[k][tx])) { g2 = k; break; }
-        }
-        if (g2 !== ground) continue;
-        g[ty][tx] = g[y][x];
-        g[y][x] = '.';
-        break;
-      }
-    }
-  }
-}
-
 // DEVIATION: the original lets a power-up slide out sideways from a block set
 // into a ceiling; this engine emerges it upward and would bury it. One tile of
-// air is carved above any capped item block.
+// air is carved above any capped item block. That one is a real engine limit.
 function relieveBlocks(rows) {
   const CAPPED = new Set(['?', 'M']);
   const g = rows.map((r) => r.split(''));
@@ -72,7 +42,6 @@ function relieveBlocks(rows) {
       if (CAPPED.has(g[y][x]) && SOLID.has(g[y - 1][x])) g[y - 1][x] = '.';
     }
   }
-  dropStrandedItems(g);
   return g.map((r) => r.join(''));
 }
 
@@ -91,13 +60,10 @@ function findSpawn(rows) {
 }
 
 
-// Podoboos are lava bubbles. The original's castle floor is lava where they
-// leap; rendering it as plain stone made them erupt out of bedrock. Each one
-// gets a three-wide pool, which is inside a running jump exactly as 1-4's are,
-// and is re-seated on the lava surface.
+// Podoboos are lava bubbles, and they leap out of the surface of the lava.
+// ForegroundScenery now supplies that lava column by column, so they only need
+// seating on it rather than pools dug for them.
 function seatPodoboos(rows, ents) {
-  // Terrain now supplies the lava (a castle with no floor is a lake), so the
-  // podoboos only need seating on its surface rather than pools of their own.
   const g = rows.map((r) => r.split(''));
   for (const e of ents) {
     if (e.type !== 'podoboo') continue;
@@ -107,9 +73,6 @@ function seatPodoboos(rows, ents) {
     }
     e.y = top;
   }
-  // Filling the lava lakes can leave an item block hanging over one, so run the
-  // same drop pass again now that the lava is in place.
-  dropStrandedItems(g);
   return g.map((r) => r.join(''));
 }
 
@@ -137,14 +100,9 @@ ${note}
 {
   const L = emitLevel('2-1', { theme: 'overworld' });
   const warp = L.meta.pipes.find((p) => p.warp);
-  const ents = L.entities.filter((e) => e.type !== 'piranha');
-  // Piranhas belong on pipes; the original's enemy stream places them by column.
-  for (const p of L.meta.pipes) {
-    if (p.warp) continue;
-    if (L.entities.some((e) => e.type === 'piranha' && Math.abs(e.x - p.x) < 3)) {
-      ents.push({ type: 'piranha', x: p.x + 0.5, y: p.top });
-    }
-  }
+  // Piranha plants are no longer guessed from the enemy stream: VerticalPipe
+  // creates them itself, centred on the pipe, so smb-build emits them.
+  const ents = L.entities.slice();
   const body = `
 // The beanstalk brick is at column 83 and the warp pipe at ${warp ? warp.x : '-'} — both the
 // original's positions. The jumpspring before the flagpole is at ${L.meta.springs[0] ? L.meta.springs[0].x : '-'}.
@@ -227,6 +185,19 @@ ${entsBlock(ents)}
   const flag = W - 10;
   set(flag, 2, '^');
   for (let r = 3; r <= 12; r++) set(flag, r, '|');
+  // The original's WaterPipe IS the exit: the area's last AlterAreaAttributes
+  // raises terrain 15, solid top to bottom, and the pipe is the one gap in that
+  // wall. Swimming into it is how you leave, rather than scraping over the wall
+  // along the water surface.
+  //
+  // The trigger column is the WATER in front of the mouth, not the mouth tile
+  // itself. The pipe metatiles are solid ($6b and $6c both clear the block
+  // buffer's bar), so a swimmer collides with the mouth and stops with his
+  // leading edge exactly on the boundary of the engine's 2px entry window — it
+  // does fire there, but only just. Anchoring one column left gives the whole
+  // tile as the window.
+  const wp = L.meta.waterPipe;
+  const shore = L.width + 2;
   const body = `
 export default {
   id: '2-2',
@@ -241,6 +212,9 @@ export default {
   entities: [
 ${entsBlock(L.entities)}
   ],
+  warps: [
+    { from: { x: ${wp.x - 1}, y: ${wp.top} }, dir: 'right', to: { area: 'main', x: ${shore}.5, y: 12, exit: 'none' } },
+  ],
   flagpole: { x: ${flag} },
   castle: { x: ${flag + 5} },
 };
@@ -249,9 +223,11 @@ ${entsBlock(L.entities)}
     join(OUT, '2-2.js'),
     header(
       '2-2 — underwater',
-      "// DEVIATION: the original ends at a water pipe and has no flagpole object.\n// A short dry shore and a pole are appended so the level can be completed with\n// this engine's existing level-end machinery. Everything to the left of column " +
+      "// The original's exit is the WaterPipe at column " +
+        L.meta.waterPipe.x +
+        ", cut into the\n// solid wall its last AlterAreaAttributes raises.\n//\n// DEVIATION: the original has no flagpole object in this area — it ends at that\n// pipe. This engine completes a level at a pole, so a short dry shore and a\n// pole are appended past the pipe, reached by swimming over the wall along the\n// surface. Everything left of column " +
         L.width +
-        '\n// is the original.'
+        ' is the original.'
     ) +
       tilesBlock(relieveBlocks(rows)) +
       body
