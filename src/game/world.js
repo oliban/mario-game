@@ -41,6 +41,7 @@ const [
   fontMod,
   itemsMod,
   sceneryMod,
+  cannonsMod,
 ] = await Promise.all([
   opt('../data/tiles.js'),
   opt('./entity.js'),
@@ -51,6 +52,7 @@ const [
   opt('../data/sprites/font.js'),
   opt('../data/sprites/items.js'),
   opt('../data/scenery.js'),
+  opt('./entities/cannons.js'),
 ]);
 
 // entities/index.js only pulls in the enemy roster. Items, props and one-shot
@@ -143,8 +145,10 @@ export const LEGEND = {
   U: { name: 'used', solid: true },
   // tiles.js extensions beyond the ARCHITECTURE legend
   '-': { name: 'pipe_body', solid: true, pipe: true },
-  K: { name: 'cannon_barrel', solid: true },
-  k: { name: 'cannon_base', solid: true },
+  // `cannon` is read by entities/cannons.js, which turns the top tile of each
+  // vertical run of them into a firing bullet bill cannon.
+  K: { name: 'cannon_barrel', solid: true, cannon: 'barrel' },
+  k: { name: 'cannon_base', solid: true, cannon: 'base' },
 };
 
 // Names accepted from src/data/tiles.js when resolving a char's artwork.
@@ -561,6 +565,8 @@ export class World {
   constructor(opts = {}) {
     this.cam = new Camera();
     this.blocks = new BlockSystem(this);
+    // Cannons are tiles, not entities, so they need a driver of their own.
+    this.cannons = cannonsMod && cannonsMod.Cannons ? new cannonsMod.Cannons(this) : null;
 
     this.level = null;
     this.rootLevel = null;
@@ -771,6 +777,9 @@ export class World {
     this._placePlayer(lvl, opts);
     this.cam.reset(lvl, this.player);
     this._spawnLevelEntities(lvl);
+    // After the camera, which decides how many cannons the level starts with
+    // already filed into the ring.
+    if (this.cannons) this.cannons.reset(lvl);
 
     this.tick = 0;
     this.freezeTimer = 0;
@@ -915,7 +924,11 @@ export class World {
     } else if (id === TID.LAVA) {
       frames = pick(t.THEME_LAVA_FRAMES);
       va = 3;
-      vb = 5;
+      // vb stays 0 on purpose — see the measurement table above lavaPhase in
+      // tiles.js. De-phasing lava vertically as well puts a visible horizontal band
+      // across every 16th row, because the crust field drifts (-2, +2) per frame and
+      // two frames five apart are ten pixels out of register at the join.
+      vb = 0;
       vt = 1;
     }
     if (!Array.isArray(frames) || frames.length < 2) return;
@@ -1521,6 +1534,9 @@ export class World {
     if (!dying && !changing) {
       this._updateBridgeFall();
       this.blocks.update();
+      // ProcessCannons sits in GameEngine (asm:5331) alongside the block and
+      // misc object routines, before the enemies get their tick.
+      if (this.cannons) this._safe(this.cannons, 'update');
       this._updateEntities();
     }
 
