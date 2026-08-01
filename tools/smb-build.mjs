@@ -503,15 +503,25 @@ if (process.argv[1] && process.argv[1].endsWith('smb-build.mjs')) {
   const args = process.argv.slice(2);
   const id = args.find((a) => !a.startsWith('--')) || '1-1';
   if (args.includes('--unhandled')) {
-    // Every object in every area, so a type that only ever appears in one
-    // level still shows up. Anything listed is level geometry going missing.
-    const ids = args.filter((a) => !a.startsWith('--'));
-    const all = ids.length ? ids : Object.keys(REF.levelMap);
-    for (const lid of all) buildArea(lid);
+    // EVERY AREA, BY NAME. This used to walk REF.levelMap, which is 36 entries
+    // but names only 28 distinct areas — the shared coin rooms, both coin
+    // heavens, the warp zone and the two bonus water areas were never audited,
+    // while the output said "36 area(s)" and looked like full coverage. A
+    // coverage tool that overstates its coverage is worse than none, because it
+    // stops anyone looking. Count what was actually rendered, and say so.
+    const named = args.filter((a) => !a.startsWith('--'));
+    const all = named.length ? named : Object.keys(REF.areas);
+    const seen = new Set();
+    for (const key of all) {
+      const entry = REF.levelMap[key];
+      seen.add(entry ? entry.area : key);
+      buildArea(key);
+    }
+    const cover = `${seen.size} distinct area(s) of ${Object.keys(REF.areas).length}`;
     if (!unhandled.size) {
-      console.log(`no unhandled object types across ${all.length} area(s)`);
+      console.log(`no unhandled object types across ${cover}`);
     } else {
-      console.log(`UNHANDLED object types across ${all.length} area(s):`);
+      console.log(`UNHANDLED object types across ${cover}:`);
       for (const [name, count] of [...unhandled].sort((a, b) => b[1] - a[1])) {
         console.log(`  ${String(count).padStart(4)}  ${name}`);
       }
