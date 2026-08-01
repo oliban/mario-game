@@ -4,6 +4,7 @@ import rng from '../../core/rng.js';
 import * as EB from '../../data/sprites/enemies-b.js';
 import {
   pickAnim,
+  pickSprite,
   enemyDie,
   frozen,
   hurtPlayer,
@@ -65,6 +66,18 @@ const BRO_B = BRO_A.slice(0, 16).concat([
 const BRO_THROW = BRO_A.slice();
 BRO_THROW[6] = '.05500000000550.';
 
+// Stomped: helmet, face and plated chest driven down into a single flat band,
+// legs splayed out from under it. Bottom-anchored, so it sits on the ground.
+const BRO_FLAT = [
+  '....00000000....',
+  '..088888888880..',
+  '.00555555555500.',
+  '.05596555965550.',
+  '0022233377733200',
+  '0111222222221110',
+  '.00000000000000.',
+];
+
 const local = (rows, name) => makeSprite(rows, BRO_PAL, { name });
 
 const WALK = pickAnim(
@@ -79,7 +92,12 @@ const THROW_ANIM = pickAnim(
   () => new Anim([local(BRO_THROW, 'hammerbro-throw')], 20, false),
   14
 );
-export const HAMMERBRO_ART = { walk: WALK, throw: THROW_ANIM };
+const FLAT = pickSprite(
+  EB,
+  ['HAMMER_BRO.flat', 'HAMMERBRO.flat', 'HAMMERBRO_FLAT'],
+  () => local(BRO_FLAT, 'hammerbro-flat')
+);
+export const HAMMERBRO_ART = { walk: WALK, throw: THROW_ANIM, flat: FLAT };
 
 // Wind-up runs the length of the throw pose; the hammer leaves his hand as the
 // second frame comes up.
@@ -203,6 +221,11 @@ export default class HammerBro extends Entity {
   }
 
   draw(ctx, cam) {
+    // A stomp flattens him for squashTicks frames, the way it does a goomba.
+    if (this.dead && this.killStyle === 'stomp') {
+      this.drawSprite(ctx, cam, FLAT);
+      return;
+    }
     if (this.windT >= 0 && !this.dead) {
       // Driven off the wind-up clock so the pose plays from its first frame.
       this.drawSprite(ctx, cam, THROW_ANIM.frame(this.windT));
