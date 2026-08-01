@@ -168,23 +168,7 @@ ${entsBlock(ents)}
 // ---------------------------------------------------------------------- 2-2
 {
   const L = emitLevel('2-2', { theme: 'water' });
-  // DEVIATION: the original ends this area at a water pipe and has no flagpole
-  // in its object stream. This engine completes a level at a pole, so a short
-  // dry shore and a pole are appended past the last of the original's geometry.
-  const W = L.width + 24;
-  const rows = L.rows.map((r) => r.padEnd(W, '.'));
-  const set = (x, y, ch) => {
-    const a = rows[y].split('');
-    a[x] = ch;
-    rows[y] = a.join('');
-  };
-  for (let x = L.width; x < W; x++) {
-    for (let y = 13; y < 15; y++) set(x, y, '#');
-    for (let y = 0; y < 13; y++) set(x, y, '.');
-  }
-  const flag = W - 10;
-  set(flag, 2, '^');
-  for (let r = 3; r <= 12; r++) set(flag, r, '|');
+  const rows = L.rows;
   // The original's WaterPipe IS the exit: the area's last AlterAreaAttributes
   // raises terrain 15, solid top to bottom, and the pipe is the one gap in that
   // wall. Swimming into it is how you leave, rather than scraping over the wall
@@ -197,7 +181,6 @@ ${entsBlock(ents)}
   // does fire there, but only just. Anchoring one column left gives the whole
   // tile as the window.
   const wp = L.meta.waterPipe;
-  const shore = L.width + 2;
   const body = `
 export default {
   id: '2-2',
@@ -205,7 +188,7 @@ export default {
   time: 400,
   theme: 'water',
   music: 'underwater',
-  width: ${W},
+  width: ${L.width},
   height: 15,
   spawn: { x: 2, y: 6 },
   tiles: TILES,
@@ -213,21 +196,22 @@ export default {
 ${entsBlock(L.entities)}
   ],
   warps: [
-    { from: { x: ${wp.x - 1}, y: ${wp.top} }, dir: 'right', to: { area: 'main', x: ${shore}.5, y: 12, exit: 'none' } },
+    { from: { x: ${wp.x - 1}, y: ${wp.top} }, dir: 'right', to: { complete: true } },
   ],
-  flagpole: { x: ${flag} },
-  castle: { x: ${flag + 5} },
+  flagpole: null,
+  castle: null,
 };
 `;
   writeFileSync(
     join(OUT, '2-2.js'),
     header(
       '2-2 — underwater',
-      "// The original's exit is the WaterPipe at column " +
-        L.meta.waterPipe.x +
-        ", cut into the\n// solid wall its last AlterAreaAttributes raises.\n//\n// DEVIATION: the original has no flagpole object in this area — it ends at that\n// pipe. This engine completes a level at a pole, so a short dry shore and a\n// pole are appended past the pipe, reached by swimming over the wall along the\n// surface. Everything left of column " +
-        L.width +
-        ' is the original.'
+      "// This area ends the way the original ends it: at the WaterPipe in column " +
+        wp.x +
+        ',\n' +
+        '// cut into the solid wall the last AlterAreaAttributes raises. Swimming into\n' +
+        '// it finishes the level — tally and all — so there is no flagpole here, and\n' +
+        '// the original has none either. Every column is the original\'s.'
     ) +
       tilesBlock(relieveBlocks(rows)) +
       body
