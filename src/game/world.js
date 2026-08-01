@@ -860,6 +860,7 @@ export class World {
       // The coin tile has no entry in the tile sheet — it is an item sprite.
       if (rec.coin && !rec.sprite && !rec.anim && this.art.coin) rec.anim = this.art.coin;
       this._bindTileVariants(rec, art ? art.id : null);
+      this._bindTileCap(rec, art ? art.id : null);
     }
     this.recByCode[code] = rec;
     return rec;
@@ -959,6 +960,50 @@ export class World {
     rec.va = va;
     rec.vb = vb;
     rec.vt = vt;
+  }
+
+  // -------------------------------------------------------------------------
+  // Cap art: the tile a run turns into where nothing of its own kind is above it.
+  //
+  // tiles.js draws a lava pool and a staircase as textures that assume something
+  // else caps them — LAVA_SURF is the waterline with the crest and the bubbles,
+  // STAIR_TOP is the lit tread. Both are named on the tile record as `capTop`, and
+  // both were unreachable: a char census across all 32 levels found the 'l' and 'T'
+  // legend characters used ZERO times, which stranded 45 sprites per theme as art
+  // that never appeared in the game. A pool shipped with a hard flat top edge and a
+  // flight of steps shipped as a wall with no tread anywhere on it.
+  //
+  // Hanging the decision on the NEIGHBOUR rather than on the level data is what
+  // stops that happening again — the level does not have to opt in, and the
+  // generator never has to learn about it.
+  //
+  // Bound once per record, like the variants, so drawTiles pays only one property
+  // test on the tiles that have no cap at all (everything except lava and stairs).
+  _bindTileCap(rec, id) {
+    const t = tilesMod;
+    const TID = t && t.TID;
+    if (!TID || id == null || !t.TILES || !t.TILES[id]) return;
+    const capId = t.TILES[id].capTop;
+    if (capId == null) return;
+    const pick = (table) => (table && (table[this.tileset] || table.overworld)) || null;
+
+    // A cap can be phased in its own right: the lava waterline has eight frames and
+    // travels along the pool exactly as the body does, on the same stride, so the
+    // crest and the flow beneath it stay in step.
+    let frames = null;
+    let va = 1;
+    if (capId === TID.LAVA_SURF) {
+      frames = pick(t.THEME_LAVA_SURF_FRAMES);
+      va = 3;
+    }
+    if (Array.isArray(frames) && frames.length >= 2 && !(frames.length & (frames.length - 1))
+        && frames.every((f) => isSprite(f))) {
+      rec.cap = { variants: frames, vmask: frames.length - 1, va, vb: 0, vt: 1, sprite: null };
+      return;
+    }
+    const set = pick(t.THEME_TILES);
+    const sprite = set && set[capId];
+    if (isSprite(sprite)) rec.cap = { variants: null, vmask: 0, va: 1, vb: 0, vt: 0, sprite };
   }
 
   // tiles.js first, then the prop modules. A tile sheet entry that exists but
@@ -2349,15 +2394,29 @@ export class World {
     for (let ty = r.y0; ty <= r.y1; ty++) {
       const row = ty * this.w;
       for (let tx = r.x0; tx <= r.x1; tx++) {
-        const rec = this.recByCode[this.map[row + tx]];
+        const code = this.map[row + tx];
+        const rec = this.recByCode[code];
         if (!rec || rec.decor || rec.invisible || rec.code === 46) continue;
+        // Cap art (see _bindTileCap). Only lava and stairs carry a cap, so every
+        // other tile pays one property test and no map read. The extra read is the
+        // cell DIRECTLY ABOVE: a run is capped where the thing above it is not the
+        // same material. Off the top of the map counts as not-the-same, so a pool
+        // that reaches row 0 still gets its waterline.
         // Position variants (see _bindTileVariants). tx and ty are WORLD tile
         // coordinates, so the choice is fixed to the map and cannot crawl with
-        // the camera.
-        const vs = rec.variants;
-        const s = vs
-          ? vs[(tx * rec.va + ty * rec.vb + (rec.vt ? beat : 0)) & rec.vmask]
-          : this.tileSprite(rec, tick);
+        // the camera. A cap never phases vertically, so its selector drops the ty
+        // term entirely.
+        const cap = rec.cap;
+        let s;
+        if (cap && (ty === 0 || this.map[row - this.w + tx] !== code)) {
+          s = cap.variants
+            ? cap.variants[(tx * cap.va + (cap.vt ? beat : 0)) & cap.vmask]
+            : cap.sprite;
+        } else if (rec.variants) {
+          s = rec.variants[(tx * rec.va + ty * rec.vb + (rec.vt ? beat : 0)) & rec.vmask];
+        } else {
+          s = this.tileSprite(rec, tick);
+        }
         if (!s) continue;
         const off = rec.bumpable ? blocks.offsetAt(tx, ty) : 0;
         s.draw(
