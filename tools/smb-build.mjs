@@ -411,6 +411,7 @@ export function buildArea(levelId, opts = {}) {
   }
 
   const ents = [];
+  const pairedBalance = new Set();
   for (const e of enemies) {
     if (e.hardOnly) continue;
     const gr = groupOf(e.id);
@@ -434,7 +435,26 @@ export function buildArea(levelId, opts = {}) {
     const lift = LIFTS[e.id];
     if (lift) {
       // PosPlatform nudges every lift 12 pixels right of its own column.
-      ents.push({ type: 'platform', x: e.x + 0.75, y: e.y + 1, ...lift, range: 64, speed: 0.75 });
+      const spec = { type: 'platform', x: e.x + 0.75, y: e.y + 1, ...lift, range: 64, speed: 0.75 };
+      if (e.id === 0x24) {
+        // A balance platform is HALF of a pair. The original writes both halves
+        // into the enemy stream and links them by adjacency through
+        // BalPlatformAlignment: the first gets alignment $ff, the second gets
+        // the first's buffer offset. Our Platform in pulley mode spawns its own
+        // partner, so emitting both halves would put four platforms on two
+        // ropes. Emit the first, and take the rope's span and its balance point
+        // from where the original actually put the second.
+        if (pairedBalance.has(e)) continue;
+        const mate = enemies.find(
+          (o) => o !== e && o.id === 0x24 && o.x > e.x && !pairedBalance.has(o) && !o.hardOnly
+        );
+        if (mate) {
+          pairedBalance.add(mate);
+          spec.spacing = (mate.x - e.x) * 16;
+          spec.anchorY = ((e.y + 1 + mate.y + 1) / 2) * 16;
+        }
+      }
+      ents.push(spec);
       continue;
     }
     const t = ENEMY_MAP[e.id];
