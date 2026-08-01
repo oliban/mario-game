@@ -180,7 +180,22 @@ const P = {
   stompBounce: pnum(-2.5, 'stompBounceWeak', 'playerStompBounce', 'bounceVelocity'),
   stompBounceHeld: pnum(-4.0, 'stompBounce', 'stompBounceHeld', 'playerStompBounceHeld', 'bounceVelocityHeld'),
 
-  swimGravity: pnum(0.09375, 'waterGravity', 'swimGravity', 'playerSwimGravity'),
+  // Swimming is index 5 of the jump/fall force tables (smbdis.asm:6014-6024, selected
+  // at 6110-6123), and it uses the SAME two-force scheme as a jump: JumpMForceData[5]
+  // = $0d/256 while the stroke button is still down, FallMForceData[5] = $0a/256 once
+  // it is released or you are sinking (JumpSwimSub, smbdis.asm:5921-5935). A held
+  // stroke therefore rises 1.5^2 / (2*0.05078125) = 22px = 1.4 tiles; tapped, 28.8px.
+  //
+  // waterGravity in physics.js is 0.09375 = $18, which is the force the original
+  // switches to ABOVE the swimming ceiling (smbdis.asm:5940-5946) — a hard pull back
+  // down — not the ordinary swim force. It is kept here under that meaning; using it
+  // everywhere is what made every stroke worth 0.69 tiles instead of 1.4.
+  swimRiseGravity: pnum(0.05078125, 'waterRiseGravity', 'swimRiseGravity'),
+  swimSinkGravity: pnum(0.0390625, 'waterSinkGravity', 'swimSinkGravity'),
+  swimCeilingGravity: pnum(0.09375, 'waterGravity', 'swimGravity', 'playerSwimGravity'),
+  // Player_Y_Position < $14 is "above water level" to the original (smbdis.asm:5939,
+  // 6127). Our y is the top of the hitbox, as Player_Y_Position is.
+  swimCeilingY: pnum(20, 'swimCeilingY', 'waterCeilingY'),
   swimStroke: pnum(-1.5, 'strokeVelocity', 'swimStroke', 'swimImpulse'),
   swimStrokeSurface: pnum(-1.0, 'strokeVelocityAtTop', 'swimStrokeSurface', 'surfaceStroke'),
   swimMaxRise: pnum(-2.0, 'swimMaxRise', 'swimRiseCap'),
@@ -876,7 +891,18 @@ export default class Player extends EntityBase {
     // The launch frame is NOT exempt: physics.js integrates gravity on the frame the
     // jump starts (see simulateJump), and skipping it adds a whole vy0 of extra rise.
     if (this.inWater) {
-      this.vy += P.swimGravity;
+      // Three forces, exactly as JumpSwimSub picks them (smbdis.asm:5921-5946):
+      // above the swimming ceiling the strong $18 pull wins whichever way you are
+      // moving, otherwise a rising stroke that is still held decelerates at $0d and
+      // everything else — released stroke, sinking — at $0a.
+      const rising = this.vy < 0;
+      if (rising && !this._jumpHeld()) this.jumpHeld = false;
+      this.vy +=
+        this.y < P.swimCeilingY
+          ? P.swimCeilingGravity
+          : rising && this.jumpHeld
+            ? P.swimRiseGravity
+            : P.swimSinkGravity;
       if (this.vy > P.swimMaxFall) this.vy = P.swimMaxFall;
       if (this.vy < P.swimMaxRise) this.vy = P.swimMaxRise;
     } else if (this.grounded) {
@@ -1070,8 +1096,13 @@ export default class Player extends EntityBase {
       ? P.swimStrokeSurface
       : P.swimStroke;
     if (this.vy < P.swimMaxRise) this.vy = P.swimMaxRise;
+    // The swimming ceiling: a stroke taken above y=20 gives no upward speed at all,
+    // which is what keeps you from swimming out of the top of the level
+    // (PlayerPhysicsSub, smbdis.asm:6124-6134).
+    if (this.y < P.swimCeilingY) this.vy = 0;
     this.swimTick = 0;
     this.jumping = false;
+    this.jumpHeld = true;
     sfx(this.world, 'swim', 'stroke');
     fx(this.world, 'bubble', this.x + this.w / 2 + this.facing * 3, this.y + 4, false);
   }
@@ -1185,6 +1216,14 @@ export default class Player extends EntityBase {
         this.x = right;
         if (this.vx > 0) this.vx = 0;
       }
+    }
+    // Vertical, in water only. The swimming ceiling above already turns you around
+    // ~11px above y=20, so this never fires in ordinary play; it is the backstop that
+    // stops any future stroke or bounce from putting a swimmer off the top of a level
+    // the camera cannot follow him out of. Dry levels keep SMB's open sky.
+    if (this.inWater && this.y < 0) {
+      this.y = 0;
+      if (this.vy < 0) this.vy = 0;
     }
   }
 
