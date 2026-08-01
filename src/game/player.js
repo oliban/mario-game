@@ -1191,8 +1191,8 @@ export default class Player extends EntityBase {
       this.ducking = false;
       this.state = 'shrinking';
       this.stateTimer = 0;
-      this.vx = 0;
-      this.vy = 0;
+      // Velocity survives the transition. SMB freezes the animation but resumes
+      // the jump exactly as it was; zeroing here cancelled the arc mid-air.
       this._grow = { kind: 'shrink', from, frames: P.growFrames };
       // src/audio/sfx.js has no 'powerdown'; the power-down reuses the pipe warble.
       sfx(this.world, 'pipe', 'powerdown');
@@ -1396,8 +1396,7 @@ export default class Player extends EntityBase {
   _beginGrow(target) {
     this.state = 'growing';
     this.stateTimer = 0;
-    this.vx = 0;
-    this.vy = 0;
+    // Velocity survives the transition — see hurt().
     this.ducking = false;
     this._grow = { kind: 'grow', from: this.power, to: target, frames: P.growFrames };
     if (this.power === POWER.SMALL) this._growTo(HITBOX.BIG_H);
@@ -1440,8 +1439,9 @@ export default class Player extends EntityBase {
   }
 
   _updateChangeSize() {
-    this.vx = 0;
-    this.vy = 0;
+    // No physics integration happens in this state (only _updateNormal moves the
+    // player), so Mario is already held in place. vx/vy are left intact so the
+    // jump resumes with the same momentum when the animation ends.
     const g = this._grow;
     const frames = (g && g.frames) || P.growFrames;
     if (this.stateTimer < frames) return;
