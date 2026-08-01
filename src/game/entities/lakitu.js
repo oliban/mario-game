@@ -80,6 +80,11 @@ export default class Lakitu extends Entity {
     this.fleeing = false;
     this.bobT = 0;
     this.isEnemy = true;
+    // Lakitu ($11) is the second `iny` case in EnemyStomped (asm:11456-11458),
+    // so Y=2 and StompedEnemyPtsData[2] = $05 (asm:11436) = "800" in
+    // FloateyNumTileData (asm:1267). EIGHT hundred, not the 200 a stomped
+    // bullet bill or flying cheep pays.
+    this.stompPoints = 800;
   }
 
   update() {

@@ -30,6 +30,13 @@ export default class Cheep extends Entity {
     // Fish move through the level, not against it.
     this.noclip = true;
     this.isEnemy = true;
+    // Only the leaping fish are FlyingCheepCheep ($14, smbdis.asm:613), and only
+    // that id is on EnemyStomped's fixed-value list (asm:11444-11445, Y=0 ->
+    // StompedEnemyPtsData[0] = $02 = 200). The swimming grey/red cheeps are
+    // $0a/$0b, which are not — and cannot be stomped anyway, in the original
+    // because a water area sends every contact to InjurePlayer (asm:11346-11347)
+    // and here because onStomp() refuses unless `leaping`.
+    if (this.leaping) this.stompPoints = 200;
 
     if (this.leaping) {
       const p = playerOf(world);

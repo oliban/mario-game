@@ -134,6 +134,10 @@ export default class HammerBro extends Entity {
     this.hopT = 0;
     this.dropT = 0;
     this.isEnemy = true;
+    // HammerBro ($05) is the first `iny` case in EnemyStomped (asm:11453-11455),
+    // so Y=1 and StompedEnemyPtsData[1] = $06 (asm:11436) = "1000" in
+    // FloateyNumTileData (asm:1268). Same value his fireball death already pays.
+    this.stompPoints = 1000;
   }
 
   update() {

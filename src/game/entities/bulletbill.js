@@ -28,6 +28,11 @@ export default class BulletBill extends Entity {
     this.noclip = true;
     this.sprite = BODY;
     this.isEnemy = true;
+    // EnemyStomped (asm:11447-11451) branches both bill variants to
+    // EnemyStompedPts with Y=0, and StompedEnemyPtsData[0] = $02 (asm:11436) is
+    // "200" in FloateyNumTileData (asm:1264). Flat, and it does not touch the
+    // stomp chain.
+    this.stompPoints = 200;
 
     // The cannon shares the whistle-and-bang of the end-of-level fireworks,
     // exactly as the original reuses one effect for both.
@@ -57,35 +62,7 @@ export default class BulletBill extends Entity {
     this.kill('stomp', player);
     this.squashTicks = 18;
     fx(this.world, 'enemyPoof', this.centerX, this.centerY);
-    // A stomped bullet bill pays a flat 200, not the 100 that opens the stomp
-    // chain: EnemyStomped (asm:11439-11453) branches both bill variants to
-    // EnemyStompedPts with Y=0, and StompedEnemyPtsData[0] = $02 (asm:11436)
-    // selects "200" in FloateyNumTileData (asm:1264-1266). That path also never
-    // touches StompChainCounter, so the chain is put back a frame later by
-    // updateCorpse() — the score itself is awarded by the player's chain code
-    // after this returns, which is why it has to be nudged rather than paid here.
-    if (player && typeof player.stompChain === 'number') {
-      this._chainRestore = { player, chain: player.stompChain };
-      player.stompChain = 1; // index 1 of STOMP_SCORES -> 200
-    }
     return true;
-  }
-
-  _restoreChain() {
-    if (!this._chainRestore) return;
-    const { player, chain } = this._chainRestore;
-    this._chainRestore = null;
-    player.stompChain = chain;
-  }
-
-  // The corpse's first tick, i.e. the frame after the score was awarded.
-  updateCorpse() {
-    this._restoreChain();
-    return super.updateCorpse();
-  }
-
-  onRemove() {
-    this._restoreChain();
   }
 
   // Fireproof. HandleEnemyFBallCol falls through to ChkOtherEnemies

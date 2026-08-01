@@ -22,6 +22,12 @@ export default class Blooper extends Entity {
     this.thrusting = false;
     this.phaseT = 0;
     this.isEnemy = true;
+    // Bloober ($07) is the third `iny` case in EnemyStomped (asm:11459-11460),
+    // so Y=3 and StompedEnemyPtsData[3] = $06 (asm:11436) = "1000". The original
+    // can never actually pay it — a water area sends every contact to
+    // InjurePlayer (asm:11346-11347) — but the value is unambiguous, and our
+    // bloobers can leave the water, where onStomp() allows the squash.
+    this.stompPoints = 1000;
   }
 
   update() {

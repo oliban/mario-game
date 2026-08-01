@@ -315,6 +315,23 @@ export const HITBOX = {
 // entities/index.js (chainScore) must award exactly these values at the same
 // indices; past the end of the table the chain pays a 1-UP instead.
 export const STOMP_SCORES = [100, 200, 400, 500, 800, 1000, 2000, 4000, 5000, 8000];
+
+// Not every enemy pays the chain. EnemyStomped (smbdis.asm:11439-11463) compares
+// the enemy id against a short list and diverts the matches to EnemyStompedPts,
+// which awards StompedEnemyPtsData[y] and returns WITHOUT ever touching
+// StompChainCounter — a fixed-value stomp neither reads the chain nor advances
+// it, so the next ordinary stomp still pays whatever the chain was owed.
+// ChkForDemoteKoopa (asm:11480-11493) does the same with a literal $03.
+//
+// An entity opts in by setting `stompPoints` to the value it owes; 0, absent or
+// nonsense means "pay the chain" and is the default for everything else. It is
+// read at award time rather than baked in, so an entity whose worth changes with
+// its state (a paratroopa is worth 400 only while it still has its wings) can
+// just set it as that state changes.
+export function stompPointsOf(entity) {
+  const v = entity && entity.stompPoints;
+  return typeof v === 'number' && isFinite(v) && v > 0 ? v : 0;
+}
 // Flagpole bands, in the original's order (FlagpoleScoreMods / FlagpoleScoreDigits,
 // smbdis.asm:6573-6577): $05/$02 at digit 3 and $08/$04/$01 at digit 4. FIVE bands
 // — there is no 200-point flagpole in SMB. Selected by absolute player Y against
@@ -1382,7 +1399,8 @@ export default class Player extends EntityBase {
 
     const ex = entity ? entity.x + (entity.w || 16) / 2 : this.x + this.w / 2;
     const ey = entity ? entity.y : this.y + this.h;
-    const score = this._awardChain(ex, ey, 'stompChain');
+    const fixed = stompPointsOf(entity);
+    const score = fixed ? this._awardFixed(ex, ey, fixed) : this._awardChain(ex, ey, 'stompChain');
     sfx(this.world, 'stomp', 'squish');
     // Deliberately no freeze() here — see world._onStompLanded. The stomp was
     // being frozen twice (3 + 2 frames), which is what desynced chain-stomps.
@@ -1418,6 +1436,13 @@ export default class Player extends EntityBase {
     const ey = entity ? entity.y : this.y;
     sfx(this.world, 'kick', 'stomp');
     return this._awardChain(ex, ey, 'starChain');
+  }
+
+  // EnemyStompedPts (smbdis.asm:11464-11466): one floatey number for the value
+  // the enemy is worth, and the chain counter is left exactly as it was.
+  _awardFixed(x, y, score) {
+    callAny(this.world, ['addScore', 'score', 'addPoints'], score, x, y);
+    return score;
   }
 
   _awardChain(x, y, field) {

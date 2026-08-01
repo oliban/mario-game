@@ -103,15 +103,24 @@ export default class Koopa extends Entity {
   onStomp(player) {
     if (this.dead) return false;
     if (this.winged) {
-      // The first stomp only strips the wings.
+      // The first stomp only strips the wings. ChkForDemoteKoopa
+      // (smbdis.asm:11480-11493) rewrites the id, then `lda #$03 / jsr
+      // SetupFloateyNumber` awards a flat 400 ("400" is index $03 of
+      // FloateyNumTileData, asm:1265) and jumps to SBnce — it never touches
+      // StompChainCounter either, so losing the wings is worth 400 whatever the
+      // chain was doing.
       this.winged = false;
       this.flying = false;
       this.isWalker = true;
       this.vy = 0;
       this.grounded = false;
+      this.stompPoints = 400;
       fx(this.world, 'powerupSparkle', this.centerX, this.y + 6);
       return true;
     }
+    // Stomping the demoted troopa into its shell IS a chain stomp
+    // (HandleStompedShellE, asm:11497), so hand the score back to the chain.
+    this.stompPoints = 0;
     this._toShell(player && player.facing ? player.facing : this.facing);
     return true;
   }
