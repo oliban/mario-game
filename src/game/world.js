@@ -1632,6 +1632,30 @@ export class World {
     for (let c = right; c >= left; c--) cols.push(c);
     this._bridge = { cols, y: ty, timer: 0, player: p || null, bowserDropped: false };
     if (p) p.controlsLocked = true;
+
+    // The axe ends the fight, so nothing left on screen may still kill you — a
+    // flame Bowser breathed a moment before you touched it was landing after
+    // you had already won. The boss himself stays, because watching him drop is
+    // the point. Clearing the hazards is better than making Mario invulnerable:
+    // invulnFrames blanks the sprite on odd frames, and he would flicker through
+    // the entire collapse and walk-off.
+    const boss0 = this._bowser();
+    for (const e of this.entities) {
+      if (!e || e.removed || e === boss0) continue;
+      if (e.isPlayer || e === p) continue;
+      if (typeof e.onPlayerTouch === 'function' || e.harmful) e.removed = true;
+    }
+
+    // Frame the pair. Mario is at the axe on the right and Bowser is out on the
+    // bridge to the left; following Mario alone scrolls the boss off the screen
+    // so you never see him drop.
+    const boss = this._bowser();
+    if (boss && this.cam) {
+      const mid = (boss.x + boss.w * 0.5 + (p ? p.x + p.w * 0.5 : boss.x)) * 0.5;
+      const maxX = Math.max(0, this.w * TILE - SCREEN_W);
+      this.cam.x = Math.max(0, Math.min(maxX, Math.round(mid - SCREEN_W * 0.5)));
+      if (typeof this.cam.lock === 'function') this.cam.lock(true);
+    }
     return this._bridge;
   }
 
