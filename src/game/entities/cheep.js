@@ -40,6 +40,15 @@ export default class Cheep extends Entity {
       this.leapG = opts.gravity == null ? LEAP_G : opts.gravity;
       this.leapMaxFall = opts.maxFall == null ? 0 : opts.maxFall;
       this.active = true;
+      // OffscreenBoundsCheck (smbdis.asm 11006) opens with
+      //   lda Enemy_ID,x / cmp #FlyingCheepCheep / beq ExScrnBd
+      // — the one enemy the original refuses to erase for leaving the sides of
+      // the screen. It has to be: a frenzy deliberately surfaces fish up to
+      // 160 px behind Mario, and culling those on their first frame thins the
+      // barrage to a single fish. That ID only ever comes from a frenzy, so the
+      // exemption is scoped the same way; a hand-placed leaper keeps the
+      // engine's normal despawn. The arc still ends itself below, so no leak.
+      if (opts.offscreenCull === false) this.despawnOffscreen = false;
       // A frenzy launches its fish from below the bottom of the screen, where
       // there is no surface to break — the original plays nothing there either.
       if (opts.silent !== true) {

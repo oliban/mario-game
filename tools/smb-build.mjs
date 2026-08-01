@@ -113,6 +113,14 @@ function decorChar(mt) {
 const STAIR_ROW = [0x03, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a];
 const STAIR_HEIGHT = [0x07, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00];
 
+// Object names that fell through the renderer with nothing to show for it.
+// 2-2 shipped without its exit pipe because WaterPipe was quietly swallowed
+// here, so silence is not acceptable: `--unhandled` turns this into a report.
+export const unhandled = new Map();
+
+// The three Frenzy objects are enemy spawners, not tiles.
+const FRENZY_KIND = { 'Frenzy(cheeps)': 'cheep', 'Frenzy(bullets)': 'bullet', 'Frenzy(stop)': 'stop' };
+
 export function buildArea(levelId, opts = {}) {
   const entry = REF.levelMap[levelId];
   const area = REF.areas[entry.area];
@@ -215,8 +223,12 @@ export function buildArea(levelId, opts = {}) {
     for (let r = 0; r <= 12; r++) if (solidRow(r)) put(x, ROW(r), '#');
   }
 
-  const meta = { pipes: [], flagpole: null, castle: null, axe: null, springs: [], vine: null, warpPipe: null };
+  const meta = {
+    pipes: [], flagpole: null, castle: null, axe: null, springs: [],
+    vine: null, warpPipe: null, waterPipe: null,
+  };
   const contents = [];
+  const frenzies = [];
 
   for (const o of objs) {
     const x = o.x;
@@ -291,6 +303,14 @@ export function buildArea(levelId, opts = {}) {
         }
         break;
       }
+      // One column, two rows ($6b over $6c), both solid — the sideways mouth
+      // you swim into at the end of a water area. The original's own comment
+      // calls the length "residual code, water pipe is 1 col thick".
+      case 'WaterPipe':
+        put(x, y, '<');
+        put(x, y + 1, '<');
+        meta.waterPipe = { x, top: y };
+        break;
       case 'Jumpspring': meta.springs.push({ x, y }); break;
       case 'Flagpole': meta.flagpole = { x }; break;
       case 'CastleObject': if (x > 8) meta.castle = { x }; break;
@@ -299,7 +319,35 @@ export function buildArea(levelId, opts = {}) {
       // metatiles only the bridge's ($89) clears its bar, so only it is solid.
       case 'Axe': put(x, ROW(6), 'a'); meta.axe = { x, y: ROW(6) }; break;
       case 'CastleBridge': for (let i = 0; i < 13; i++) put(x + i, ROW(8), 'B'); break;
-      default: break; // frenzies, scroll locks, ropes, loop commands
+      // Deliberately not rendered. Every one of these is either a spawner
+      // handled through the entity list below, or a metatile that the original
+      // draws but never puts in the block buffer, so it is pure decoration and
+      // nothing in this engine can interact with it.
+      case 'Frenzy(cheeps)':
+      case 'Frenzy(bullets)':
+      case 'Frenzy(stop)':
+        // Spawners, not tiles: they become `frenzy` entities further down.
+        frenzies.push({ type: 'frenzy', x, y: ROW(0), kind: FRENZY_KIND[o.name] });
+        break;
+      case 'PulleyRope':      // $41-$43, attribute 1 and under $51: scenery
+      case 'EndlessRope':     // $40, likewise — the rope the lifts run on
+      case 'BalancePlatRope': // $40/$44, likewise
+      case 'Chain':           // $0c, attribute 0 and under $10: scenery
+      case 'FlagBalls_Residual': // $6d, drawn by dead code in the original
+        break;
+      case 'ScrollLock':      // camera commands, no tiles at all
+      case 'ScrollLockWarp':
+      case 'LoopCmd':
+      case 'AlterAreaAttributes': // consumed by the schedule above
+        break;
+      case 'IntroPipe':   // only in the title-screen demo area
+      case 'ExitPipe':    // only in the underground bonus rooms of world 1
+        break;
+      default:
+        // Anything that reaches here is a piece of the level going silently
+        // missing. `node tools/smb-build.mjs --unhandled` lists them.
+        unhandled.set(o.name, (unhandled.get(o.name) || 0) + 1);
+        break;
     }
   }
 
@@ -334,6 +382,7 @@ export function buildArea(levelId, opts = {}) {
     // half-buried in its top course.
     ents.push({ type: t, x: e.x, y: e.y + 1 });
   }
+  ents.push(...frenzies);
 
   return { width, terrain, tiles: g.map((r) => r.join('')), meta, contents, entities: ents, objs, enemies };
 }
@@ -342,6 +391,22 @@ export function buildArea(levelId, opts = {}) {
 if (process.argv[1] && process.argv[1].endsWith('smb-build.mjs')) {
   const args = process.argv.slice(2);
   const id = args.find((a) => !a.startsWith('--')) || '1-1';
+  if (args.includes('--unhandled')) {
+    // Every object in every area, so a type that only ever appears in one
+    // level still shows up. Anything listed is level geometry going missing.
+    const ids = args.filter((a) => !a.startsWith('--'));
+    const all = ids.length ? ids : Object.keys(REF.levelMap);
+    for (const lid of all) buildArea(lid);
+    if (!unhandled.size) {
+      console.log(`no unhandled object types across ${all.length} area(s)`);
+    } else {
+      console.log(`UNHANDLED object types across ${all.length} area(s):`);
+      for (const [name, count] of [...unhandled].sort((a, b) => b[1] - a[1])) {
+        console.log(`  ${String(count).padStart(4)}  ${name}`);
+      }
+    }
+    process.exit(unhandled.size ? 1 : 0);
+  }
   const built = buildArea(id);
   if (args.includes('--check')) {
     const mod = await import(`../src/data/levels/${id}.js`);

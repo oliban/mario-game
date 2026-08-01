@@ -216,6 +216,10 @@ export default class Frenzy extends Entity {
       maxFall: FLY_CC_MAX_FALL,
       silent: true,
       active: true,
+      // OffscreenBoundsCheck exempts FlyingCheepCheep — see cheep.js. Without
+      // this the fish that surface behind Mario die on their first frame and
+      // the barrage collapses to one fish at a time.
+      offscreenCull: false,
     });
     if (e) this.brood.push(e);
   }

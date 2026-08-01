@@ -16,24 +16,26 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
 
 
-// DEVIATION: the original lets a power-up slide out sideways from a block set
-// into a ceiling; this engine emerges it upward and would bury it. One tile of
-// air is carved above any capped item block. Hidden blocks that the original
-// only lets you strike from a jump arc are dropped to the low block row, since
-// our reachability check requires somewhere to stand.
-function relieveBlocks(rows) {
-  const SOLID = new Set(['#', 'B', '=', 'S', 'U']);
-  const ITEM = new Set(['?', 'M']);
-  const g = rows.map((r) => r.split(''));
-  for (let y = 1; y < g.length; y++) {
-    for (let x = 0; x < g[y].length; x++) {
-      if (ITEM.has(g[y][x]) && SOLID.has(g[y - 1][x])) g[y - 1][x] = '.';
-    }
-  }
-  // Item blocks the original lets you strike from a jump arc need somewhere to
-  // stand under them here. Any that sit more than a jump above their own ground
-  // drop to four rows above it, keeping their column.
-  const ITEMS = new Set(['?', 'M', '1', 'C']);
+const SOLID = new Set(['#', 'B', '=', 'S', 'U']);
+const ITEMS = new Set(['?', 'M', '1', 'C']);
+
+// DEVIATION, and one we would rather not have.
+//
+// The original stacks item blocks: 2-1 puts a Hidden1Up on SMB row 3 and a
+// hidden coin block on SMB row 7 in the SAME column, and the row-7 block is the
+// step. You strike it from below, it turns into a used block, you stand on it,
+// and from there the 1-up is an ordinary jump away. This engine does exactly
+// that at runtime — a bumped question block becomes 'U', which is solid.
+//
+// tools/reach.mjs cannot see it. Its grid takes solidity straight from LEGEND,
+// where 'C' and '1' are `solid: false`, so no standing node is ever created on
+// top of a hidden block and the upper one reads as unreachable. Until that
+// checker models a struck block as a platform, any item block more than a jump
+// above its own ground is dropped to four rows above it. It keeps its column
+// where it can; when the column is taken — and in 2-1 it is taken by the very
+// block the puzzle is built on — it steps one column aside rather than giving
+// up, which is what left 2-1's 1-up stranded before.
+function dropStrandedItems(g) {
   for (let y = 0; y < g.length; y++) {
     for (let x = 0; x < g[y].length; x++) {
       if (!ITEMS.has(g[y][x])) continue;
@@ -43,11 +45,34 @@ function relieveBlocks(rows) {
       }
       if (ground < 0 || ground - y <= 4) continue;
       const ty = ground - 4;
-      if (g[ty][x] !== '.') continue;
-      g[ty][x] = g[y][x];
-      g[y][x] = '.';
+      for (const tx of [x, x + 1, x - 1]) {
+        if (tx < 0 || tx >= g[ty].length || g[ty][tx] !== '.') continue;
+        // Only useful if the new column has the same ground under it.
+        let g2 = -1;
+        for (let k = ty + 1; k < g.length; k++) {
+          if (SOLID.has(g[k][tx])) { g2 = k; break; }
+        }
+        if (g2 !== ground) continue;
+        g[ty][tx] = g[y][x];
+        g[y][x] = '.';
+        break;
+      }
     }
   }
+}
+
+// DEVIATION: the original lets a power-up slide out sideways from a block set
+// into a ceiling; this engine emerges it upward and would bury it. One tile of
+// air is carved above any capped item block.
+function relieveBlocks(rows) {
+  const CAPPED = new Set(['?', 'M']);
+  const g = rows.map((r) => r.split(''));
+  for (let y = 1; y < g.length; y++) {
+    for (let x = 0; x < g[y].length; x++) {
+      if (CAPPED.has(g[y][x]) && SOLID.has(g[y - 1][x])) g[y - 1][x] = '.';
+    }
+  }
+  dropStrandedItems(g);
   return g.map((r) => r.join(''));
 }
 
@@ -82,22 +107,9 @@ function seatPodoboos(rows, ents) {
     }
     e.y = top;
   }
-  // An item block with nothing standable under it drops to a jump's height
-  // above the nearest ground in its column.
-  const SOLID2 = new Set(['#', 'B', '=', 'S', 'U']);
-  const ITEMS = new Set(['?', 'M', '1', 'C']);
-  for (let y = 0; y < g.length; y++) {
-    for (let x = 0; x < g[y].length; x++) {
-      if (!ITEMS.has(g[y][x])) continue;
-      let ground = -1;
-      for (let k = y + 1; k < g.length; k++) if (SOLID2.has(g[k][x])) { ground = k; break; }
-      if (ground < 0 || ground - y <= 4) continue;
-      const ty = ground - 4;
-      if (g[ty][x] !== '.') continue;
-      g[ty][x] = g[y][x];
-      g[y][x] = '.';
-    }
-  }
+  // Filling the lava lakes can leave an item block hanging over one, so run the
+  // same drop pass again now that the lava is in place.
+  dropStrandedItems(g);
   return g.map((r) => r.join(''));
 }
 
@@ -249,11 +261,10 @@ ${entsBlock(L.entities)}
 // ---------------------------------------------------------------------- 2-3
 {
   const L = emitLevel('2-3', { theme: 'overworld' });
-  // DEVIATION: the original's leaping cheep-cheeps come from two Frenzy objects
-  // (columns 26 and 137), a spawner this engine does not have. They are placed
-  // explicitly across that span instead, at the original's own bridge columns.
+  // The leaping cheep-cheeps are the original's own Frenzy objects at columns
+  // 26 and 137, with the stop at 197, emitted as `frenzy` entities. They used
+  // to be a row of hand-placed cheeps because this engine had no spawner.
   const ents = L.entities.slice();
-  for (let x = 28; x < 190; x += 11) ents.push({ type: 'cheep', x, y: 13, variant: 'red' });
   const body = `
 export default {
   id: '2-3',
@@ -276,7 +287,7 @@ ${entsBlock(ents)}
     join(OUT, '2-3.js'),
     header(
       '2-3 — the bridges',
-      "// DEVIATION: the original's leaping cheep-cheeps are spawned by two Frenzy\n// objects at columns 26 and 137. This engine has no frenzy spawner, so they are\n// placed explicitly across that span."
+      "// The leaping cheep-cheeps come from the original's own Frenzy objects at\n// columns 26 and 137, with the stop frenzy at 197. Almost every hand-placed\n// enemy in this area is flagged hard-mode-only and so is absent on a first\n// quest, exactly as in the original."
     ) +
       tilesBlock(relieveBlocks(L.rows)) +
       body
