@@ -7,7 +7,13 @@
 // not an approximation of them. Re-run the generator rather than editing by
 // hand.
 //
-// Colour control 7, which is black sky again. The busiest lift level in the
+// Colour control 7. BGColorCtrl_Addr entry 7 is $04, and VRAM_AddrTable index
+// 4 is CastlePaletteData — the FULL 32-byte palette, not the four-byte patch
+// the snow levels get. So this is an overworld tile map drawn in the castle
+// palette under a black sky, which is what `tileset: castle` asks for. The
+// theme stays athletic, so props, particles and music are unaffected.
+//
+// The busiest lift level in the
 // game: it is the only one that uses all four of our platform modes —
 // vertical ($25), horizontal ($28), balance pairs ($24) and one that falls
 // away under you ($29) — plus two jumpsprings.
@@ -37,6 +43,7 @@ export default {
   time: 300,
   theme: 'athletic',
   sky: 'night',
+  tileset: 'castle',
   music: 'overworld',
   width: 180,
   height: 15,

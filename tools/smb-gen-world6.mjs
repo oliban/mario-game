@@ -189,6 +189,7 @@ export default {
   time: 300,
   theme: 'athletic',
   sky: 'night',
+  tileset: 'castle',
   music: 'overworld',
   width: ${L.width},
   height: 15,
@@ -206,7 +207,13 @@ ${entsBlock(L.entities)}
 `;
   writeFileSync(
     join(OUT, '6-3.js'),
-    header('6-3 — the lifts, night', '// Colour control 7, which is black sky again. The busiest lift level in the\n' +
+    header('6-3 — the lifts, night', '// Colour control 7. BGColorCtrl_Addr entry 7 is $04, and VRAM_AddrTable index\n' +
+        '// 4 is CastlePaletteData — the FULL 32-byte palette, not the four-byte patch\n' +
+        '// the snow levels get. So this is an overworld tile map drawn in the castle\n' +
+        '// palette under a black sky, which is what `tileset: castle` asks for. The\n' +
+        '// theme stays athletic, so props, particles and music are unaffected.\n' +
+        '//\n' +
+        '// The busiest lift level in the\n' +
         '// game: it is the only one that uses all four of our platform modes —\n' +
         '// vertical ($25), horizontal ($28), balance pairs ($24) and one that falls\n' +
         '// away under you ($29) — plus two jumpsprings.') + tilesBlock(rows) + body
