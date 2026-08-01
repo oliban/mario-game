@@ -100,13 +100,14 @@ function report(levelId) {
   );
 }
 
-const args = process.argv.slice(2);
-const ids = args.includes('--all')
-  ? Object.keys(REF.levelMap).filter((k) => !k.endsWith('-sub'))
-  : args.length
-    ? args
-    : ['1-1'];
-for (const id of ids) report(id);
+// Only report when run directly; importing this module must stay silent.
+if (process.argv[1] && process.argv[1].endsWith('smb-decode.mjs')) {
+  const args = process.argv.slice(2);
+  const ids = args.includes('--all')
+    ? Object.keys(REF.levelMap).filter((k) => !k.endsWith('-sub'))
+    : args.filter((a) => !a.startsWith('--'));
+  for (const id of ids.length ? ids : ['1-1']) report(id);
+}
 
 // --- object stream -------------------------------------------------------
 // Index = row-dependent offset + id, exactly as the parser computes it:

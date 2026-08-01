@@ -99,13 +99,23 @@ export default class SpringBoard extends Entity {
 
   update() {
     this.t++;
-    const player = this._occupant();
-    const on = this.standing(player);
+    // The rider is LATCHED when the board starts compressing. Re-testing
+    // standing() each frame loses him: compressing moves the plate down, his
+    // feet fall outside the band, snap() stops being called and he drops off
+    // the board before it can ever launch him.
+    if (this.phase !== 'idle' && (!this.rider || this.rider.removed || this.rider.dead)) {
+      this.rider = null;
+      this.phase = 'idle';
+      this.phaseT = 0;
+    }
+    const player = this.phase === 'idle' ? this._occupant() : this.rider;
+    const on = this.phase === 'idle' ? this.standing(player) : !!player;
 
     switch (this.phase) {
       case 'idle': {
         this.setStage(0);
         if (on && player.vy >= 0) {
+          this.rider = player;
           this.phase = 'compress';
           this.phaseT = 0;
         }
@@ -129,11 +139,14 @@ export default class SpringBoard extends Entity {
         this.setStage(Math.max(0, 3 - this.phaseT));
         if (this.phaseT >= 3) {
           this.setStage(0);
-          if (this.standing(player)) this.launch(player);
+          // Launch the latched rider, not whoever happens to test as standing:
+          // the plate has just sprung back up and he is a few pixels clear of it.
+          if (player) this.launch(player);
+          this.rider = null;
           this.phase = 'idle';
           this.phaseT = 0;
           this.boost = false;
-        } else if (this.standing(player)) {
+        } else if (player) {
           this.snap(player);
         }
         break;
