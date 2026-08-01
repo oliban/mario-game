@@ -191,11 +191,18 @@ export function buildArea(levelId, opts = {}) {
   for (const o of objs) {
     if (o.index !== 46) continue;
     const prev = schedule[schedule.length - 1];
+    // AlterAreaAttributes takes effect on the NEXT column, not its own.
+    // AreaParserCore renders scenery and terrain into the metatile buffer for a
+    // column and only THEN calls ProcessAreaData for it, so the column carrying
+    // the attribute is already drawn with the old TerrainControl. Applying it a
+    // column early walls off the exit pipe of UndergroundArea3's page-2 coin
+    // room behind the solid terrain its own AlterAreaAttributes raises.
+    const at = o.x + 1;
     if (o.b1 & 0x40) {
       const f = o.b1 & 0x07;
-      schedule.push({ x: o.x, t: prev.t, bg: prev.bg, fore: f < 4 ? f : 0 });
+      schedule.push({ x: at, t: prev.t, bg: prev.bg, fore: f < 4 ? f : 0 });
     } else {
-      schedule.push({ x: o.x, t: o.b1 & 0x0f, bg: (o.b1 & 0x30) >> 4, fore: prev.fore });
+      schedule.push({ x: at, t: o.b1 & 0x0f, bg: (o.b1 & 0x30) >> 4, fore: prev.fore });
     }
   }
   const attrAt = (x) => {
@@ -544,6 +551,25 @@ if (process.argv[1] && process.argv[1].endsWith('smb-build.mjs')) {
 //
 // Returns 32 columns of that page, the column its exit pipe stands in, and the
 // column the ceiling pipe should drop you into.
+// Which coin room a level's warp pipe reaches, straight out of its own enemy
+// stream. ParseRow0e reads a 3-byte record: byte 1 is the AreaPointer (bits 6-5
+// the area type, bits 4-0 the offset within it) and byte 2 carries the world
+// number in its top three bits and the ENTRANCE PAGE in the low five. The coin
+// rooms are underground offset 2, so a record pointing there names the page.
+export function bonusPageFor(levelId) {
+  const entry = REF.levelMap[levelId];
+  const b = REF.areas[entry.area].enemyBytes;
+  for (let i = 0; i + 2 < b.length; ) {
+    const b0 = b[i];
+    if (b0 === 0xff) break;
+    if ((b0 & 0x0f) !== 0x0e) { i += 2; continue; }
+    const ptr = b[i + 1];
+    if (((ptr >> 5) & 3) === 2 && (ptr & 0x1f) === 2) return b[i + 2] & 0x1f;
+    i += 3;
+  }
+  return 0;
+}
+
 export function bonusRoom(page) {
   const b = buildArea('UndergroundArea3', { theme: 'underground' });
   const x0 = page * 16;

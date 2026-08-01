@@ -46,7 +46,17 @@ import { ROOT } from './serve.mjs';
 
 const TILE = 16;
 const MAX_JUMP_UP = 4; // tiles of height a run jump gains
-const MAX_GAP = 5; // tiles of horizontal gap a run jump clears
+// Six, not five. The original ships six-tile holes — 6-2 at 123-128, 8-1 at
+// 221-226, 8-2 at 148-153 — and calling those unjumpable made three of its
+// levels look broken. Measured at 8-2's own gap, arriving at the lip at 2.56,
+// 2.00 and 1.60 px/frame, Mario lands on column 155 every time with the far lip
+// at 154; on flat ground with a run-up he covers 7.5 to 8.6 tiles. Five was
+// conservative by more than a tile.
+//
+// Note this is measured as COLUMN DISTANCE, not hole width: a six-wide hole at
+// 123-128 is a jump from 122 to 129, a dx of seven. Six was not enough to clear
+// the original's six-wide holes for exactly that reason.
+const MAX_GAP = 7; // tiles of horizontal gap a run jump clears
 const FALL_BONUS = 3; // extra tiles of reach when the landing is far below
 const SWIM_UP = 8; // water lets you climb as far as you like
 const SPRING_UP = 8; // a springboard roughly doubles the jump

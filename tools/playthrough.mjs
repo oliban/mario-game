@@ -306,7 +306,11 @@ function blocksIn(lvl) {
 function bumpSpots(gr, bx, by) {
   const spots = [];
   for (const n of gr.nodes) {
-    if (n.virtual) continue;
+    // Lift nodes are virtual, and they are legitimate places to stand: 6-3's
+    // power block hangs over open air with a horizontal lift running under it,
+    // and riding the lift to bump it is exactly what the original intends.
+    // Skipping them called that block unreachable.
+    if (n.virtual && !n.lift) continue;
     if (Math.abs(n.x - bx) > 1) continue;
     const drop = n.y - by;
     if (drop < 1 || drop > 5) continue;
