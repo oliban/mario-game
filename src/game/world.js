@@ -931,6 +931,22 @@ export class World {
       vb = 0;
       vt = 1;
     }
+    // A tile whose ART RESOLVES TO THE TERRAIN ART shares the terrain's variants.
+    //
+    // In a castle or a water area tiles.js hands the solid block the ground drawing,
+    // because SolidBlockMetatiles and TerrainMetatiles are the same metatile there
+    // ($62 and $69). Matching on the tile id alone missed that: a `B` is TID.STONE,
+    // never TID.GROUND, so it drew ground variant A and only ever variant A — 183
+    // identical stamps in 4-4 and 122 in 7-4, sitting beside a wall that alternates.
+    //
+    // The test is the resolved SPRITE rather than a list of ids, so the rule that
+    // decides which themes do this stays in tiles.js where it belongs; world.js does
+    // not need to know that castle and water are the two areas involved, and anything
+    // else that is later given the terrain art picks the variants up for free.
+    if (!frames) {
+      const ground = pick(t.THEME_GROUND);
+      if (ground && ground[0] === rec.sprite) frames = ground;
+    }
     if (!Array.isArray(frames) || frames.length < 2) return;
     // Masking is only valid on a power of two. If a table ever ships a length that
     // is not one, leave the record on the old single-sprite path rather than
