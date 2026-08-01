@@ -712,17 +712,23 @@ export const FIREBAR = {
  *                        with the cheek and tapers 3px -> 2px, with the mouth
  *                        cut as a 1px slot-0 slit at its root; it is a beak by
  *                        silhouette, not a detached gold blob.
- *    TORSO    rows 11-18 SHELL (x1-x5) | slot-1 seam (x6) | PLASTRON (x7-x11)
- *                        | ARM (x13-x14). The shell's leading contour steps
- *                        x1,x0,x0,x0,x0,x1,x1,x2 so the dome CURVES in
- *                        silhouette instead of standing as a flat wall.
- *    LEGS     rows 19-23 green shins ending in SKIN feet — the same gold as the
- *                        hands and face, which is what stops the lower half
+ *    TORSO    rows 11-18 SHELL (x1-x4) | slot-1 seam (x5-x6) | PLASTRON (x7-x10)
+ *                        | ARMPIT NOTCH (x11, transparent on every torso row)
+ *                        | ARM (x13-x14 over an x12 outline). The shell's
+ *                        leading contour steps x1,x0,x0,x0,x0,x1,x1,x2 so the
+ *                        dome CURVES in silhouette instead of standing as a
+ *                        flat wall.
+ *    LEGS     rows 19-23 LIMB-green shins ending in SKIN feet — the same gold as
+ *                        the hands and face, which is what stops the lower half
  *                        being one undifferentiated green brick.
  *
- *  Every limb has a transparent notch where it leaves the body, so filling the
- *  sprite solid black still shows a beak, an arm and a hammer clear of the
- *  torso outline in all four frames.
+ *  ARMS AND LEGS ARE NOT SHELL. They carry their own ramp — slot a #256b12 over
+ *  a slot-1 shade — which sits 71 RGB units off the shell's mid green and 46 off
+ *  the helmet's, so the limb reads as a limb by VALUE and not merely because a
+ *  black line was drawn round it. Every arm is two full pixels of limb colour
+ *  wide, never one pixel between two outlines, and every torso row carries the
+ *  transparent x11 notch, so filling a frame solid black still shows an armpit.
+ *  All four frames are ONE 8-connected mass: nothing floats.
  * ------------------------------------------------------------------ */
 
 // Skin is Koopa gold, NOT human flesh — #f8d5ac is what made this read as a
@@ -731,28 +737,29 @@ export const FIREBAR = {
 // is now spent ONLY on the eye: four pixels, nothing else on the sprite.
 const BRO_PAL = [
   OUT,        // 0 outline — outer contour only; interior seams use slot 1
-  '#0b4210',  // 1 shell core shadow / interior seam / helmet underside
+  '#0b4210',  // 1 shell core shadow / interior seam / helmet underside / limb shade
   '#12751a',  // 2 shell shadow
-  '#35a832',  // 3 shell mid / limbs
+  '#35a832',  // 3 shell mid — SHELL ONLY, never a limb
   '#6ed45c',  // 4 shell lit rim
   '#f8dc70',  // 5 skin lit
-  '#ffffff',  // 6 eye sclera
+  '#e8eef6',  // 6 eye sclera / hammer head specular
   '#a8720c',  // 7 skin shade / scute seam
   '#fffbe8',  // 8 plastron lit
   '#2fb07a',  // 9 HELMET lit    — 78 RGB off the shell's lit rim
-  '#3a4450',  // a hammer head core shadow  (same steel as HAMMER.spin)
+  '#256b12',  // a LIMB mid      — 71 RGB off the shell's mid, 46 off the helmet's
   '#12603a',  // b HELMET mid    — 80 RGB off the shell's mid green
   '#7a4a1c',  // c hammer haft mid
   '#e8b830',  // d skin mid / plastron scute shade / haft lit
   '#aab4c4',  // e hammer head mid
-  '#e8eef6',  // f hammer head specular
+  '#707c8c',  // f hammer head shadow  (the step the held head used to skip)
 ];
 
 // CONTACT pose: stance at its widest, both soles planted on row 23, lead arm
-// hanging long at the hip. The arm is the part that used to vanish — it is now
-// held off the torso by a TRANSPARENT column at x12 from row 13 down, so the
-// elbow cuts a notch into the silhouette and the gold fist on rows 16-17
-// bulges past the ribs instead of being a stripe painted on them.
+// hanging long at the hip. The arm is the part that used to vanish. The plastron
+// is pulled in one column so the torso ends at x10, x11 is transparent on ALL
+// SEVEN torso rows as the armpit, and the limb itself is two pixels of slot-a
+// green at x13-x14 between outlines at x12 and x15, capped at row 10 and ending
+// in a gold fist on rows 16-17. Silhouette: a body with an arm swung clear of it.
 //        0123456789abcdef
 const BRO_WALK_A = [
   '.....000000.....',
@@ -765,18 +772,18 @@ const BRO_WALK_A = [
   '...057667d70....',
   '...05760d755d0..',
   '...05ddd70dd0...',
-  '....07777700....',
-  '.044211888d00330',
-  '0443211888dd0330',
-  '0431111777dd.030',
-  '04322118888d.030',
-  '0422111888dd.030',
-  '.042111777dd0550',
-  '.04211188dd00d70',
+  '....07777700.00.',
+  '.04421188d0.0aa0',
+  '044321188dd.0aa0',
+  '043111177dd.0aa0',
+  '0432211888d.0aa0',
+  '042211188dd.0aa0',
+  '.04211177dd.0550',
+  '.0421118dd0.0d70',
   '..04441dd8d0.00.',
-  '..03320.03320...',
-  '.03320...03320..',
-  '03320.....03320.',
+  '..0aa10.0aa10...',
+  '.0aa10...0aa10..',
+  '0aa10.....0aa10.',
   '055dd0...055ddd0',
   '077770...0777770',
 ];
@@ -807,13 +814,13 @@ const BRO_WALK_B = [
   '.044211888d0.00.',
   '0443211888dd.550',
   '0431111777dd.5d0',
-  '04322118888d0330',
-  '0422111888d0330.',
-  '.04211177dd330..',
+  '04322118888d0aa0',
+  '0422111888d0aa0.',
+  '.04211177d0aa0..',
   '..04441dd8d0....',
-  '...0332003320...',
-  '..03320..03320..',
-  '.055dd0..03320..',
+  '...0aa100aa10...',
+  '..0aa10..0aa10..',
+  '.055dd0..0aa10..',
   '.077770..055ddd0',
   '.........0777770',
 ];
@@ -822,36 +829,39 @@ const BRO_WALK_B = [
 // props: the Bro sinks four rows into a crouch — the helmet crown falls from
 // row 0 to row 4, the torso loses two rows, the knees splay — while both soles
 // stay pinned to row 23.
-// The raised arm is held CLEAR of the head by a transparent x11 running from
-// row 4 to row 8, so the haft and the 2x2 gold fist gripping it on rows 6-7
-// read as a separate mass. The haft is slot c BROWN, not skin gold, so the
-// stick, the hand and the steel head are three materials; the mallet head
-// spans six columns against the haft's one, so even filled solid black it is
-// a hammer on a stick and not a pole.
+// The wind-up arm is a REAL ARM, not a hammer floating beside a hip. One
+// unbroken limb runs from the steel head down the right of the frame: mallet
+// (rows 0-3) -> slot-c brown haft (rows 4-5) -> 2x2 gold fist (rows 6-7) ->
+// slot-a limb green at x13-x14 (rows 8-13) -> a three-pixel shoulder that
+// widens to x12 and sockets into the torso (rows 14-15). The far hand is hidden
+// behind the plastron, so the Bro has exactly two arms. The armpit notch at x11
+// holds the raised limb off the ribs from row 8 to row 13. The head's steel is
+// the same four-step ramp as HAMMER.spin — specular, mid, #707c8c shadow, then
+// outline — instead of jumping 112 units from mid straight to core shadow.
 //        0123456789abcdef
 const BRO_THROW_A = [
   '..........000000',
-  '.........0ffeea0',
-  '.........0feeaa0',
-  '.........0eaaa0.',
+  '.........066eef0',
+  '.........06eeff0',
+  '.........0efff0.',
   '....000000..0c0.',
   '..04499bbb0.0c0.',
   '.04999bbb10.0550',
   '.0999bbbb10.05d0',
-  '.00011111100.000',
-  '...055dd70......',
-  '..057667d70.....',
-  '..05760d755d0...',
-  '..05ddd70dd0....',
-  '...07777700.....',
-  '.044211888d0.030',
-  '0443211888dd.030',
-  '0431111777dd0550',
-  '04322118888d0d70',
-  '.042111888dd000.',
+  '.0001111110.0aa0',
+  '...055dd70..0aa0',
+  '..057667d70.0aa0',
+  '..05760d755d0aa0',
+  '..05ddd70dd00aa0',
+  '...07777700.0aa0',
+  '.044211888d0aaa0',
+  '0443211888d0aaa0',
+  '0431111777dd000.',
+  '04322118888d....',
+  '.042111888dd0...',
   '..04441dd8d0....',
-  '..03320.03320...',
-  '.03320...03320..',
+  '..0aa10.0aa10...',
+  '.0aa10...0aa10..',
   '055dd0...055ddd0',
   '077770...0777770',
 ];
@@ -859,18 +869,19 @@ const BRO_THROW_A = [
 // RELEASE. The counter-pose: the crouch UNLOADS. The helmet climbs two rows
 // back up (crown on row 2 against the wind-up's row 4), the spine straightens,
 // the torso gains a row and the lead leg lunges two columns further out than in
-// the wind-up. The hand is EMPTY — the arm has swung down and forward and ends
-// in a gold fist at x13-x14 on rows 15-16, held off the ribs by a transparent
-// notch at x12 above it — while the hammer has left it entirely: it tumbles
-// free in the top-right corner with a clear transparent column between it and
-// the helmet, so nothing about the two shapes reads as still connected.
+// the wind-up. The hand is EMPTY — the arm has swung down and forward: two full
+// pixels of slot-a limb green at x13-x14 on rows 13-14 over the x11 armpit
+// notch, ending in a gold fist on rows 15-16 — while the hammer has left it
+// entirely. The thrown mallet tumbles in the top-right with its haft angled
+// down-right and a clear transparent column at x10-x12 between it and the
+// helmet, so nothing about the two shapes reads as still connected.
 //        0123456789abcdef
 const BRO_THROW_B = [
-  '...........0000.',
-  '..........0ffea0',
-  '....00000.0eea0.',
-  '..04499bb0.0ca0.',
-  '.04999bbb110.00.',
+  '..........00000.',
+  '.........066ee0.',
+  '....00000.0eff0.',
+  '..04499bb0..0c0.',
+  '.04999bbb110.0..',
   '.0999bbbb1110...',
   '.0499bbbb11110..',
   '.00011111110000.',
@@ -878,16 +889,16 @@ const BRO_THROW_B = [
   '...057667d70....',
   '...05760d755d0..',
   '...05ddd70dd0...',
-  '....07777700....',
-  '.044211888d0.030',
-  '0443211888dd.030',
-  '0431111777dd0550',
-  '04322118888d0d70',
+  '....07777700.00.',
+  '.04421188d0.0aa0',
+  '044321188dd.0aa0',
+  '043111177dd.0550',
+  '0432211888d.0d70',
   '.042111888dd000.',
   '.04211177dd0....',
   '..04441dd8d0....',
-  '..03320..03320..',
-  '.03320....03320.',
+  '..0aa10..0aa10..',
+  '.0aa10....0aa10.',
   '055dd0....055dd0',
   '077770....077770',
 ];
