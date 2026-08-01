@@ -53,6 +53,25 @@
 //   * where a tile is genuinely a discrete OBJECT rather than a texture — the
 //     staircase stone, the brick — it gets a joint all the way round instead, so
 //     the repeat reads as "these are separate blocks" rather than as a grille.
+//
+// READ THIS BEFORE ADDING PER-TILE WEAR. Everything below that takes a tile
+// COORDINATE is currently dead: spriteFor, animatedSpriteFor, groundVariant,
+// stairVariant, waterPhase, lavaPhase, lavaSurfPhase, THEME_GROUND, THEME_STAIR
+// and the `variants` / `capTop` fields on the TILES records have no caller
+// anywhere in src/. world.js resolves ONE sprite per tile record in _makeRec and
+// draws it with `tileSprite(rec, tick)` in drawTiles — a tick, never an x or a y.
+// So variant B of the ground and variant B of the staircase have never appeared
+// on screen, a pool of lava draws the same frame in every cell, and the lava
+// waterline and the lit stair tread are unreachable.
+//
+// The practical consequence for art in this file: a hand-placed chip, gleam or
+// blotch at a fixed coordinate is printed at that coordinate in EVERY instance of
+// the tile on screen, and "the variant next to it has different ones" is not a
+// defence, because the variant is never drawn. Ground alone is 16,585 of the
+// ~24,000 non-air cells in the 32 shipped levels. Until world.js passes tile
+// coordinates through to spriteFor, the only textures that survive repetition are
+// the ones with no landmark in them at all — see R_GROUND_A and ashlarRows below,
+// both of which had their fixed damage removed for exactly this reason.
 
 import { makeSprite, Anim } from '../core/gfx.js';
 import { INK } from './palette.js';
@@ -297,29 +316,25 @@ function slabCourse(grout, h) {
 // in variant B) are all different columns and no column is a joint in two stacked
 // courses of the same tile, so A beside B never lines two joints up either.
 //
-// Wear is always a PAIR of pixels on a slab edge or corner — a chip reads as
-// damage, a lone pixel reads as dirt on the lens and repeats visibly.
-const R_GROUND_A = px(
-  [...slabCourse([3], 7), ...slabCourse([11], 7)],
-  [
-    [7, 0, '4'], [8, 0, '4'],       // chipped-bright top edge, top course only
-    [12, 2, '1'], [12, 3, '1'],     // chip biting into the big slab's face
-    [5, 4, '3'], [6, 4, '3'],       // rubbed-smooth patch
-    [6, 8, '1'], [7, 8, '1'],       // chipped corner on the lower course
-    [1, 10, '1'], [2, 10, '1'],
-  ]
-);
+// NO HAND-PLACED WEAR. This tile used to carry five chips at fixed coordinates,
+// justified by the variant next to it carrying five different ones. That
+// justification does not survive contact with the renderer: world.js resolves one
+// sprite per tile RECORD and never passes a tile coordinate, so THEME_GROUND /
+// groundVariant / spriteFor are not called by the game at all and variant B has
+// never been drawn on screen. Ground is 16,585 of the ~24,000 non-air cells in the
+// 32 shipped levels, so those five chips were printed, identically, on a perfect
+// 16-pixel lattice across every floor and every castle wall in the game — a
+// screenshot of a 1-2 floor is a grid of the same five marks repeating.
+//
+// What is left is the bond and nothing else. The joints sit 8 columns apart
+// (3 and 11) and the courses are 8 rows tall, so the tile's own content has an
+// EIGHT-pixel period in both axes and there is no 16-pixel feature for the eye to
+// lock a grid onto. A clean half-bond repeated is masonry; a half-bond plus a
+// recognisable blotch repeated is one drawing printed forty times, and with no
+// working variant mechanism the only honest move is to remove the blotch.
+const R_GROUND_A = [...slabCourse([3], 7), ...slabCourse([11], 7)];
 
-const R_GROUND_B = px(
-  [...slabCourse([9], 7), ...slabCourse([1], 7)],
-  [
-    [2, 0, '4'], [3, 0, '4'],
-    [13, 3, '1'], [13, 4, '1'],
-    [5, 2, '3'], [6, 2, '3'],
-    [8, 8, '1'], [9, 8, '1'],
-    [4, 12, '1'], [5, 12, '1'],
-  ]
-);
+const R_GROUND_B = [...slabCourse([9], 7), ...slabCourse([1], 7)];
 
 // ---------------------------------------------------------------------------
 // BRICK — 8x4 courses, half-brick offset, 1px mortar. Lit top row, lit left edge,
@@ -658,33 +673,79 @@ const R_STAIR_TOP = [
 ];
 
 // ---------------------------------------------------------------------------
-// CASTLE BRICKWORK — tight grey ashlar, half-bond, pitted faces.
+// CASTLE BRICKWORK — dressed ashlar: ONE big stone per course per tile, laid in
+// half-bond so the perpend zigzags col 15 / col 7 / col 15 / col 7 down the wall.
+//
+// This is the tile that fails the tiling policy hardest when it fails, because a
+// castle screen is nothing BUT this tile: 1-4 draws a twenty-by-twelve wall of it.
+// The version before this one broke both clauses at the top of the file.
+//
+//   * it carried EIGHT hand-placed pits and gleams at fixed coordinates, so that
+//     wall drew 240 copies of the same eight flecks on a perfect 16px lattice —
+//     the loudest thing in the fortress was the tile grid;
+//   * its three courses were 6 / 6 / 4 rows tall, so the vertical rhythm only
+//     closed after a full 16 pixels and the change of course height marked every
+//     horizontal seam.
+//
+// Now the courses are four rows each and the bond alternates every course, so the
+// masonry pattern closes after EIGHT rows: there is no 16-pixel feature left in
+// the tile for the eye to lock a grid onto. What was hand-placed damage is now
+// wrapping value noise — the same field the staircase is pick-dressed with — which
+// crosses every seam instead of stopping at one, and is a step of the ramp rather
+// than a high-contrast fleck, so it reads as dressed stone and not as polka dots.
+//
+// The stone is 16px wide against the breakable brick's 8, which is what keeps
+// "castle wall" and "smashable brick" two materials and not one drawing in two
+// palettes — the two tiles used to differ almost entirely by paint.
 // ---------------------------------------------------------------------------
 
-const R_CASTLE = px(
-  [
-    '4333333043333330',
-    '3222221032222210',
-    '3222221032222210',
-    '3222221032222210',
-    '3111111031111110',
-    '0000000000000000',
-    '4330433333304333',
-    '3210322222103221',
-    '3210322222103221',
-    '3210322222103221',
-    '3110311111103111',
-    '0000000000000000',
-    '4333304333304333',
-    '3222103222103221',
-    '3111103111103111',
-    '0000000000000000',
-  ],
-  [
-    [4, 2, '1'], [10, 3, '1'], [6, 8, '1'], [13, 7, '1'],
-    [2, 13, '1'], [8, 13, '4'], [11, 1, '4'], [1, 8, '4'],
-  ]
-);
+function ashlarRows() {
+  const rows = [];
+  for (let y = 0; y < 16; y++) {
+    const ry = y & 3;
+    // half-bond: the perpend sits at col 15 on even courses and col 7 on odd ones
+    const joint = (y >> 2) & 1 ? 7 : 15;
+    let s = '';
+    for (let x = 0; x < 16; x++) {
+      if (ry === 3 || x === joint) { s += '0'; continue; }   // bed joint / perpend
+      // the arris just past the joint is the edge of the next stone, so it catches
+      // the key light — that one lit column per course is what says "these are
+      // separate blocks" without drawing a grid
+      // The arris is structure, so the weathering is not allowed to eat it.
+      // Two columns wide on the top row, one below: the lit corner of a dressed
+      // stone is a chamfer, and a one-pixel specular that appears four times in
+      // 256 is a top-of-ramp the eye never reaches.
+      const off = (x - joint - 1 + 16) % 16;
+      if (off === 0) { s += ry === 0 ? '4' : '3'; continue; }
+      if (off === 1 && ry === 0) { s += '4'; continue; }
+      // The face turns over three rows: a lit top edge, then the body. It does NOT
+      // drop to shadow on the third row — that dropped the whole tile to 24
+      // luminance units above the breakable brick, one short of the gap that lets a
+      // player tell a wall they can open from a wall they cannot before they waste
+      // a jump on it.
+      const base = ry === 0 ? 3 : 2;
+      // Pick-dressing only ever takes a pixel DOWN. Noise allowed to brighten as
+      // well puts a scatter of specular flecks on the face, and a fleck at a fixed
+      // coordinate is the exact fault this rewrite exists to remove — it does not
+      // matter that noise chose the coordinate rather than a hand, it is still the
+      // same coordinate in all 240 tiles of a 1-4 wall. Darkening only reads as
+      // weathering, which is what a dressed face actually does.
+      //
+      // How far the noise has to dip depends on the row: the foot of a course
+      // collects the grime and the cast shadow of the stone above it, the top edge
+      // almost none. That gives each course a BROKEN dark line along its bottom
+      // instead of a hard stripe, which is the difference between weathered
+      // masonry and a ruled grid.
+      const bite = ry === 2 ? -0.15 : ry === 1 ? -0.8 : -1.15;
+      const n = vnoise(x, y, 8, 53) + 0.6 * vnoise(x, y, 16, 97);
+      s += String(n < bite ? base - 1 : base);
+    }
+    rows.push(s);
+  }
+  return rows;
+}
+
+const R_CASTLE = ashlarRows();
 
 // ---------------------------------------------------------------------------
 // PIPES — rim is a full 32px wide, the stem is 28px (2px inset each side), so the
@@ -1340,7 +1401,12 @@ const R_VINE_BLOCK = px(
 // what makes a pool deepen; the drawing never changes.
 const WATER_PAL = {
   overworld:   ['#02142c', '#052a55', '#0f5a86', '#2088c0', '#4fc0e8', '#b5ebf2', '#ffffff'],
-  underground: ['#01060f', '#052a55', '#083f78', '#0a4a90', '#2f8ad0', '#9fd6f2', '#ffffff'],
+  // The mid body used to be '#0a4a90', 26 RGB and under 10 luminance units from the
+  // deep body beside it — the tightest step of any liquid ramp outside the castle's
+  // deliberately cold key, and the two slots the water body tile dithers BETWEEN.
+  // A cave pool was therefore drawing its whole ordered-dither field in one colour.
+  // The other four themes hold 70-76 across the same step; this now holds 70.
+  underground: ['#01060f', '#052a55', '#083f78', '#0f68b0', '#2f8ad0', '#9fd6f2', '#ffffff'],
   // Cold, not emerald. A saturated green pool was the loudest thing on a castle
   // screen and it collided head-on with the one object the castle rule reserves
   // saturation for — the pipe. This one stays liquid, keeps a non-black darkest

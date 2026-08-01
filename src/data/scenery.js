@@ -35,9 +35,16 @@ import { makeSprite, Anim } from '../core/gfx.js';
 // src/data/palette.js. Seaweed does NOT reuse it: P_WEED is a separate teal ramp that
 // sits at least 40 RGB units from this one at every matching index, so a weed under
 // water can never be mistaken for a bush on land.
+// The bottom two rungs used to be '#003c00' and '#0b3400': 13.6 RGB apart and
+// 1.4 luminance apart, i.e. two declared slots doing one job, with the "outline"
+// coming out BRIGHTER than the "deep shadow" it was supposed to sit under. A bush
+// therefore had no dark end at all — its underside and its silhouette were the
+// same tone. The outline now goes properly dark and the deep shadow moves up into
+// the gap it was leaving empty (slot 1 -> slot 2 was a 67-unit hole), so the two
+// steps read 50 / 41 instead of 14 / 67.
 const P_GREEN = [
-  '#003c00', // outline
-  '#0b3400', // deep shadow
+  '#001e00', // outline
+  '#0d4e04', // deep shadow
   '#077704', // shadow
   '#0d8a12', // mid dark
   '#3fb52e', // mid
@@ -52,7 +59,11 @@ const P_CLOUD = [
   '#3a5fd0', // shadow
   '#5c82ee', // mid
   '#93a9ff', // lit
-  '#cbd8ff', // bright
+  // Was '#cbd8ff', which sat 73 from the lit tone below it and 17 from the near-
+  // white above it: the top of a cloud's ramp was three tones doing two tones'
+  // work, with the whole crown flattening into one pale mass. Pulled down into the
+  // gap, so the last three steps run 42 / 48 / 48.
+  '#b3c4fc', // bright
   '#d8e3ff', // near white — kept off pure white so the water's foam slot stays its own tone
   '#ffffff', // specular
 ];
@@ -148,7 +159,10 @@ const P_MTN = [
 // carried across the whole ramp at matching luminance.
 const P_SNOW = [
   '#2c2c2c', // outline
-  '#3a3a3a', // deep shadow
+  // Was '#3a3a3a': 24 from the outline and 84 from the shadow above it, so the
+  // white-foliage bushes had a bunched dark end and a hole in the middle of the
+  // ramp. Moved into the hole; the two steps now run 59 / 50.
+  '#4e4e4e', // deep shadow
   '#6b6b6b', // shadow
   '#8a8a8a', // mid dark
   '#b4b4b4', // mid
@@ -213,7 +227,13 @@ const P_TREE = [
 // Underwater foliage is teal; land foliage is green; the two never trade places.
 const P_WEED = [
   '#00323c', // outline
-  '#00343a', // deep
+  // Was '#00343a' — 2.8 RGB units from the outline above it, the closest adjacent
+  // pair anywhere in either art file and by any measure the same colour twice.
+  // Slot 1 is the LEFT contour of the seaweed stem and slot 0 its right-hand
+  // outline, so a tapered cylinder lit from the upper left was being drawn with an
+  // outline down both sides and no shading between them. It now sits halfway to
+  // the shadow tone (41 / 43 instead of 3 / 78) and the stem reads as round.
+  '#025453', // deep
   '#04776b', // shadow
   '#0d8a7a', // mid dark
   '#2eb59c', // mid
