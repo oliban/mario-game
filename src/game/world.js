@@ -1233,7 +1233,10 @@ export class World {
       }
     }
     if (!this.coop) this.player2 = null;
-    this.players = [this.player, this.player2].filter(Boolean);
+    // A brother kept OUT across a sub-area (see below) must stay out of the
+    // roster too, or respawn() hands him back his body and he walks around
+    // flagged dead — out but visible, controllable and updating.
+    this.players = [this.player, this.player2].filter((q) => q && (!q.out || !opts.subArea));
 
     const p = this.player;
     if (!p) return;
@@ -1254,10 +1257,16 @@ export class World {
     p.y = (sp.y + 1) * TILE - p.h;
     this._settlePlayer(p);
 
-    if (this.player) this.player.out = false;
+    // A brother who is OUT stays out across a warp. Reviving here made any pipe
+    // or vine the survivor took a free resurrection — walk into a pipe and your
+    // dead brother is standing beside you, at no cost — which erased the only
+    // penalty a co-op death carries. A sub-area is the same visit to the same
+    // level; only a real (re)start brings him back.
+    const revive = !opts.subArea;
+    if (this.player && revive) this.player.out = false;
     const l = this.player2;
     if (l) {
-      l.out = false;
+      if (revive) l.out = false;
       l.world = this;
       const lx = Math.max(0, px - TILE);
       const ly = (sp.y + 1) * TILE - l.h;
@@ -1272,6 +1281,12 @@ export class World {
       }
       l.y = (sp.y + 1) * TILE - l.h;
       this._settlePlayer(l);
+      // respawn() above cleared hidden/removed. Put them back for a brother who
+      // is still out, so he stays gone rather than becoming a live corpse.
+      if (l.out) {
+        l.hidden = true;
+        l.removed = true;
+      }
     }
   }
 
@@ -1401,6 +1416,30 @@ export class World {
   // A player spawned inside the floor is fatal; lift by at most one tile.
   _settlePlayer(p) {
     for (let n = 0; n < TILE && this._boxSolid(p.x, p.y, p.w, p.h); n++) p.y -= 1;
+    if (!this._boxSolid(p.x, p.y, p.w, p.h)) return;
+    // Lifting alone cannot free a body wedged SIDEWAYS. A warp destination is
+    // given as a tile coordinate and used as the body's LEFT EDGE, so an `x`
+    // ending in .5 puts a 12px body across a column boundary — and where that
+    // column is a wall, as in 2-1b and 7-1b, the arrival is embedded in it. He
+    // could not move even when pushed directly, which is a soft-lock. Slide out
+    // along x, nearest side first, so the destination only has to be roughly
+    // right rather than exactly clear.
+    // Snap to a whole column rather than sliding by pixels. _boxSolid samples
+    // points and will accept a body overlapping a wall by a pixel or two, but
+    // resolveX works in tile RANGES and will not — leaving him free by one test
+    // and pinned by the other, unable to move even when pushed directly. A
+    // tile-aligned body cannot straddle a column edge, so the two agree.
+    const x0 = p.x;
+    const col = Math.round(x0 / TILE);
+    for (let d = 0; d <= 2; d++) {
+      for (const c of d === 0 ? [col] : [col - d, col + d]) {
+        const x = c * TILE;
+        if (x < 0) continue;
+        p.x = x;
+        if (!this._boxSolid(p.x, p.y, p.w, p.h)) return;
+      }
+    }
+    p.x = x0;
   }
 
   // -------------------------------------------------------------------------
