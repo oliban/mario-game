@@ -1763,6 +1763,19 @@ export class World {
     const to = wdef && wdef.to;
     if (!to) return false;
 
+    // A warp that COMPLETES ends the level the ordinary way — tally, time
+    // bonus, then progression — rather than jumping somewhere. The original
+    // ends its water levels at a pipe rather than a flagpole, and 2-2 is one.
+    //
+    // This is deliberately not `to.level`: that path hands off to onWarpLevel,
+    // which is the warp-zone route and skips the tally and the level
+    // progression entirely. Ending a level through it would look correct in
+    // every check we have while quietly costing the player their score.
+    if (to.complete) {
+      this.levelComplete();
+      return true;
+    }
+
     // A warp that names a LEVEL leaves this level entirely, which only the host
     // can do — it owns level ids, the HUD world number and the intro screen. The
     // world just reports the destination and stops.
