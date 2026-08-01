@@ -606,6 +606,72 @@ export function bonusPagesFor(levelId) {
   return pages.length ? pages : null;
 }
 
+// The other half of the same record, read from the other end. `bonusPagesFor`
+// asks a LEVEL's stream which room it reaches; this asks the ROOM's stream where
+// it puts you back. ParseRow0e (smbdis.asm:8021-8039) gates on
+// `cmp WorldNumber / bne NotUse`, which is how one shared room serves eight
+// worlds, and the low five bits of byte 2 are the EntrancePage. On arrival the
+// screen is placed at that page (asm:2669-2671) and the player at
+// PlayerStarting_X_Pos = $38 = 56px into it (asm:2815-2816 and 2856-2857) —
+// three whole columns plus the half the callers append.
+//
+// It has to be data rather than a search, because the original never protects
+// you on the way out: PlayerEnemyCollision does not run while
+// GameEngineSubroutine is still the entrance routine (asm:11298-11300) and
+// resumes the instant control returns. Picking the column off the terrain walked
+// past the pipe the player is supposed to rise out of and set him down in the
+// open next to whatever was standing there.
+export function returnColumnFor(world, bonusPage) {
+  const b = REF.areas.UndergroundArea3.enemyBytes;
+  let page = 0;
+  let pageSel = false;
+  for (let i = 0; i + 1 < b.length; ) {
+    const b0 = b[i];
+    if (b0 === 0xff) break;
+    const row = b0 & 0x0f;
+    if (row === 0x0f) {
+      page = b[i + 1] & 0x3f;
+      pageSel = true;
+      i += 2;
+      continue;
+    }
+    if (row === 0x0e) {
+      const col = page * 16 + (b0 >> 4);
+      const b2 = b[i + 2];
+      // A room is a 32-column window onto its page, so take the record that
+      // falls inside the window this level actually uses — worlds 5 and 8 both
+      // read page 8, and 8-1 reads page 2, from the same stream.
+      if ((b2 >> 5) + 1 === world && col >= bonusPage * 16 && col < bonusPage * 16 + 32) {
+        return (b2 & 0x1f) * 16 + 3;
+      }
+      pageSel = false;
+      i += 3;
+      continue;
+    }
+    if (b[i + 1] & 0x80 && !pageSel) {
+      page += 1;
+      pageSel = true;
+    }
+    // The page-select window is one object wide: Inc2B/Inc3B clear
+    // EnemyObjectPageSel after every record they consume (smbdis.asm:8047-8051),
+    // which is what lets a later MSB advance the page again. decodeEnemies does
+    // the same; leaving it set makes the cursor drift on long streams.
+    pageSel = false;
+    i += 2;
+  }
+  return null;
+}
+
+// Pair that column with the pipe standing in it, so the exit names a real pipe
+// mouth rather than a bare floor tile. Returns null when the data names no
+// record, leaving the caller to fall back to its terrain search.
+export function bonusReturn(meta, world, bonusPage) {
+  const col = returnColumnFor(world, bonusPage);
+  if (col == null) return null;
+  const pipe = (meta.pipes || []).find((p) => p.x <= col && col <= p.x + 1);
+  return { col, top: pipe ? pipe.top : 12 };
+}
+
 export function bonusRoom(page) {
   const b = buildArea('UndergroundArea3', { theme: 'underground' });
   const x0 = page * 16;

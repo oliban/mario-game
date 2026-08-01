@@ -15,7 +15,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource, bonusReturn } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -96,10 +96,16 @@ ${note}
   // The coin room's side pipe puts you back into the main area. The original's
   // own re-entry point is the pipe at column 163, the one after the staircases,
   // which is exactly why taking the room is a shortcut rather than a detour.
-  const backPipe = L.meta.pipes.find((p) => p.x > 100 && !p.warp);
+  // The room's own row-$0e record names column 163 for world 1; the pipe search
+  // this used to do found the same column, which is exactly why it worked. Take
+  // it from the data now so all eight worlds share one derivation.
+  const back = bonusReturn(L.meta, 1, 0) || (() => {
+    const p = L.meta.pipes.find((q) => q.x > 100 && !q.warp);
+    return { col: p.x, top: p.top };
+  })();
 
   const body = `
-${bonusRoomSource('1-1b', 'WORLD 1-1', 0, backPipe.x, backPipe.top)}
+${bonusRoomSource('1-1b', 'WORLD 1-1', 0, back.col, back.top)}
 // The warp zone, reached by the first pipe at col ${first.x}. SMB hides its warp
 // zones behind a ceiling run or a vine; this one is deliberately on the very
 // first pipe, because its job is to get a tester into any level in two seconds.

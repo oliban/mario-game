@@ -22,7 +22,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource, skyAreaSource } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource, skyAreaSource, bonusReturn } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -113,9 +113,9 @@ ${note}
   const vine = L.meta.vine;
   const back = landingNear(rows, 160);
   const wp = L.meta.warpPipe;
-  const out = landingNear(rows, 100);
+  const out = bonusReturn(L.meta, 3, 4) || { col: landingNear(rows, 100), top: 12 };
   const body = `
-${bonusRoomSource('3-1b', 'WORLD 3-1', 4, out, 12)}
+${bonusRoomSource('3-1b', 'WORLD 3-1', 4, out.col, out.top)}
 ${skyAreaSource('3-1c', 'WORLD 3-1', `{ area: 'main', x: ${back}.5, y: 12, exit: 'up' }`, 'GroundArea21')}
 export default {
   id: '3-1',

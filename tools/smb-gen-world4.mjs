@@ -9,7 +9,15 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource, skyAreaSource, bonusPagesFor, buildArea, warpZoneSource } from './smb-build.mjs';
+import {
+  emitLevel,
+  bonusRoomSource,
+  skyAreaSource,
+  bonusPagesFor,
+  bonusReturn,
+  buildArea,
+  warpZoneSource,
+} from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -99,9 +107,9 @@ ${note}
   const rows = relieveBlocks(L.rows);
   const sp = findSpawn(rows);
   const wp = L.meta.warpPipe;
-  const out = landingNear(rows, wp.x + 34);
+  const out = bonusReturn(L.meta, 4, 6) || { col: landingNear(rows, wp.x + 34), top: 12 };
   const body = `
-${bonusRoomSource('4-1b', 'WORLD 4-1', 6, out, 12)}
+${bonusRoomSource('4-1b', 'WORLD 4-1', 6, out.col, out.top)}
 export default {
   id: '4-1',
   name: 'WORLD 4-1',
@@ -153,10 +161,10 @@ ${entsBlock(L.entities)}
   // sides — the room you reach by running along the very top of the level,
   // which is exactly how the original hides 4-2's warp zone.
   const secret = wps[wps.length - 1];
-  const out = landingNear(rows, wp.x + 30);
+  const out = bonusReturn(L.meta, 4, 8) || { col: landingNear(rows, wp.x + 30), top: 12 };
 
   const body = `
-${bonusRoomSource('4-2b', 'WORLD 4-2', 8, out, 12)}
+${bonusRoomSource('4-2b', 'WORLD 4-2', 8, out.col, out.top)}
 ${warpZoneSource('4-2c', 'WORLD 4-2', [null, '5-1', null])}
 ${warpZoneSource('4-2w', 'WORLD 4-2', ['8-1', '7-1', '6-1']).replace('WARPZONE', 'WARPZONE2')}
 export default {
