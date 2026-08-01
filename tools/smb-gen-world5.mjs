@@ -6,13 +6,75 @@
 // reference/, not from anyone's memory of the game, and deviations are marked
 // DEVIATION and exist only where this engine lacks a mechanism the original had.
 //
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { emitLevel, bonusRoomSource, skyAreaSource, bonusPagesFor, waterRoomSource } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
+const REF = JSON.parse(readFileSync(join(ROOT, 'reference', 'smb-areas.json'), 'utf8'));
+
+// Where a coin room puts you back is DATA, not a search. The room's own enemy
+// stream carries three-byte row-$0e records; ParseRow0e (smbdis.asm:8021-8039)
+// reads the third byte as the world number in its 3 MSB and the EntrancePage in
+// the low five bits, and only uses the record whose world matches — which is how
+// one shared room serves eight worlds. On arrival the screen is placed at that
+// page (asm:2669-2671) and the player at PlayerStarting_X_Pos = $38 = 56px into
+// it (asm:2815-2816 and 2856-2857), i.e. 3.5 columns, hence the `.5` the caller
+// appends.
+//
+// This matters because the original never protects you on the way out: there is
+// no post-pipe invulnerability, PlayerEnemyCollision simply does not run while
+// GameEngineSubroutine is still the entrance routine (asm:11298-11300) and
+// resumes the instant control returns. What keeps you safe is arriving where the
+// data says, which is a pipe mouth. Choosing the column off the terrain instead
+// walked past that pipe and set 5-1 down next to a koopa.
+function returnColumnFor(world, bonusPage) {
+  const b = REF.areas.UndergroundArea3.enemyBytes;
+  let page = 0;
+  let pageSel = false;
+  for (let i = 0; i + 1 < b.length; ) {
+    const b0 = b[i];
+    if (b0 === 0xff) break;
+    const row = b0 & 0x0f;
+    if (row === 0x0f) {
+      page = b[i + 1] & 0x3f;
+      pageSel = true;
+      i += 2;
+      continue;
+    }
+    if (row === 0x0e) {
+      const col = page * 16 + (b0 >> 4);
+      const b2 = b[i + 2];
+      // The room is a 32-column window onto the page, so take the record that
+      // falls inside the window this level actually uses.
+      if ((b2 >> 5) + 1 === world && col >= bonusPage * 16 && col < bonusPage * 16 + 32) {
+        return (b2 & 0x1f) * 16 + 3;
+      }
+      i += 3;
+      continue;
+    }
+    if (b[i + 1] & 0x80 && !pageSel) {
+      page += 1;
+      pageSel = true;
+    }
+    i += 2;
+  }
+  return null;
+}
+
+// The pipe you rise out of, so the exit names its real mouth rather than a bare
+// floor tile. Falls back to the old terrain search if the data ever misses.
+function backExit(L, rows, world, bonusPage, fallbackWant) {
+  const col = returnColumnFor(world, bonusPage);
+  if (col != null) {
+    const pipe = L.meta.pipes.find((p) => p.x <= col && col <= p.x + 1);
+    if (pipe) return { col, top: pipe.top };
+    return { col, top: 12 };
+  }
+  return { col: landingNear(rows, fallbackWant), top: 12 };
+}
 
 const SOLID = new Set(['#', 'B', '=', 'S', 'U']);
 
@@ -99,9 +161,9 @@ ${note}
   const rows = relieveBlocks(L.rows);
   const sp = findSpawn(rows);
   const wp = L.meta.warpPipe;
-  const out = landingNear(rows, wp.x + 20);
+  const back = backExit(L, rows, 5, bonusPagesFor('5-1')[0], wp.x + 20);
   const body = `
-${bonusRoomSource('5-1b', 'WORLD 5-1', bonusPagesFor('5-1')[0], out, 12)}
+${bonusRoomSource('5-1b', 'WORLD 5-1', bonusPagesFor('5-1')[0], back.col, back.top)}
 export default {
   id: '5-1',
   name: 'WORLD 5-1',
