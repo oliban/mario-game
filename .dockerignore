@@ -1,6 +1,13 @@
 node_modules
 shots
 tools
+
+# ROM-derived working reference (the disassembly and everything extracted from
+# it). Gitignored too. The Dockerfile copies an explicit allow-list so this is
+# already excluded today -- this line is here so that a later switch to
+# `COPY . .` cannot start shipping it without anyone noticing.
+reference
+
 .git
 .github
 *.md
