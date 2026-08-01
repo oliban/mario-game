@@ -46,6 +46,12 @@ export default class Piranha extends Entity {
     this.phaseT = (opts.phase | 0) % (WAIT + RISE + SNAP + SINK);
     this.popT = 0;
     this.isEnemy = true;
+    // Not a stream enemy: VerticalPipe writes the plant into the enemy buffer
+    // itself, centred on its pipe, as part of parsing the AREA data. It is there
+    // whatever the enemy cursor is doing, so a camera jump must not drop it —
+    // otherwise surfacing from a coin room strips the plant out of the very pipe
+    // you came up through.
+    this.fromEnemyStream = false;
   }
 
   // The pipe lip is the first solid tile at or below the spawn point.

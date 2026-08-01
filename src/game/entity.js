@@ -129,6 +129,11 @@ export class Entity {
     this.despawnMargin = DESPAWN_MARGIN;
     this._fellOut = false;
     this.everActive = false;
+    // True for anything the original spawns from the ENEMY STREAM, which is the
+    // only thing the cursor rule below governs. Piranha plants set it false:
+    // VerticalPipe builds them from the AREA data along with the pipe, so they
+    // exist wherever the enemy cursor happens to be.
+    this.fromEnemyStream = true;
 
     // Death bookkeeping. With autoCorpse on (the default) a killed entity stops
     // running its own update() and plays the base squash/flip-and-fall instead.
@@ -173,6 +178,20 @@ export class Entity {
       this.active = x <= (cam.x || 0) + SCREEN_W + this.activateMargin;
     }
     this.everActive = this.active;
+
+    // Was this a LEVEL-AUTHORED entity placed behind a screen the camera has
+    // just been jumped to? Only knowable here — the camera is reset immediately
+    // before _spawnLevelEntities runs (world.js:778-779) — but acted on in
+    // updateActivation(), once the subclass constructor has finished setting
+    // isEnemy and friends. `opts.type` is what marks a level-authored spawn:
+    // _spawnLevelEntities passes the level's own spec as the options object and
+    // guarantees a `type` on it, while every runtime spawn (a shell from a
+    // stomped koopa, a mushroom, a fireball) passes options that have none.
+    // That distinction is the whole safety of this rule: it can only ever fire
+    // on entities built during a level load.
+    const bornCamX = cam ? cam.x || 0 : 0;
+    this._bornBehindScreen =
+      bornCamX > 0 && !!(opts && typeof opts.type === 'string') && x < bornCamX + SCREEN_W;
 
     installTick(this);
   }
@@ -392,6 +411,31 @@ export class Entity {
       this.active = true;
       this.everActive = true;
       return true;
+    }
+    // The original's enemy stream is a forward-only cursor with a spawn window
+    // at the RIGHT edge of the screen: an enemy at or beyond ScreenRight_X_Pos
+    // is instantiated (CheckRightExtBounds, smbdis.asm:7958-7965), but one the
+    // cursor reaches while it is already LEFT of that edge is consumed and never
+    // spawned at all (asm:7952-7956 falling into CheckThreeBytes, 8041-8054).
+    //
+    // In ordinary play that never bites, because the right edge sweeps over each
+    // enemy exactly once. It only bites when the screen is placed somewhere new
+    // — a coin-room or coin-heaven return, a halfway restart — and the cursor
+    // has to walk past everything before it. That is precisely the case flagged
+    // in the constructor, and it is why coming out of 3-1's beanstalk lands you
+    // on a koopa here and on nothing at all in the original.
+    if (this._bornBehindScreen) {
+      this._bornBehindScreen = false;
+      // Deliberately narrower than the original: only STREAM ENEMIES are
+      // dropped. The cursor governs jumpsprings, vines and the flagpole too, but
+      // our entities are instantiated up front rather than streamed, so dropping
+      // one is permanent where the original merely declines to spawn it on this
+      // pass — and a lift or vine that never appears is a soft-lock, which is a
+      // worse bug than the one being fixed.
+      if (this.isEnemy && this.fromEnemyStream) {
+        this.remove();
+        return false;
+      }
     }
     const camX = c.x || 0;
     if (!this.active) {
