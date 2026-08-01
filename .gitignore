@@ -9,3 +9,8 @@ shots/
 .DS_Store
 *.log
 reference/
+
+# Isolated agent worktrees. A background agent given its own worktree gets a
+# full copy of the repo dropped in here — never commit it. Scoped to
+# worktrees/ rather than all of .claude/ so real project config stays visible.
+.claude/worktrees/
