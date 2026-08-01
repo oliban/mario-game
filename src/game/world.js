@@ -561,6 +561,7 @@ export class World {
     this.rootLevel = null;
     this.areaId = null;
     this.theme = 'overworld';
+    this.tileset = 'overworld';
 
     this.w = 0;
     this.h = 0;
@@ -721,6 +722,12 @@ export class World {
     this.level = lvl;
     this.areaId = areaId || null;
     this.theme = lvl.theme || levelObj.theme || 'overworld';
+    // A level may draw its TILES with another theme's palette while staying its
+    // own theme for everything else. The original does this with colour control
+    // 7, which writes the full castle palette over an overworld area — 6-3 is an
+    // overworld level rendered in castle greys under a black sky. Not called
+    // `tiles`, which is already the tile MAP.
+    this.tileset = lvl.tileset || levelObj.tileset || this.theme;
 
     const m = String(lvl.id || levelObj.id || '1-1').match(/(\d+)\s*-\s*(\d+)/);
     if (m) {
@@ -916,14 +923,14 @@ export class World {
     }
 
     const rec = entry.rec;
-    const themeSet = A.themeTiles ? A.themeTiles[this.theme] : null;
+    const themeSet = A.themeTiles ? A.themeTiles[this.tileset] : null;
     let sprite = (themeSet && themeSet[entry.id]) || rec.sprite || null;
     if (!isSprite(sprite)) sprite = null;
 
     let anim = unwrapArt(rec.animated) || unwrapArt(rec.anim) || null;
     if (anim && A.themeAnims) {
       const key = A.animKeys.get(anim);
-      const themed = key && A.themeAnims[this.theme] ? A.themeAnims[this.theme][key] : null;
+      const themed = key && A.themeAnims[this.tileset] ? A.themeAnims[this.tileset][key] : null;
       if (isAnim(themed)) anim = themed;
     }
     if (!isAnim(anim)) anim = null;
