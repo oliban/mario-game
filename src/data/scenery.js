@@ -138,8 +138,37 @@ const P_MTN = [
   '#8878ad', // near crest light
 ];
 
+// World 3's white foliage. The original does not repaint the scenery sprites: it
+// writes four bytes over background palette 0, turning green $29 into white $30,
+// dark green $1a into grey $00 and black $0f into light grey $10. Background
+// palette 0 is the scenery palette, so hills, bushes and tree canopy change and
+// nothing else does — the ground metatile is on palette 1.
+//
+// Our ramp is eight slots rather than four, so this is the same substitution
+// carried across the whole ramp at matching luminance.
+const P_SNOW = [
+  '#2c2c2c', // outline
+  '#3a3a3a', // deep shadow
+  '#6b6b6b', // shadow
+  '#8a8a8a', // mid dark
+  '#b4b4b4', // mid
+  '#d0d0d0', // lit
+  '#e8e8e8', // bright
+  '#ffffff', // specular
+];
+
 // Foliage slots 0-7 are P_GREEN verbatim so canopy and bushes cannot drift apart;
 // 8-13 are the bark ramp.
+const P_TREE_SNOW = [
+  ...P_SNOW,
+  '#32190c', // bark outline
+  '#48280e', // bark shadow
+  '#6d4116', // bark mid dark
+  '#93601e', // bark mid
+  '#bb832f', // bark lit
+  '#e6b061', // bark specular
+];
+
 const P_TREE = [
   ...P_GREEN,
   '#32190c', // bark outline
@@ -1836,6 +1865,7 @@ export const MOUNTAINS = {
 };
 
 const TREE_TOP = makeSprite(TREE_TOP_PX, P_TREE, { name: 'scenery.tree.top' });
+const TREE_TOP_SNOW = makeSprite(TREE_TOP_PX, P_TREE_SNOW, { name: 'scenery.tree.top.snow' });
 
 export const TREE = {
   top: TREE_TOP,
@@ -1896,4 +1926,26 @@ export const WATER_LINE = {
     ],
     6
   ),
+};
+
+// Snow-baked siblings, same pixel rows and a second palette. Emitted by a level
+// as `scenery: 'snow'`; see decorArt() in world.js.
+export const HILL_LARGE_SNOW = {
+  sprite: makeSprite(HILL_LARGE_PX, P_SNOW, { name: 'scenery.hill.large.snow' }),
+};
+export const HILL_SMALL_SNOW = {
+  sprite: makeSprite(HILL_SMALL_PX, P_SNOW, { name: 'scenery.hill.small.snow' }),
+};
+export const BUSH_SNOW = {
+  small: makeSprite(BUSH_S_PX, P_SNOW, { name: 'scenery.bush.small.snow' }),
+  medium: makeSprite(BUSH_M_PX, P_SNOW, { name: 'scenery.bush.medium.snow' }),
+  large: makeSprite(BUSH_L_PX, P_SNOW, { name: 'scenery.bush.large.snow' }),
+};
+
+// Canopy in snow, bark unchanged: the original's write lands on background
+// palette 0 only, and the bark ramp lives in the upper slots.
+export const TREE_SNOW = {
+  top: TREE_TOP_SNOW,
+  trunk: makeSprite(TRUNK_PX, P_TREE_SNOW, { name: 'scenery.tree.trunk.snow' }),
+  trunkB: makeSprite(TRUNK_B_PX, P_TREE_SNOW, { name: 'scenery.tree.trunk.b.snow' }),
 };

@@ -314,14 +314,24 @@ const DECOR_SETS = {
   c: [['CLOUD', 'small'], ['CLOUD', 'medium'], ['CLOUD', 'large']],
 };
 
-let DECOR_ART = null;
-function decorArt() {
-  if (DECOR_ART) return DECOR_ART;
+// Keyed by scenery variant, not one global set. World 3's night levels repaint
+// the scenery palette — hills, bushes and tree canopy go white — which the
+// original does by writing four bytes over background palette 0 rather than by
+// swapping art. A level asks for it with `scenery: 'snow'`.
+const DECOR_ART = new Map();
+function decorArt(variant) {
+  const key = variant || 'default';
+  if (DECOR_ART.has(key)) return DECOR_ART.get(key);
+  const suffix = variant ? `_${String(variant).toUpperCase()}` : '';
+  // Fall back to the plain sprite whenever a variant does not publish one, so a
+  // new variant only has to redraw what actually differs.
+  const pick = (name) =>
+    (suffix && sceneryMod && sceneryMod[name + suffix]) || (sceneryMod && sceneryMod[name]);
   const out = {};
   for (const ch of Object.keys(DECOR_SETS)) {
     const list = [];
     for (const [name, pose] of DECOR_SETS[ch]) {
-      const art = poseArt(sceneryMod && sceneryMod[name], [pose]);
+      const art = poseArt(pick(name), [pose]);
       if (art && artW(art) > 0 && !list.includes(art)) list.push(art);
     }
     list.sort((a, b) => artW(a) - artW(b));
@@ -330,12 +340,12 @@ function decorArt() {
   // A tree column is a canopy sitting on a stack of trunk segments. Every tree
   // in the shipped levels hangs under a platform, so the canopy only appears
   // when nothing covers the top of the column.
-  const trunk = poseArt(sceneryMod && sceneryMod.TREE, ['trunk']);
-  const canopy = poseArt(sceneryMod && sceneryMod.TREE, ['rustle', 'top']);
+  const trunk = poseArt(pick('TREE'), ['trunk']);
+  const canopy = poseArt(pick('TREE'), ['rustle', 'top']);
   if (trunk || canopy) out.t = { trunk: trunk || canopy, canopy: canopy || trunk };
   const cloud = sceneryMod && sceneryMod.CLOUD;
   out.driftPx = cloud && typeof cloud.driftPx === 'number' ? cloud.driftPx : 0;
-  DECOR_ART = out;
+  DECOR_ART.set(key, out);
   return out;
 }
 
@@ -928,7 +938,9 @@ export class World {
   // -------------------------------------------------------------------------
   _buildDecor() {
     const list = (this.decor = []);
-    const sets = decorArt();
+    // The variant comes off the current area, so a sub-area can differ from the
+    // level that contains it — the same rule the sky override follows.
+    const sets = decorArt(this.level && this.level.scenery);
     const seen = new Uint8Array(this.w * this.h);
 
     for (let ty = 0; ty < this.h; ty++) {
@@ -993,7 +1005,7 @@ export class World {
       // Centre the silhouette on its footprint and sit it on the cell floor.
       x: px + Math.floor((tiles * TILE - s.w) * 0.5),
       y: (ty + 1) * TILE - s.h,
-      drift: ch === 'c' ? decorArt().driftPx : 0,
+      drift: ch === 'c' ? decorArt(this.level && this.level.scenery).driftPx : 0,
     });
   }
 
