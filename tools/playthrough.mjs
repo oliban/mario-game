@@ -498,10 +498,26 @@ if (wanted('bricks')) {
           const beforeName = before ? before.name : null;
           const startY = p.y;
           let rose = 0;
-          g.hold({ jump: true });
-          for (let i = 0; i < 24; i++) {
-            window.__PT.step(1);
-            rose = Math.max(rose, startY - p.y);
+          // Underwater, holding jump is ONE stroke, not a jump — he rises a
+          // little and then sinks away from the brick, so a 24-frame hold
+          // measures nothing. Swimming up to a brick means stroking
+          // repeatedly. Verified in the engine: held under the brick and
+          // stroked, big Mario breaks it on the first strike, so this is the
+          // harness's model being wrong and not the game.
+          const swimming = !!p.inWater;
+          if (swimming) {
+            for (let i = 0; i < 120; i++) {
+              g.hold(i % 8 < 2 ? { jump: true } : {});
+              window.__PT.step(1);
+              rose = Math.max(rose, startY - p.y);
+              if (!w.tileAt(s.x, s.y)) break;
+            }
+          } else {
+            g.hold({ jump: true });
+            for (let i = 0; i < 24; i++) {
+              window.__PT.step(1);
+              rose = Math.max(rose, startY - p.y);
+            }
           }
           g.hold({});
           for (let i = 0; i < 40; i++) window.__PT.step(1);

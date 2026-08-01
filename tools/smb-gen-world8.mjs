@@ -9,7 +9,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource, skyAreaSource, bonusPageFor, buildArea } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource, skyAreaSource, bonusPagesFor, buildArea } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -101,7 +101,7 @@ ${note}
   const wp = L.meta.warpPipe;
   const out = landingNear(rows, wp.x + 24);
   const body = `
-${bonusRoomSource('8-1b', 'WORLD 8-1', bonusPageFor('8-1'), out, 12)}
+${bonusRoomSource('8-1b', 'WORLD 8-1', bonusPagesFor('8-1')[0], out, 12)}
 export default {
   id: '8-1',
   name: 'WORLD 8-1',
@@ -141,7 +141,7 @@ ${entsBlock(L.entities)}
   const wp = L.meta.warpPipe;
   const out = landingNear(rows, wp.x + 24);
   const body = `
-${bonusRoomSource('8-2b', 'WORLD 8-2', bonusPageFor('8-2'), out, 12)}
+${bonusRoomSource('8-2b', 'WORLD 8-2', bonusPagesFor('8-2')[0], out, 12)}
 export default {
   id: '8-2',
   name: 'WORLD 8-2',

@@ -9,7 +9,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource, skyAreaSource, bonusPageFor } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource, skyAreaSource, bonusPagesFor, waterRoomSource } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -136,12 +136,20 @@ ${entsBlock(L.entities)}
   const L = emitLevel('6-2', { theme: 'overworld' });
   const rows = relieveBlocks(L.rows);
   const sp = findSpawn(rows);
-  const wp = L.meta.warpPipe;
-  const out = landingNear(rows, wp.x + 24);
+  // Four destinations, four consumers, matched in the order the enemy stream
+  // names them: pipe 19 -> coin room page 8, pipe 56 -> the water room,
+  // beanstalk 81 -> coin heaven, pipe 153 -> coin room page 6.
+  const wps = L.meta.pipes.filter((p) => p.warp);
+  const pages = bonusPagesFor('6-2');
+  const out = landingNear(rows, wps[0].x + 24);
+  const out2 = landingNear(rows, wps[2].x + 24);
+  const outw = landingNear(rows, wps[1].x + 24);
   const vine = L.meta.vine;
   const back = landingNear(rows, vine.x + 40);
   const body = `
-${bonusRoomSource('6-2b', 'WORLD 6-2', bonusPageFor('6-2'), out, 12)}
+${bonusRoomSource('6-2b', 'WORLD 6-2', pages[0], out, 12)}
+${bonusRoomSource('6-2d', 'WORLD 6-2', pages[1], out2, 12, 'BONUS2')}
+${waterRoomSource('6-2w', 'WORLD 6-2', outw)}
 ${skyAreaSource('6-2c', 'WORLD 6-2', `{ area: 'main', x: ${back}.5, y: 12, exit: 'up' }`, 'GroundArea21')}
 export default {
   id: '6-2',
@@ -162,9 +170,11 @@ ${contentsBlock(L.contents)}
 ${entsBlock(L.entities)}
   ],
   warps: [
-    { from: { x: ${wp.x}, y: ${wp.top} }, dir: 'down', to: { area: '6-2b', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: ${wps[0].x}, y: ${wps[0].top} }, dir: 'down', to: { area: '6-2b', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: ${wps[1].x}, y: ${wps[1].top} }, dir: 'down', to: { area: '6-2w', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: ${wps[2].x}, y: ${wps[2].top} }, dir: 'down', to: { area: '6-2d', x: 3.5, y: 12, exit: 'down' } },
   ],
-  areas: { '6-2b': BONUS, '6-2c': SKY },
+  areas: { '6-2b': BONUS, '6-2d': BONUS2, '6-2w': WATERROOM, '6-2c': SKY },
   flagpole: { x: ${L.meta.flagpole.x} },
   castle: { x: ${L.meta.castle.x} },
 };

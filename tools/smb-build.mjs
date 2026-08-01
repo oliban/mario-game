@@ -566,18 +566,22 @@ if (process.argv[1] && process.argv[1].endsWith('smb-build.mjs')) {
 // the area type, bits 4-0 the offset within it) and byte 2 carries the world
 // number in its top three bits and the ENTRANCE PAGE in the low five. The coin
 // rooms are underground offset 2, so a record pointing there names the page.
-export function bonusPageFor(levelId) {
+export function bonusPagesFor(levelId) {
   const entry = REF.levelMap[levelId];
   const b = REF.areas[entry.area].enemyBytes;
+  const pages = [];
   for (let i = 0; i + 2 < b.length; ) {
     const b0 = b[i];
     if (b0 === 0xff) break;
     if ((b0 & 0x0f) !== 0x0e) { i += 2; continue; }
     const ptr = b[i + 1];
-    if (((ptr >> 5) & 3) === 2 && (ptr & 0x1f) === 2) return b[i + 2] & 0x1f;
+    if (((ptr >> 5) & 3) === 2 && (ptr & 0x1f) === 2) pages.push(b[i + 2] & 0x1f);
     i += 3;
   }
-  return 0;
+  // NULL, not 0, when the level names no coin room at all. Defaulting to page 0
+  // silently gave 5-2 a room its data never mentions — it has a water bonus and
+  // a coin heaven, and no coin room.
+  return pages.length ? pages : null;
 }
 
 export function bonusRoom(page) {
@@ -602,7 +606,7 @@ export function bonusRoom(page) {
 
 // The room as a level module, ready to paste into a generator's output. `back`
 // is the column in the main area the exit pipe surfaces at.
-export function bonusRoomSource(id, name, page, back, backTop) {
+export function bonusRoomSource(id, name, page, back, backTop, varName = 'BONUS') {
   const r = bonusRoom(page);
   const q = (v) => JSON.stringify(v).replace(/"([a-zA-Z]+)":/g, '$1: ').replace(/"/g, "'");
   // Where you land is not a constant: page 0's coin hall has a solid block of
@@ -621,7 +625,7 @@ export function bonusRoomSource(id, name, page, back, backTop) {
   return `// The coin room, rendered from UndergroundArea3 page ${page} — the room this
 // level's own enemy stream names. You drop in at the left, take the coins, and
 // walk right into the pipe, which surfaces at column ${back}.
-const BONUS = {
+const ${varName} = {
   id: '${id}',
   name: '${name}',
   theme: 'underground',
@@ -676,6 +680,72 @@ ${g.map((r) => `    '${r.join('')}',`).join('\n')}
   ],
   entities: [],
   warps: [{ from: { x: ${px}, y: 11 }, dir: 'down', to: ${dest} }],
+};
+`;
+}
+
+// The underwater bonus room, WaterArea1 — 5-2 and 6-2 each have a pipe into it.
+// You drop in at the left, swim right, and leave by the water pipe.
+export function waterRoomSource(id, name, back) {
+  const b = buildArea('WaterArea1', { theme: 'water' });
+  const rows = b.tiles.map((r) => {
+    let out = '';
+    for (let x = 0; x < b.width; x++) out += r[x] === '.' ? (x < 2 ? '~' : '_') : r[x];
+    return out;
+  });
+  const wp = b.meta.waterPipe;
+  return `// The underwater bonus room, rendered from WaterArea1 — the area this level's
+// own enemy stream names. Swim right; the water pipe at column ${wp.x} lets you out
+// again at column ${back}.
+const WATERROOM = {
+  id: '${id}',
+  name: '${name}',
+  theme: 'water',
+  music: 'underwater',
+  width: ${b.width},
+  height: 15,
+  spawn: { x: 3, y: 12 },
+  tiles: [
+${rows.map((r) => `    '${r}',`).join('\n')}
+  ],
+  entities: [],
+  warps: [
+    { from: { x: ${wp.x - 1}, y: ${wp.top} }, dir: 'right', to: { area: 'main', x: ${back}.5, y: 12, exit: 'up' } },
+  ],
+};
+`;
+}
+
+// GroundArea16, the sky warp zone above 4-2's beanstalk. WarpZoneNumbers has
+// two rows for it: `$24, $05, $24` — blank, five, blank — for the beanstalk
+// route, and `$08, $07, $06` for the other one. So which pipes work depends on
+// how you arrived, and `dests` says which.
+export function warpZoneSource(id, name, dests) {
+  const b = buildArea('GroundArea16', { theme: 'overworld' });
+  const W = 70;
+  const rows = b.tiles.map((r) => r.slice(0, W));
+  const pipes = b.meta.pipes.filter((p) => p.warp);
+  const warps = pipes
+    .map((p, i) => (dests[i] ? `    { from: { x: ${p.x}, y: ${p.top} }, dir: 'down', to: { level: '${dests[i]}' } },` : null))
+    .filter(Boolean);
+  return `const WARPZONE = {
+  id: '${id}',
+  name: 'WARP ZONE',
+  theme: 'overworld',
+  music: 'bonus',
+  width: ${W},
+  height: 15,
+  spawn: { x: 2, y: 12 },
+  tiles: [
+${rows.map((r) => `    '${r}',`).join('\n')}
+  ],
+  entities: [],
+  signs: [
+${pipes.map((p, i) => (dests[i] ? `    { x: ${p.x + 0.25}, y: ${p.top - 2}, text: '${dests[i][0]}' },` : null)).filter(Boolean).join('\n')}
+  ],
+  warps: [
+${warps.join('\n')}
+  ],
 };
 `;
 }

@@ -9,7 +9,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource, skyAreaSource, bonusPageFor } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource, skyAreaSource, bonusPagesFor, waterRoomSource } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -101,7 +101,7 @@ ${note}
   const wp = L.meta.warpPipe;
   const out = landingNear(rows, wp.x + 20);
   const body = `
-${bonusRoomSource('5-1b', 'WORLD 5-1', bonusPageFor('5-1'), out, 12)}
+${bonusRoomSource('5-1b', 'WORLD 5-1', bonusPagesFor('5-1')[0], out, 12)}
 export default {
   id: '5-1',
   name: 'WORLD 5-1',
@@ -154,7 +154,7 @@ ${entsBlock(L.entities)}
   const out = landingNear(rows, wp.x + 26);
   const back = landingNear(rows, vine.x + 40);
   const body = `
-${bonusRoomSource('5-2b', 'WORLD 5-2', bonusPageFor('5-2'), out, 12)}
+${waterRoomSource('5-2b', 'WORLD 5-2', out)}
 ${skyAreaSource('5-2c', 'WORLD 5-2', `{ area: 'main', x: ${back}.5, y: 12, exit: 'up' }`)}
 export default {
   id: '5-2',
@@ -177,7 +177,7 @@ ${entsBlock(L.entities)}
   warps: [
     { from: { x: ${wp.x}, y: ${wp.top} }, dir: 'down', to: { area: '5-2b', x: 3.5, y: 12, exit: 'down' } },
   ],
-  areas: { '5-2b': BONUS, '5-2c': SKY },
+  areas: { '5-2b': WATERROOM, '5-2c': SKY },
   flagpole: { x: ${L.meta.flagpole.x} },
   castle: { x: ${L.meta.castle.x} },
 };
@@ -186,7 +186,10 @@ ${entsBlock(L.entities)}
     join(OUT, '5-2.js'),
     header(
       '5-2 — overworld, the cannons',
-      '// Cannons again (area style 2), plus a beanstalk at ' + vine.x + ' into coin heaven, a\n' +
+      '// Cannons again (area style 2), plus a beanstalk at ' + vine.x + ' into coin heaven and\n' +
+        '// a pipe at ' + wp.x + ' into the underwater bonus room. This level names no coin\n' +
+        '// room at all — the page-0 one it used to get was my default, not its data.\n' +
+        '// A\n' +
         '// jumpspring at ' + (L.meta.springs[0] ? L.meta.springs[0].x : '-') + ' and nine holes. Day-snow colour control, as 5-1.'
     ) +
       tilesBlock(rows) +

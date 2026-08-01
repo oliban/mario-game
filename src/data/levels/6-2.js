@@ -32,7 +32,7 @@ const TILES = [
 
 // The coin room, rendered from UndergroundArea3 page 8 — the room this
 // level's own enemy stream names. You drop in at the left, take the coins, and
-// walk right into the pipe, which surfaces at column 177.
+// walk right into the pipe, which surfaces at column 45.
 const BONUS = {
   id: '6-2b',
   name: 'WORLD 6-2',
@@ -63,7 +63,78 @@ const BONUS = {
   ],
   entities: [],
   warps: [
+    { from: { x: 13, y: 11 }, dir: 'right', to: { area: 'main', x: 45.5, y: 12, exit: 'up' } },
+  ],
+};
+
+// The coin room, rendered from UndergroundArea3 page 6 — the room this
+// level's own enemy stream names. You drop in at the left, take the coins, and
+// walk right into the pipe, which surfaces at column 177.
+const BONUS2 = {
+  id: '6-2d',
+  name: 'WORLD 6-2',
+  theme: 'underground',
+  music: 'underground',
+  width: 32,
+  height: 15,
+  spawn: { x: 1, y: 12 },
+  tiles: [
+    '################################',
+    '################################',
+    '=..############{}###############',
+    '=..............{}...............',
+    '=..............{}...............',
+    '=..............{}...............',
+    '=..............{}...............',
+    '=..............{}...............',
+    '=..oooooooo....{}...............',
+    '=..========..=.{}...............',
+    '=..=......=....{}...............',
+    '=..=......=..<-->...............',
+    '=..oooooooooo<-->...............',
+    '################################',
+    '################################',
+  ],
+  contents: [
+    {x: 13,y: 9,item: 'power'},
+  ],
+  entities: [],
+  warps: [
     { from: { x: 13, y: 11 }, dir: 'right', to: { area: 'main', x: 177.5, y: 12, exit: 'up' } },
+  ],
+};
+
+// The underwater bonus room, rendered from WaterArea1 — the area this level's
+// own enemy stream names. Swim right; the water pipe at column 62 lets you out
+// again at column 79.
+const WATERROOM = {
+  id: '6-2w',
+  name: 'WORLD 6-2',
+  theme: 'water',
+  music: 'underwater',
+  width: 79,
+  height: 15,
+  spawn: { x: 3, y: 12 },
+  tiles: [
+    '~~_____________________________________________________________________________',
+    '~~_____________________________________________________________________________',
+    '~~~~~~~~~~~~~~~~~~~~~~~~~~##~~~~##~~~~~~~~~~~~~~~~~~~~~~~~~~~##################',
+    '__________________________##____##___________________________##################',
+    '_______________=__________##____##____BBBBBB_________________##################',
+    '_______________=______________________=____=__________oooo___##################',
+    '___________BBBBB______________________=____=__________BBBB_____################',
+    '______________________oooooooooo______=____=__________________<################',
+    '______________________________________=____=______oooo________<################',
+    '____________________=_____________________________BBBB_______##################',
+    '____________=_______=_____##____##___________________________##################',
+    '____________=_______=_____##____##____________=_____________B##################',
+    '____________=_______=_____##____##______oo____=____________BB##################',
+    '######################____##____######__##__###################################',
+    '######################____##____######__##__###################################',
+  ],
+  entities: [],
+  warps: [
+    { from: { x: 61, y: 7 }, dir: 'right', to: { area: 'main', x: 79.5, y: 12, exit: 'up' } },
   ],
 };
 
@@ -157,9 +228,11 @@ export default {
     {type: 'piranha',x: 201.5,y: 9},
   ],
   warps: [
-    { from: { x: 153, y: 10 }, dir: 'down', to: { area: '6-2b', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: 19, y: 9 }, dir: 'down', to: { area: '6-2b', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: 56, y: 8 }, dir: 'down', to: { area: '6-2w', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: 153, y: 10 }, dir: 'down', to: { area: '6-2d', x: 3.5, y: 12, exit: 'down' } },
   ],
-  areas: { '6-2b': BONUS, '6-2c': SKY },
+  areas: { '6-2b': BONUS, '6-2d': BONUS2, '6-2w': WATERROOM, '6-2c': SKY },
   flagpole: { x: 216 },
   castle: { x: 220 },
 };

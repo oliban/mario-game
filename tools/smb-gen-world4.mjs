@@ -9,7 +9,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource, skyAreaSource, buildArea } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource, skyAreaSource, bonusPagesFor, buildArea, warpZoneSource } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -157,7 +157,8 @@ ${entsBlock(L.entities)}
 
   const body = `
 ${bonusRoomSource('4-2b', 'WORLD 4-2', 8, out, 12)}
-${skyAreaSource('4-2c', 'WORLD 4-2', "{ level: '5-1' }")}
+${warpZoneSource('4-2c', 'WORLD 4-2', [null, '5-1', null])}
+${warpZoneSource('4-2w', 'WORLD 4-2', ['8-1', '7-1', '6-1']).replace('WARPZONE', 'WARPZONE2')}
 export default {
   id: '4-2',
   name: 'WORLD 4-2',
@@ -170,7 +171,7 @@ export default {
   tiles: TILES,
   contents: [
 ${contentsBlock(L.contents)}
-    { x: ${vine.x}, y: ${vine.y}, item: 'vine', height: 11, warp: { to: { area: '4-2c', x: 3.5, y: 12, exit: 'none' } } },
+    { x: ${vine.x}, y: ${vine.y}, item: 'vine', height: 11, warp: { to: { area: '4-2c', x: 2.5, y: 12, exit: 'none' } } },
   ],
   entities: [
 ${entsBlock(L.entities)}
@@ -178,9 +179,9 @@ ${entsBlock(L.entities)}
   warps: [
     { from: { x: ${wp.x}, y: ${wp.top} }, dir: 'down', to: { area: '4-2b', x: 3.5, y: 12, exit: 'down' } },
     { from: { x: ${side.x}, y: ${side.top} }, dir: 'right', to: { complete: true } },
-    { from: { x: ${secret.x}, y: ${secret.top} }, dir: 'down', to: { complete: true } },
+    { from: { x: ${secret.x}, y: ${secret.top} }, dir: 'down', to: { area: '4-2w', x: 2.5, y: 12, exit: 'down' } },
   ],
-  areas: { '4-2b': BONUS, '4-2c': SKY },
+  areas: { '4-2b': BONUS, '4-2c': WARPZONE, '4-2w': WARPZONE2 },
 };
 `;
   writeFileSync(
