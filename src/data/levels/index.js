@@ -24,6 +24,14 @@ import L31 from './3-1.js';
 import L32 from './3-2.js';
 import L33 from './3-3.js';
 import L34 from './3-4.js';
+import L41 from './4-1.js';
+import L42 from './4-2.js';
+import L43 from './4-3.js';
+import L44 from './4-4.js';
+import L51 from './5-1.js';
+import L52 from './5-2.js';
+import L53 from './5-3.js';
+import L54 from './5-4.js';
 
 export const LEVELS = {
   '1-1': L11,
@@ -38,6 +46,14 @@ export const LEVELS = {
   '3-2': L32,
   '3-3': L33,
   '3-4': L34,
+  '4-1': L41,
+  '4-2': L42,
+  '4-3': L43,
+  '4-4': L44,
+  '5-1': L51,
+  '5-2': L52,
+  '5-3': L53,
+  '5-4': L54,
 };
 
 export { ORDER } from './roster.js';

@@ -10,7 +10,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -76,6 +76,18 @@ function seatPodoboos(rows, ents) {
   return g.map((r) => r.join(''));
 }
 
+
+// A column with floor under it and two clear rows above, for a warp to land in.
+function landingNear(rows, want) {
+  for (let d = 0; d < 40; d++) {
+    for (const x of [want + d, want - d]) {
+      if (x < 2 || x >= rows[0].length) continue;
+      if (SOLID.has(rows[13][x]) && rows[12][x] === '.' && rows[11][x] === '.') return x;
+    }
+  }
+  return want;
+}
+
 const j = (v) => JSON.stringify(v);
 const tilesBlock = (rows) => 'const TILES = [\n' + rows.map((r) => `  '${r}',\n`).join('') + '];\n';
 const entsBlock = (ents) =>
@@ -103,7 +115,10 @@ ${note}
   // Piranha plants are no longer guessed from the enemy stream: VerticalPipe
   // creates them itself, centred on the pipe, so smb-build emits them.
   const ents = L.entities.slice();
+  const rows21 = relieveBlocks(L.rows);
+  const outCol = landingNear(rows21, 108);
   const body = `
+${bonusRoomSource('2-1b', 'WORLD 2-1', 0, outCol, 12)}
 // The beanstalk brick is at column 83 and the warp pipe at ${warp ? warp.x : '-'} — both the
 // original's positions. The jumpspring before the flagpole is at ${L.meta.springs[0] ? L.meta.springs[0].x : '-'}.
 const SKY = {
@@ -152,7 +167,10 @@ ${L.contents.map((c) => `    ${j(c).replace(/"([a-z]+)":/g, '$1: ').replace(/"/g
   entities: [
 ${entsBlock(ents)}
   ],
-  areas: { '2-1c': SKY },
+  warps: [
+    { from: { x: ${warp.x}, y: ${warp.top} }, dir: 'down', to: { area: '2-1b', x: 3.5, y: 12, exit: 'down' } },
+  ],
+  areas: { '2-1b': BONUS, '2-1c': SKY },
   flagpole: { x: ${L.meta.flagpole.x} },
   castle: { x: ${L.meta.castle.x} },
 };
@@ -160,7 +178,7 @@ ${entsBlock(ents)}
   writeFileSync(
     join(OUT, '2-1.js'),
     header('2-1 — overworld', '// The beanstalk, the warp pipe and the jumpspring are all the original\'s.') +
-      tilesBlock(relieveBlocks(L.rows)) +
+      tilesBlock(rows21) +
       body
   );
 }

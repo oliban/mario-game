@@ -22,7 +22,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -115,41 +115,7 @@ ${note}
   const wp = L.meta.warpPipe;
   const out = landingNear(rows, 100);
   const body = `
-// The coin room under the pipe at column ${wp.x}, which the original's data flags as
-// a pipe that leads somewhere. Same shape as 1-1's: drop in through the ceiling,
-// leave by the side pipe, surface at column ${out}.
-const BONUS = {
-  id: '3-1b',
-  name: 'WORLD 3-1',
-  theme: 'underground',
-  music: 'underground',
-  width: 20,
-  height: 15,
-  spawn: { x: 2, y: 10 },
-  tiles: [
-    '####################',
-    '####################',
-    '##[]################',
-    '#.{}..............##',
-    '#.................##',
-    '#.................##',
-    '#.................##',
-    '#.................##',
-    '#...oooooooooo....##',
-    '#...oooooooooo..<>##',
-    '#...oooooooooo..<>##',
-    '####################',
-    '####################',
-    '####################',
-    '####################',
-  ],
-  entities: [],
-  // from.x is the '<' column: the trigger and the clip both key off it.
-  warps: [
-    { from: { x: 16, y: 10 }, dir: 'right', to: { area: 'main', x: ${out}.5, y: 12, exit: 'up' } },
-  ],
-};
-
+${bonusRoomSource('3-1b', 'WORLD 3-1', 4, out, 12)}
 // The sky above the beanstalk at column ${vine.x}. You come down again at column ${back},
 // past the second staircase.
 const SKY = {

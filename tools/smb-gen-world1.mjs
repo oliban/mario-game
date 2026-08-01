@@ -15,7 +15,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -99,43 +99,7 @@ ${note}
   const backPipe = L.meta.pipes.find((p) => p.x > 100 && !p.warp);
 
   const body = `
-// The coin room under the original's warp pipe at column ${warp.x}. You drop in
-// through the pipe in its ceiling and leave through the side pipe on the right,
-// surfacing at the pipe at column ${backPipe.x} — the one past the staircases, so the
-// room is a genuine shortcut.
-const BONUS = {
-  id: '1-1b',
-  name: 'WORLD 1-1',
-  theme: 'underground',
-  music: 'underground',
-  width: 20,
-  height: 15,
-  spawn: { x: 2, y: 10 },
-  tiles: [
-    '####################',
-    '####################',
-    '##[]################',
-    '#.{}..............##',
-    '#.................##',
-    '#.................##',
-    '#.................##',
-    '#.................##',
-    '#...oooooooooo....##',
-    '#...oooooooooo..<>##',
-    '#...oooooooooo..<>##',
-    '####################',
-    '####################',
-    '####################',
-    '####################',
-  ],
-  entities: [],
-  // from.x is the '<' column: the trigger and the clip both key off it, so a
-  // column short and Mario is swallowed by open floor beside the pipe.
-  warps: [
-    { from: { x: 16, y: 10 }, dir: 'right', to: { area: 'main', x: ${backPipe.x}.5, y: ${backPipe.top}, exit: 'up' } },
-  ],
-};
-
+${bonusRoomSource('1-1b', 'WORLD 1-1', 0, backPipe.x, backPipe.top)}
 // The warp zone, reached by the first pipe at col ${first.x}. SMB hides its warp zones
 // behind a ceiling run or a vine; this one is deliberately on the very first
 // pipe, because its job is to get a tester into any level in two seconds.

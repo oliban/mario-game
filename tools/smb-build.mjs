@@ -143,8 +143,12 @@ export const unhandled = new Map();
 const FRENZY_KIND = { 'Frenzy(cheeps)': 'cheep', 'Frenzy(bullets)': 'bullet', 'Frenzy(stop)': 'stop' };
 
 export function buildArea(levelId, opts = {}) {
+  // A raw area name is accepted as well as a level id, so the shared sub-areas
+  // — the coin rooms, the warp zones — can be rendered from their own data
+  // rather than hand-drawn.
   const entry = REF.levelMap[levelId];
-  const area = REF.areas[entry.area];
+  const area = entry ? REF.areas[entry.area] : REF.areas[levelId];
+  if (!area) throw new Error(`no level or area named ${levelId}`);
   const objs = decodeObjects(area.objectBytes);
   const enemies = decodeEnemies(area.enemyBytes);
 
@@ -238,10 +242,15 @@ export function buildArea(levelId, opts = {}) {
     }
   }
 
+  // CloudTypeOverride: when the header's two MSB are 3 the terrain metatile
+  // becomes $88, the cloud block, instead of the area type's own ground. That
+  // is what the coin-heaven areas above the beanstalks are made of, and $88
+  // clears its block-buffer bar, so it is solid and you stand on it.
+  const groundChar = styleBits === 3 ? 'B' : '#';
   for (let x = 0; x < width; x++) {
     const bits = TERRAIN[terrainAt(x)] || TERRAIN[1];
     const solidRow = (r) => (r < 8 ? (bits[0] >> r) & 1 : (bits[1] >> (r - 8)) & 1);
-    for (let r = 0; r <= 12; r++) if (solidRow(r)) put(x, ROW(r), '#');
+    for (let r = 0; r <= 12; r++) if (solidRow(r)) put(x, ROW(r), groundChar);
   }
 
   const meta = {
@@ -522,6 +531,115 @@ if (process.argv[1] && process.argv[1].endsWith('smb-build.mjs')) {
     console.log('entities', built.entities.length);
   }
 
+}
+
+// --- the shared underground coin rooms -------------------------------------
+// UndergroundArea3 is not one room. It is FIVE, laid end to end at pages 0, 2,
+// 4, 6 and 8, each walled off by a ColumnOfBricks at its left edge and ended by
+// an ExitPipe. Which one a level reaches is in that level's own enemy stream:
+// a row-$0e record carries the area pointer, the world number and the ENTRANCE
+// PAGE, and the page is what picks the room. So 1-1 and 2-1 get the plain coin
+// hall at page 0, 3-1 gets the brick diamond with a power-up in it at page 4,
+// 4-1 gets page 6 and 5-1 page 8 — five different rooms out of one area.
+//
+// Returns 32 columns of that page, the column its exit pipe stands in, and the
+// column the ceiling pipe should drop you into.
+export function bonusRoom(page) {
+  const b = buildArea('UndergroundArea3', { theme: 'underground' });
+  const x0 = page * 16;
+  const rows = b.tiles.map((r) => r.slice(x0, x0 + 32).padEnd(32, '#'));
+  const side = b.meta.sidePipes.find((p) => p.x >= x0 && p.x < x0 + 32);
+  const contents = b.contents
+    .filter((c) => c.x >= x0 && c.x < x0 + 32)
+    .map((c) => ({ ...c, x: c.x - x0 }));
+  // The original relies on the screen edge for the top of the room; our rows 0
+  // and 1 sit above its 13-row buffer entirely, so they are capped to keep the
+  // player in.
+  rows[0] = '#'.repeat(32);
+  rows[1] = '#'.repeat(32);
+  return {
+    rows,
+    contents,
+    exit: side ? { x: side.x - x0, top: side.top } : null,
+  };
+}
+
+// The room as a level module, ready to paste into a generator's output. `back`
+// is the column in the main area the exit pipe surfaces at.
+export function bonusRoomSource(id, name, page, back, backTop) {
+  const r = bonusRoom(page);
+  const q = (v) => JSON.stringify(v).replace(/"([a-zA-Z]+)":/g, '$1: ').replace(/"/g, "'");
+  // Where you land is not a constant: page 0's coin hall has a solid block of
+  // bricks against the left wall and page 4's does not, so the drop-in point is
+  // the first column with floor under it and room for big Mario above.
+  const SOL = new Set(['#', 'B', '=', 'S', 'U']);
+  let spawn = { x: 2, y: 12 };
+  for (let x = 1; x < 30; x++) {
+    let y = 12;
+    while (y > 3 && SOL.has(r.rows[y][x])) y--;
+    if (SOL.has(r.rows[y + 1][x]) && r.rows[y][x] === '.' && r.rows[y - 1][x] === '.') {
+      spawn = { x, y };
+      break;
+    }
+  }
+  return `// The coin room, rendered from UndergroundArea3 page ${page} — the room this
+// level's own enemy stream names. You drop in at the left, take the coins, and
+// walk right into the pipe, which surfaces at column ${back}.
+const BONUS = {
+  id: '${id}',
+  name: '${name}',
+  theme: 'underground',
+  music: 'underground',
+  width: 32,
+  height: 15,
+  spawn: { x: ${spawn.x}, y: ${spawn.y} },
+  tiles: [
+${r.rows.map((s) => `    '${s}',`).join('\n')}
+  ],
+  contents: [
+${r.contents.map((c) => `    ${q(c)},`).join('\n')}
+  ],
+  entities: [],
+  warps: [
+    { from: { x: ${r.exit.x}, y: ${r.exit.top} }, dir: 'right', to: { area: 'main', x: ${back}.5, y: ${backTop}, exit: 'up' } },
+  ],
+};
+`;
+}
+
+// The coin heaven above a beanstalk, rendered from GroundArea12 — its header's
+// two MSB are 3, the cloud-block override, so its whole floor is cloud. The
+// original ends it with a ScrollLock and returns you through the pipe you find
+// at the right; we put that pipe at the end of the run of coins.
+export function skyAreaSource(id, name, dest) {
+  const b = buildArea('GroundArea12', { theme: 'overworld' });
+  // An AlterAreaAttributes partway through drops the terrain to 0, so the cloud
+  // floor simply stops. Crop to where it stops — past that there is nothing to
+  // stand on and nothing to see.
+  let W = b.width;
+  while (W > 1 && b.tiles[13][W - 1] !== 'B') W--;
+  const g = b.tiles.map((r) => r.slice(0, W).split(''));
+  // The exit pipe sits on the cloud floor at the far end.
+  const px = W - 4;
+  g[11][px] = '['; g[11][px + 1] = ']';
+  g[12][px] = '{'; g[12][px + 1] = '}';
+  return `// Coin heaven, rendered from GroundArea12 — the area the original's beanstalks
+// climb to. Its floor is cloud block, from the header's cloud-type override.
+const SKY = {
+  id: '${id}',
+  name: '${name}',
+  theme: 'overworld',
+  music: 'bonus',
+  width: ${W},
+  height: 15,
+  spawn: { x: 3, y: 12 },
+  tiles: [
+${g.map((r) => `    '${r.join('')}',`).join('\n')}
+  ],
+  entities: [],
+  warps: [{ from: { x: ${px}, y: 11 }, dir: 'down', to: ${dest} }],
+};
+`;
 }
 
 // --- level module emitter -------------------------------------------------

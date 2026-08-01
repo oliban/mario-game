@@ -37,40 +37,40 @@ const TILES = [
   '#####################################################################..###############...################################################################..#######################################################',
 ];
 
-// The coin room under the original's warp pipe at column 57. You drop in
-// through the pipe in its ceiling and leave through the side pipe on the right,
-// surfacing at the pipe at column 163 — the one past the staircases, so the
-// room is a genuine shortcut.
+// The coin room, rendered from UndergroundArea3 page 0 — the room this
+// level's own enemy stream names. You drop in at the left, take the coins, and
+// walk right into the pipe, which surfaces at column 163.
 const BONUS = {
   id: '1-1b',
   name: 'WORLD 1-1',
   theme: 'underground',
   music: 'underground',
-  width: 20,
+  width: 32,
   height: 15,
-  spawn: { x: 2, y: 10 },
+  spawn: { x: 1, y: 12 },
   tiles: [
-    '####################',
-    '####################',
-    '##[]################',
-    '#.{}..............##',
-    '#.................##',
-    '#.................##',
-    '#.................##',
-    '#.................##',
-    '#...oooooooooo....##',
-    '#...oooooooooo..<>##',
-    '#...oooooooooo..<>##',
-    '####################',
-    '####################',
-    '####################',
-    '####################',
+    '################################',
+    '################################',
+    '=..#######.....{}...............',
+    '=..............{}...............',
+    '=..............{}...............',
+    '=....ooooo.....{}...............',
+    '=..............{}...............',
+    '=...ooooooo....{}...............',
+    '=..............{}...............',
+    '=...ooooooo....{}...............',
+    '=..#######.....{}...............',
+    '=..#######...<-->...............',
+    '=..#######...<-->...............',
+    '################################',
+    '################################',
+  ],
+  contents: [
+
   ],
   entities: [],
-  // from.x is the '<' column: the trigger and the clip both key off it, so a
-  // column short and Mario is swallowed by open floor beside the pipe.
   warps: [
-    { from: { x: 16, y: 10 }, dir: 'right', to: { area: 'main', x: 163.5, y: 11, exit: 'up' } },
+    { from: { x: 13, y: 11 }, dir: 'right', to: { area: 'main', x: 163.5, y: 11, exit: 'up' } },
   ],
 };
 

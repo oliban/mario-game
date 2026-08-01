@@ -37,38 +37,40 @@ const TILES = [
   '#############################################...#############################________#__########################################....##########..#################################...################################',
 ];
 
-// The coin room under the pipe at column 38, which the original's data flags as
-// a pipe that leads somewhere. Same shape as 1-1's: drop in through the ceiling,
-// leave by the side pipe, surface at column 100.
+// The coin room, rendered from UndergroundArea3 page 4 — the room this
+// level's own enemy stream names. You drop in at the left, take the coins, and
+// walk right into the pipe, which surfaces at column 100.
 const BONUS = {
   id: '3-1b',
   name: 'WORLD 3-1',
   theme: 'underground',
   music: 'underground',
-  width: 20,
+  width: 32,
   height: 15,
-  spawn: { x: 2, y: 10 },
+  spawn: { x: 1, y: 12 },
   tiles: [
-    '####################',
-    '####################',
-    '##[]################',
-    '#.{}..............##',
-    '#.................##',
-    '#.................##',
-    '#.................##',
-    '#.................##',
-    '#...oooooooooo....##',
-    '#...oooooooooo..<>##',
-    '#...oooooooooo..<>##',
-    '####################',
-    '####################',
-    '####################',
-    '####################',
+    '################################',
+    '################################',
+    '=..............{}...............',
+    '=......oo......{}...............',
+    '=.....oooo.....{}...............',
+    '=..===.==.===..{}...............',
+    '=..==.o==o.==..{}...............',
+    '=..=.o=..=o.=..{}...............',
+    '=..=o=....=o=..{}...............',
+    '=...=......=...{}...............',
+    '=..............{}...............',
+    '=............<-->...............',
+    '=............<-->...............',
+    '################################',
+    '################################',
+  ],
+  contents: [
+    {x: 5,y: 5,item: 'power'},
   ],
   entities: [],
-  // from.x is the '<' column: the trigger and the clip both key off it.
   warps: [
-    { from: { x: 16, y: 10 }, dir: 'right', to: { area: 'main', x: 100.5, y: 12, exit: 'up' } },
+    { from: { x: 13, y: 11 }, dir: 'right', to: { area: 'main', x: 100.5, y: 12, exit: 'up' } },
   ],
 };
 

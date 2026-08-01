@@ -197,14 +197,30 @@ function buildNodes(lvl, g) {
 
   // Moving lifts: level entities and map anchors alike. Credit the whole sweep.
   const lifts = [];
+  // A pulley places ONE half in the level data and its partner is created by
+  // the entity's constructor, so the second platform is invisible to anything
+  // reading the level. Model it here the same way the constructor does —
+  // mirrored about the rope's balance point, a rope-span to the right. 4-3 is
+  // built almost entirely on balance pairs and reported 76 trap regions
+  // without this, while being perfectly playable.
+  const addLift = (pos, opts) => {
+    lifts.push(liftFrom(pos, opts));
+    const mode = opts.mode || opts.kind;
+    if (mode !== 'pulley') return;
+    const spacing = opts.spacing != null ? opts.spacing : 112;
+    const anchorY = opts.anchorY != null ? opts.anchorY : pos.y * TILE - 96;
+    lifts.push(
+      liftFrom({ x: pos.x + spacing / TILE, y: (2 * anchorY) / TILE - pos.y }, opts)
+    );
+  };
   for (const spec of lvl.entities || []) {
-    if (spec && spec.type === 'platform') lifts.push(liftFrom(spec, spec));
+    if (spec && spec.type === 'platform') addLift(spec, spec);
   }
   for (let y = 0; y < g.H; y++) {
     for (let x = 0; x < g.W; x++) {
       const r = g.at(x, y);
       if (!r || r.anchor !== 'platform') continue;
-      lifts.push(liftFrom({ x, y }, { ...(r.anchorOpts || {}) }));
+      addLift({ x, y }, { ...(r.anchorOpts || {}) });
     }
   }
   for (const lift of lifts) {
@@ -353,6 +369,16 @@ export function buildLevelGraph(lvl, areaKey = 'main') {
 
   let warpExits = 0;
   for (const wp of lvl.warps || []) {
+    // A warp that leaves the LEVEL — to another level, or one that simply ends
+    // it — is an exit too. Only `to.area` was checked, so these fell into the
+    // in-area branch and were given an edge to whatever nearestNode(undefined,
+    // undefined) happened to return. 4-2 reported 39 trap regions on that
+    // alone; 2-2 passed only because its geometry never exposed it.
+    if (wp.to && (wp.to.level || wp.to.complete)) {
+      for (const n of nodes) if (atMouth(n.x, n.y, wp)) n.exit = true;
+      warpExits++;
+      continue;
+    }
     const dest = wp.to && wp.to.area;
     if (dest && dest !== areaKey) {
       // Leaves the area entirely: reaching the mouth is a win here.

@@ -27,6 +27,43 @@ const TILES = [
   '############################################################################################....##########...##############################...##########..##########################################################',
 ];
 
+// The coin room, rendered from UndergroundArea3 page 0 — the room this
+// level's own enemy stream names. You drop in at the left, take the coins, and
+// walk right into the pipe, which surfaces at column 105.
+const BONUS = {
+  id: '2-1b',
+  name: 'WORLD 2-1',
+  theme: 'underground',
+  music: 'underground',
+  width: 32,
+  height: 15,
+  spawn: { x: 1, y: 12 },
+  tiles: [
+    '################################',
+    '################################',
+    '=..#######.....{}...............',
+    '=..............{}...............',
+    '=..............{}...............',
+    '=....ooooo.....{}...............',
+    '=..............{}...............',
+    '=...ooooooo....{}...............',
+    '=..............{}...............',
+    '=...ooooooo....{}...............',
+    '=..#######.....{}...............',
+    '=..#######...<-->...............',
+    '=..#######...<-->...............',
+    '################################',
+    '################################',
+  ],
+  contents: [
+
+  ],
+  entities: [],
+  warps: [
+    { from: { x: 13, y: 11 }, dir: 'right', to: { area: 'main', x: 105.5, y: 12, exit: 'up' } },
+  ],
+};
+
 // The beanstalk brick is at column 83 and the warp pipe at 103 — both the
 // original's positions. The jumpspring before the flagpole is at 188.
 const SKY = {
@@ -112,7 +149,10 @@ export default {
     {type: 'piranha',x: 176.5,y: 10},
     {type: 'springboard',x: 188,y: 11},
   ],
-  areas: { '2-1c': SKY },
+  warps: [
+    { from: { x: 103, y: 9 }, dir: 'down', to: { area: '2-1b', x: 3.5, y: 12, exit: 'down' } },
+  ],
+  areas: { '2-1b': BONUS, '2-1c': SKY },
   flagpole: { x: 200 },
   castle: { x: 204 },
 };
