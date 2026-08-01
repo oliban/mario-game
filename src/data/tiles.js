@@ -1560,7 +1560,32 @@ function buildTheme(theme) {
   t[TID.Q_COIN] = qa;
   t[TID.Q_ITEM] = qa;
   t[TID.USED] = S(R_USED, [earth[0], ...GOLD_SPENT], 'used');
-  t[TID.STONE] = S(R_STONE, pal(stone, STONE_DEEP[theme]), 'stone');
+  // SOLID BLOCK. The original indexes SolidBlockMetatiles by AreaType, and in two of
+  // the four areas the entry is the SAME metatile as TerrainMetatiles':
+  //
+  //   AreaType        terrain   solid block   brick
+  //   0 water           $69        $69         $22     <- solid block IS the terrain
+  //   1 ground          $54        $61         $51
+  //   2 underground     $52        $61         $52
+  //   3 castle          $62        $62         $52     <- solid block IS the terrain
+  //
+  // (AreaType is confirmed by AreaDataHOffsets .db $00,$03,$19,$1c indexing
+  // AreaDataAddrLow, which runs L_WaterArea1-3, L_GroundArea1-22, then underground,
+  // then castle; and by `cpy #$03 ;check if we are on castle level` at asm:1547.)
+  //
+  // So in a castle or a water area a solid block is not a different OBJECT standing
+  // in the wall — it is the wall, and the player reads it as unbreakable because it
+  // looks like the terrain, not because it looks like a special block. Ours drew the
+  // bevelled STONE block in every theme, which in 1-4 put tan blocks against
+  // blue-slate masonry: a material the original does not have there.
+  //
+  // Only the ground and underground areas give the solid block a metatile of its own
+  // ($61 against terrain $54 and $52), so those two keep the STONE drawing. `athletic`
+  // is not an SMB AreaType at all — the sky levels are AreaType 1 with a different
+  // AreaStyle, and these tables are indexed by AreaType only — so it follows ground
+  // and keeps its own block too.
+  const solidIsTerrain = theme === 'castle' || theme === 'water';
+  t[TID.STONE] = solidIsTerrain ? groundA : S(R_STONE, pal(stone, STONE_DEEP[theme]), 'stone');
   t[TID.STAIR] = stairA;
   t[TID.STAIR_TOP] = S(R_STAIR_TOP, quarryPal, 'stair-top');
   t[TID.LAVA_SURF] = lavaS[0];
@@ -1714,9 +1739,38 @@ export const THEME_LAVA_SURF_FRAMES = {
   athletic: BUILT.athletic.lavaS,
 };
 
+// De-phase along X ONLY. `tileY` is still accepted so callers do not have to change,
+// but its coefficient is deliberately ZERO, and that is a measured result rather than
+// a preference. This used to be `tileX * 3 + tileY * 5`, which de-phased in both axes
+// and quietly traded one lattice for another.
+//
+// A lava frame is generated from value noise that wraps mod 16, so a frame tiles
+// seamlessly with ITSELF — but two DIFFERENT frames have no such guarantee at the
+// join, because the crust field drifts (-2, +2) per frame. Neighbours five frames
+// apart are therefore ten pixels out of register vertically. Measured on a full-screen
+// lava lake as the mean colour step across a tile boundary divided by the same step
+// inside a tile (1.0 = the boundary is indistinguishable from the interior):
+//
+//   va vb   column seam   row seam   frames on screen
+//    0  0      1.857        0.936      1   (uniform — the old, un-phased behaviour)
+//    3  5      1.324        2.017      8   (de-phased in both axes: rows twice as bad)
+//    1  1      1.351        1.566      8
+//    2  3      1.363        1.906      8
+//    1  0      1.371        0.923      8
+//    3  0      1.252        0.890      8   <- this
+//
+// Any non-zero Y coefficient puts a visible horizontal band across every 16th row,
+// which is the same lattice fault rotated ninety degrees. Dropping it keeps all eight
+// frames on screen, keeps the vertical join at 0.890 (below even the uniform tile's
+// 0.936) and gives the best column figure of the lot.
+//
+// Note what the top row of that table also says: at 1.857, the UNIFORM tile has a
+// real vertical seam of its own, so R_LAVA is not as seamless in x as the tiling
+// policy at the top of this file claims. De-phasing masks it rather than fixing it;
+// the tile itself still wants a look.
 export const lavaPhase = (theme, tileX = 0, tileY = 0, tick = 0) => {
   const set = THEME_LAVA_FRAMES[theme] || THEME_LAVA_FRAMES.overworld;
-  return set[(tileX * 3 + tileY * 5 + (tick >> 3)) & 7];
+  return set[(tileX * 3 + (tick >> 3)) & 7];
 };
 
 export const lavaSurfPhase = (theme, tileX = 0, tick = 0) => {
