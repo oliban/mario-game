@@ -309,8 +309,13 @@ function resolveX(world, box, dx, opts, res) {
   const x0 = box.x;
   const w = box.w;
   let x1 = x0 + dx;
+  // SMB samples the player's sides 8px above the feet (BlockBuffer_Y_Adder $08/$18
+  // against the $20 foot adder), so a body dipping a few pixels below a floor never
+  // catches on the ledge face. opts.footSkip reproduces that: the bottom `footSkip`
+  // pixels of the box take no part in horizontal collision.
+  const skip = opts.footSkip > 0 && box.h > opts.footSkip ? opts.footSkip : 0;
   const ty0 = Math.floor(box.y / TILE);
-  const ty1 = rangeEnd(box.y, box.h, ty0);
+  const ty1 = rangeEnd(box.y, box.h - skip, ty0);
 
   if (dx > 0) {
     const c0 = Math.floor((x0 + w) / TILE);
@@ -453,6 +458,7 @@ export function wallAhead(world, box, dir, look = 1) {
 //                             (0 disables)
 //   minX, maxX       : number hard pixel walls (camera-left wall, level edges)
 //   maxStep          : number sub-step length override
+//   footSkip         : number bottom pixels of the box excluded from the X sweep
 //
 // `out` lets callers recycle a result object. The returned object is the same
 // one — copy anything you need to keep past the next call.

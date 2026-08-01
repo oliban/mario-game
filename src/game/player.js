@@ -515,6 +515,16 @@ const SHRINK_FLICKER = [0, 1, 2, 1, 0, 2, 1, 0, 2, 0];
 // slopes and moving platforms without ever accumulating fall speed.
 const GROUND_STICK = 0.5;
 
+// SMB's foot check reads a block-buffer row quantised to whole tiles, so a body up
+// to 4px below a floor surface still finds that floor underfoot; landing then masks
+// the low nybble off the vertical position and pops Mario back onto it
+// (SMBDIS.ASM DoFootCheck/LandPlyr: `cpy #$05` / `and #$f0`).
+const LEDGE_SNAP = 5;
+
+// SMB samples the sides 8px above the feet (BlockBuffer_Y_Adder $08/$18 against the
+// $20 foot adder), so the bottom of the body never catches on a ledge face.
+const SIDE_FOOT_SKIP = 8;
+
 // ---------------------------------------------------------------------------
 
 export default class Player extends EntityBase {
@@ -576,6 +586,7 @@ export default class Player extends EntityBase {
     // the body just froze in place where it died.
     this.autoCorpse = false;
     this.persistent = true;
+    this.colOpts.footSkip = SIDE_FOOT_SKIP;
 
     this.walkPhase = 0;
     this.animPhase = 0;
@@ -880,10 +891,28 @@ export default class Player extends EntityBase {
     const vyBefore = this.vy;
     this.grounded = false;
     this.moveAndCollide();
+    this._snapUpToLedge();
     this._confirmGround();
 
     this._clampToWorld();
     this._afterMove(vyBefore);
+  }
+
+  // Ledge skim. See LEDGE_SNAP: a body sunk less than 5px into the row its feet
+  // occupy is lifted back onto that row whenever either foot has solid under it.
+  // With colOpts.footSkip keeping the far lip from acting as a wall, this is what
+  // lets a run skim a one-tile gap instead of stopping dead in it.
+  _snapUpToLedge() {
+    if (this.vy < 0) return;
+    const bottom = this.y + this.h;
+    const row = Math.floor(bottom / TILE);
+    const sink = bottom - row * TILE;
+    if (sink <= 0 || sink >= LEDGE_SNAP) return;
+    const footY = row * TILE + TILE * 0.5;
+    if (!this._solid(this.x + 1, footY) && !this._solid(this.x + this.w - 1, footY)) return;
+    this.y -= sink;
+    this.vy = 0;
+    this.grounded = true;
   }
 
   // Ground probe. moveAndCollide() owns `grounded`; this only fills in when the
