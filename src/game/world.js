@@ -1655,6 +1655,10 @@ export class World {
           this.sfx('axe');
           this.shake(2.4, 14);
           this.freeze(10);
+          // The axe ends the fight either way, so the hazards go before either
+          // path runs — a castle with no bridge walks Mario off through live
+          // firebars otherwise.
+          this._clearHazards(p);
           // The axe drops the bridge out from under Bowser. Only if there is no
           // bridge to drop does the level end on the spot.
           if (!this._startBridgeFall(tx, ty, p)) {
@@ -1670,40 +1674,59 @@ export class World {
   // -------------------------------------------------------------------------
   // The axe, the bridge and Bowser.
   //
-  // The bridge is found rather than declared, so this works for any castle that
-  // puts an axe on the same row as the span: walk left from the axe, skip the
-  // gap, and take the first run of solid tiles. It then unbuilds itself one
-  // tile at a time from the axe end towards Bowser, exactly the direction the
-  // original collapses in.
+  // The bridge is found rather than declared, so this works for any castle
+  // whatever row it puts the deck on. It then unbuilds itself one tile at a
+  // time from the axe end towards Bowser, exactly the direction the original
+  // collapses in (BridgeCollapseData walks the name table right to left), and
+  // the boss only drops once the last plank is gone.
   // -------------------------------------------------------------------------
 
+  // The axe stands on top of the castle-side pillar, so the span is NOT on the
+  // axe's own row — every generated castle has the axe on row 8 and the deck on
+  // row 10. The robust rule is "the run of like tiles leading left out of that
+  // pillar, on the first deck-shaped row below the axe". Matching the tile code
+  // and not merely solidity is what keeps the collapse from eating the far wall
+  // the bridge is anchored to: the wall is ground, the planks are blocks, and
+  // the run ends of its own accord where the code changes.
+  _findBridgeSpan(tx, ty) {
+    const MAX_DROP = 6; // how far below the axe the deck may hang
+    const MAX_SPAN = 24; // never unbuild more than a bridge's worth
+    const MAX_GAP = 2; // the deck may stop a tile or two short of the pillar
+    for (let y = ty; y <= ty + MAX_DROP && y < this.h; y++) {
+      let right = -1;
+      for (let x = tx - 1; x >= tx - 1 - MAX_GAP && x >= 0; x--) {
+        if (this._solidTile(x, y)) {
+          right = x;
+          break;
+        }
+      }
+      if (right < 0) continue;
+      // A deck is something you stand on. A solid tile directly above the right
+      // end means we are reading the face of a wall, not a bridge.
+      if (this._solidTile(right, y - 1)) continue;
+      const code = this._tileCode(right, y);
+      let left = right;
+      while (
+        left > 0 &&
+        right - (left - 1) < MAX_SPAN &&
+        this._tileCode(left - 1, y) === code
+      ) {
+        left--;
+      }
+      if (right - left < 2) continue;
+      return { left, right, y };
+    }
+    return null;
+  }
+
   _startBridgeFall(tx, ty, p) {
-    let x = tx - 1;
-    const limit = Math.max(0, tx - 20);
-    while (x >= limit && !this._solidTile(x, ty)) x--;
-    if (x < limit) return null;
-    const right = x;
-    while (x >= 0 && this._solidTile(x, ty)) x--;
-    const left = x + 1;
-    if (right - left < 2) return null;
+    const span = this._findBridgeSpan(tx, ty);
+    if (!span) return null;
 
     const cols = [];
-    for (let c = right; c >= left; c--) cols.push(c);
-    this._bridge = { cols, y: ty, timer: 0, player: p || null, bowserDropped: false };
+    for (let c = span.right; c >= span.left; c--) cols.push(c);
+    this._bridge = { cols, y: span.y, timer: 0, player: p || null, bowserDropped: false };
     if (p) p.controlsLocked = true;
-
-    // The axe ends the fight, so nothing left on screen may still kill you — a
-    // flame Bowser breathed a moment before you touched it was landing after
-    // you had already won. The boss himself stays, because watching him drop is
-    // the point. Clearing the hazards is better than making Mario invulnerable:
-    // invulnFrames blanks the sprite on odd frames, and he would flicker through
-    // the entire collapse and walk-off.
-    const boss0 = this._bowser();
-    for (const e of this.entities) {
-      if (!e || e.removed || e === boss0) continue;
-      if (e.isPlayer || e === p) continue;
-      if (typeof e.onPlayerTouch === 'function' || e.harmful) e.removed = true;
-    }
 
     // Frame the pair. Mario is at the axe on the right and Bowser is out on the
     // bridge to the left; following Mario alone scrolls the boss off the screen
@@ -1718,9 +1741,31 @@ export class World {
     return this._bridge;
   }
 
+  // Nothing left on screen may still kill you once the axe is struck — a flame
+  // Bowser breathed a moment before you touched it was landing after you had
+  // already won, and the castle's firebars keep turning right through the
+  // walk-off. The boss himself stays, because watching him drop is the point.
+  // Clearing the hazards beats making Mario invulnerable: invulnFrames blanks
+  // the sprite on odd frames, so he would flicker through the whole sequence.
+  _clearHazards(p) {
+    const boss = this._bowser();
+    for (const e of this.entities) {
+      if (!e || e.removed || e === boss) continue;
+      if (e.isPlayer || e === p) continue;
+      if (typeof e.onPlayerTouch === 'function' || e.harmful) e.removed = true;
+    }
+  }
+
   _solidTile(tx, ty) {
     const r = this.recAt(tx, ty);
     return !!(r && r.solid);
+  }
+
+  // Raw map code, so a span can be bounded by "same kind of tile" rather than
+  // by solidity alone. Off-map reads never match anything.
+  _tileCode(tx, ty) {
+    if (tx < 0 || ty < 0 || tx >= this.w || ty >= this.h) return -1;
+    return this.map[ty * this.w + tx];
   }
 
   _bowser() {
@@ -1736,32 +1781,36 @@ export class World {
     const b = this._bridge;
     if (!b) return;
     b.timer++;
-    if (b.timer % 3 !== 0) return;
+    // One plank every fourth frame — RemoveBridge reloads BowserFeetCounter
+    // with $04 between metatile removals.
+    if (b.timer % 4 !== 0) return;
 
     if (b.cols.length) {
       const c = b.cols.shift();
       this.setTile(c, b.y, '.');
       this.fx('brickShards', c * TILE + TILE * 0.5, b.y * TILE + TILE * 0.5);
       this.sfx('block-bump');
-      // Once the planks under him are gone, the boss goes with them.
-      const boss = this._bowser();
-      if (!b.bowserDropped && boss) {
-        const bx = (boss.x + boss.w * 0.5) / TILE;
-        if (c <= bx + 1) {
-          b.bowserDropped = true;
-          this._safe(boss, 'onAxe');
-        }
-      }
       return;
     }
 
-    // Bridge gone. Anything still standing on it falls anyway.
+    // Bridge gone, and only now does the boss go with it: the original waits
+    // for BridgeCollapseOffset to reach the end of the table before it sets
+    // Bowser's defeated state and plays Sfx_BowserFall. He does not sink as the
+    // planks vanish under him — he stands to the last one, then drops.
     const boss = this._bowser();
-    if (!b.bowserDropped && boss) {
+    if (!b.bowserDropped) {
       b.bowserDropped = true;
-      this._safe(boss, 'onAxe');
+      b.fellAt = b.timer;
+      if (boss) this._safe(boss, 'onAxe');
     }
-    if ((b.timer | 0) < 90) return;
+    // The original holds the sequence until Bowser has sunk past $e0, near the
+    // bottom of the screen, and only then silences the music and moves on. Hold
+    // for the drop the same way, with a cap so a castle whose boss is already
+    // gone still finishes.
+    const since = b.timer - (b.fellAt | 0);
+    const sunk = !boss || boss.removed || boss.y >= (b.y + 4) * TILE;
+    if (since < 30) return;
+    if (!sunk && since < 180) return;
     this._bridge = null;
     const p = b.player || this.player;
     if (p) {
