@@ -22,7 +22,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource, skyAreaSource } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -116,37 +116,7 @@ ${note}
   const out = landingNear(rows, 100);
   const body = `
 ${bonusRoomSource('3-1b', 'WORLD 3-1', 4, out, 12)}
-// The sky above the beanstalk at column ${vine.x}. You come down again at column ${back},
-// past the second staircase.
-const SKY = {
-  id: '3-1c',
-  name: 'WORLD 3-1',
-  theme: 'overworld',
-  music: 'bonus',
-  width: 40,
-  height: 15,
-  spawn: { x: 2, y: 10 },
-  tiles: [
-    '........................................',
-    '........................................',
-    '........................................',
-    '........................................',
-    '....oooo....oooo....oooo....oooo........',
-    '...======..======..======..======.......',
-    '........................................',
-    '....oooo....oooo....oooo....oooo........',
-    '...======..======..======..======.......',
-    '........................................',
-    '........................................',
-    'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB[]....',
-    '..................................{}....',
-    '........................................',
-    '........................................',
-  ],
-  entities: [],
-  warps: [{ from: { x: 34, y: 11 }, dir: 'down', to: { area: 'main', x: ${back}.5, y: 12, exit: 'up' } }],
-};
-
+${skyAreaSource('3-1c', 'WORLD 3-1', `{ area: 'main', x: ${back}.5, y: 12, exit: 'up' }`, 'GroundArea21')}
 export default {
   id: '3-1',
   name: 'WORLD 3-1',
@@ -161,7 +131,7 @@ export default {
   tiles: TILES,
   contents: [
 ${contentsBlock(L.contents)}
-    { x: ${vine.x}, y: ${vine.y}, item: 'vine', height: 11, warp: { to: { area: '3-1c', x: 2.5, y: 10, exit: 'none' } } },
+    { x: ${vine.x}, y: ${vine.y}, item: 'vine', height: 11, warp: { to: { area: '3-1c', x: 3.5, y: 12, exit: 'none' } } },
   ],
   entities: [
 ${entsBlock(L.entities)}

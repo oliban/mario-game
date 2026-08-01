@@ -633,12 +633,14 @@ ${r.contents.map((c) => `    ${q(c)},`).join('\n')}
 `;
 }
 
-// The coin heaven above a beanstalk, rendered from GroundArea12 — its header's
-// two MSB are 3, the cloud-block override, so its whole floor is cloud. The
-// original ends it with a ScrollLock and returns you through the pipe you find
-// at the right; we put that pipe at the end of the run of coins.
-export function skyAreaSource(id, name, dest) {
-  const b = buildArea('GroundArea12', { theme: 'overworld' });
+// The coin heaven above a beanstalk. There are TWO of them and they are not
+// interchangeable: 2-1 and 5-2 climb to GroundArea12 ($2b) and 3-1 and 6-2 to
+// GroundArea21 ($34), which each level names in its own row-$0e record. Both
+// have the cloud-block override in their header, so their whole floor is cloud.
+// The original ends them with a ScrollLock and returns you through a pipe; we
+// put that pipe at the end of the run of coins.
+export function skyAreaSource(id, name, dest, areaName = 'GroundArea12') {
+  const b = buildArea(areaName, { theme: 'overworld' });
   // An AlterAreaAttributes partway through drops the terrain to 0, so the cloud
   // floor simply stops. Crop to where it stops — past that there is nothing to
   // stand on and nothing to see.
@@ -649,8 +651,8 @@ export function skyAreaSource(id, name, dest) {
   const px = W - 4;
   g[11][px] = '['; g[11][px + 1] = ']';
   g[12][px] = '{'; g[12][px + 1] = '}';
-  return `// Coin heaven, rendered from GroundArea12 — the area the original's beanstalks
-// climb to. Its floor is cloud block, from the header's cloud-type override.
+  return `// Coin heaven, rendered from ${areaName} — the area THIS level's own enemy
+// stream names. Its floor is cloud block, from the header's cloud-type override.
 const SKY = {
   id: '${id}',
   name: '${name}',

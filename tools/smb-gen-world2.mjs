@@ -10,7 +10,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource, skyAreaSource } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -117,39 +117,10 @@ ${note}
   const ents = L.entities.slice();
   const rows21 = relieveBlocks(L.rows);
   const outCol = landingNear(rows21, 108);
+  const backCol = landingNear(rows21, 128);
   const body = `
 ${bonusRoomSource('2-1b', 'WORLD 2-1', 0, outCol, 12)}
-// The beanstalk brick is at column 83 and the warp pipe at ${warp ? warp.x : '-'} — both the
-// original's positions. The jumpspring before the flagpole is at ${L.meta.springs[0] ? L.meta.springs[0].x : '-'}.
-const SKY = {
-  id: '2-1c',
-  name: 'WORLD 2-1',
-  theme: 'overworld',
-  music: 'bonus',
-  width: 40,
-  height: 15,
-  spawn: { x: 2, y: 10 },
-  tiles: [
-    '........................................',
-    '........................................',
-    '........................................',
-    '........................................',
-    '....oooo....oooo....oooo....oooo........',
-    '...======..======..======..======.......',
-    '........................................',
-    '....oooo....oooo....oooo....oooo........',
-    '...======..======..======..======.......',
-    '........................................',
-    '........................................',
-    'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB[]....',
-    '..................................{}....',
-    '........................................',
-    '........................................',
-  ],
-  entities: [],
-  warps: [{ from: { x: 34, y: 11 }, dir: 'down', to: { area: 'main', x: 128.5, y: 10, exit: 'up' } }],
-};
-
+${skyAreaSource('2-1c', 'WORLD 2-1', `{ area: 'main', x: ${backCol}.5, y: 12, exit: 'up' }`, 'GroundArea12')}
 export default {
   id: '2-1',
   name: 'WORLD 2-1',
@@ -162,7 +133,7 @@ export default {
   tiles: TILES,
   contents: [
 ${L.contents.map((c) => `    ${j(c).replace(/"([a-z]+)":/g, '$1: ').replace(/"/g, "'")},`).join('\n')}
-    { x: 83, y: 5, item: 'vine', height: 11, warp: { to: { area: '2-1c', x: 2.5, y: 10, exit: 'none' } } },
+    { x: 83, y: 5, item: 'vine', height: 11, warp: { to: { area: '2-1c', x: 3.5, y: 12, exit: 'none' } } },
   ],
   entities: [
 ${entsBlock(ents)}

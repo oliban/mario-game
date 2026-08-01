@@ -73,8 +73,8 @@ const BONUS = {
   ],
 };
 
-// Coin heaven, rendered from GroundArea12 — the area the original's beanstalks
-// climb to. Its floor is cloud block, from the header's cloud-type override.
+// Coin heaven, rendered from GroundArea12 — the area THIS level's own enemy
+// stream names. Its floor is cloud block, from the header's cloud-type override.
 const SKY = {
   id: '4-2c',
   name: 'WORLD 4-2',

@@ -142,7 +142,7 @@ ${entsBlock(L.entities)}
   const back = landingNear(rows, vine.x + 40);
   const body = `
 ${bonusRoomSource('6-2b', 'WORLD 6-2', bonusPageFor('6-2'), out, 12)}
-${skyAreaSource('6-2c', 'WORLD 6-2', `{ area: 'main', x: ${back}.5, y: 12, exit: 'up' }`)}
+${skyAreaSource('6-2c', 'WORLD 6-2', `{ area: 'main', x: ${back}.5, y: 12, exit: 'up' }`, 'GroundArea21')}
 export default {
   id: '6-2',
   name: 'WORLD 6-2',
