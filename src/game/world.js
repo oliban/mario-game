@@ -106,6 +106,10 @@ export const LEGEND = {
   },
   o: { name: 'coin', solid: false, coin: true },
   B: { name: 'block', solid: true },
+  // Coin heaven's floor and its brick rows are the same tile in the original —
+  // metatile $88, which has its own art rather than being a recoloured brick.
+  // Solid, and nothing else: no bump, no break, no contents.
+  O: { name: 'cloud-block', solid: true },
   S: { name: 'stair', solid: true },
   '[': { name: 'pipe_tl', solid: true, pipe: true },
   ']': { name: 'pipe_tr', solid: true, pipe: true },
@@ -153,6 +157,7 @@ const ART_NAMES = {
   C: ['invisible', 'hidden', 'invisibleblock', 'hiddenblock'],
   o: ['coin', 'cointile', 'freecoin', 'spinningcoin'],
   B: ['stone', 'solidblock', 'hardblock', 'block', 'rock'],
+  O: ['cloud-block', 'cloudblock', 'cloud-terrain'],
   S: ['stair', 'staircase', 'stairblock', 'stone', 'solidblock', 'block'],
   '[': ['pipetopleft', 'pipetl', 'pipelipleft'],
   ']': ['pipetopright', 'pipetr', 'pipelipright'],

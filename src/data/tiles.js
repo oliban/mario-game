@@ -1161,6 +1161,41 @@ const R_CORAL = coralRows();
 // outline is the only thing telling the player they can pass through it.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// CLOUD BLOCK — the floor of coin heaven, and its bricks too. In the original
+// this is metatile $88, "cloud level terrain", with four CHR tiles of its own
+// ($b0-$b3) — not the brick in another palette, which is why nothing we already
+// had could stand in for it. BrickMetatiles' fifth entry is $88 as well, chosen
+// when CloudTypeOverride is set, so in those areas the floor AND every row of
+// bricks are this one tile. It is the only thing in the room.
+//
+// Solid, and deliberately drawn as solid: puffed lobes along the top and a flat
+// shadowed underside, so it reads as something you stand ON rather than
+// something you pass through. The one-way platform is the tile that has to look
+// permeable, and it does that with a broken outline; this must not borrow it.
+// ---------------------------------------------------------------------------
+
+const CLOUD_PAL = ['#3050a0', '#6a90d8', '#b8d4f4', '#e8f4ff', '#ffffff'];
+
+const R_CLOUD_BLOCK = [
+  '..333..3333..33.',
+  '.34443344444.344',
+  '3444444444444444',
+  '4444444444444444',
+  '4444444444444444',
+  '3444444444444444',
+  '3344444444444444',
+  '2334444444444444',
+  '2223344444444443',
+  '2222233444444332',
+  '1222222333443322',
+  '1122222222222222',
+  '0112222222222221',
+  '0011122222222111',
+  '0001111111111110',
+  '0000000000000000',
+];
+
 const R_PLATFORM = [
   '0033330000333300',
   '4444444444444444',
@@ -1394,6 +1429,8 @@ export const TID = {
   // capped top step of a staircase. Both are the same collision class as the tile
   // they cap, so a level can adopt them by swapping a character.
   LAVA_SURF: 36, STAIR_TOP: 37,
+  // Coin heaven's floor and bricks alike; see R_CLOUD_BLOCK.
+  CLOUD_BLOCK: 38,
 };
 
 // ---------------------------------------------------------------------------
@@ -1481,6 +1518,8 @@ function buildTheme(theme) {
   // On TIMBER, not BRICK: a block that hands you a beanstalk must not ship the
   // exact palette of the block you are meant to smash.
   t[TID.VINE_BLOCK] = S(R_VINE_BLOCK, pal(timber, ...VINE_INK), 'vine-block');
+  // Not themed: a cloud area is a cloud area whatever theme it declares.
+  t[TID.CLOUD_BLOCK] = S(R_CLOUD_BLOCK, CLOUD_PAL, 'cloud-block');
 
   return {
     tiles: t,
@@ -1686,6 +1725,7 @@ export const T_PLATFORM = OW[TID.PLATFORM];
 export const T_CANNON_BARREL = OW[TID.CANNON_BARREL];
 export const T_CANNON_BASE = OW[TID.CANNON_BASE];
 export const T_VINE_BLOCK = OW[TID.VINE_BLOCK];
+export const T_CLOUD_BLOCK = OW[TID.CLOUD_BLOCK];
 
 // ---------------------------------------------------------------------------
 // tile table
@@ -1748,6 +1788,7 @@ export const TILES = {
     name: 'vine-block', solid: true, sprite: T_VINE_BLOCK, question: true,
     contains: 'vine', becomes: 7,
   },
+  38: { name: 'cloud-block', solid: true, sprite: T_CLOUD_BLOCK },
   28: { name: 'coin', solid: false, sprite: null, coin: true },
   29: { name: 'axe', solid: false, sprite: null, decor: true },
   30: { name: 'tree', solid: false, sprite: null, decor: true },
