@@ -1995,6 +1995,13 @@ export default class Player extends EntityBase {
       this._clip = { axis: 'y', at: tile.y * TILE + 1, side: 'above' };
     } else if (d === 'down') {
       step = { dx: 0, dy: (this.h + 8) / P.pipeFrames };
+      // Start ABOVE the settled position and descend into it, mirroring 'up'.
+      // Without this the walk begins wherever the world already stood him — on
+      // the floor — and then travels h+8 px DOWN with collision disabled, which
+      // buried him to the shoulders and soft-locked the level: he could not
+      // walk, jump or leave. Every `exit: 'down'` destination in the game did
+      // this, thirteen of them, including three of the four warp zones.
+      this.y -= this.h + 8;
       this._clip = { axis: 'y', at: (tile.y + 1) * TILE, side: 'below' };
     } else if (d === 'right') {
       this.facing = 1;
