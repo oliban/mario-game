@@ -38,7 +38,7 @@ const GROUPS = {
   0x3d: ['koopa:green', 2, 10], 0x3e: ['koopa:green', 2, 6],
 };
 
-export function buildArea(levelId) {
+export function buildArea(levelId, opts = {}) {
   const entry = REF.levelMap[levelId];
   const area = REF.areas[entry.area];
   const objs = decodeObjects(area.objectBytes);
@@ -66,16 +66,35 @@ export function buildArea(levelId) {
     [0b11110001, 0b00011111], [0b11111001, 0b00011000], [0b11110001, 0b00011000],
     [0b11111111, 0b00011111],
   ];
-  const bits = TERRAIN[terrain] || TERRAIN[1];
-  const solidRow = (smbRow) =>
-    smbRow < 8 ? (bits[0] >> smbRow) & 1 : (bits[1] >> (smbRow - 8)) & 1;
-  for (let r = 0; r <= 12; r++) {
-    if (!solidRow(r)) continue;
-    for (let x = 0; x < width; x++) put(x, ROW(r), '#');
+
+  // Terrain is not one setting for the level: AlterAreaAttributes (row 14)
+  // rewrites TerrainControl from its own column onward. That is what makes 2-3
+  // a bridge level — it switches to terrain 0, no floor at all, at column 6 —
+  // and what opens the lava lake before Bowser's bridge in 2-4.
+  const schedule = [{ x: 0, t: terrain }];
+  for (const o of objs) {
+    if (o.index !== 46) continue;
+    if (o.b1 & 0x40) continue; // foreground/colour variant, not terrain
+    schedule.push({ x: o.x, t: o.b1 & 0x0f });
   }
-  // Our field is two rows taller than the original's, so whatever the terrain
-  // put on its bottom row continues to the bottom of ours.
-  if (solidRow(12)) for (let x = 0; x < width; x++) fillCol(x, ROW(12), H - 1, '#');
+  schedule.sort((a, b) => a.x - b.x);
+  const terrainAt = (x) => {
+    let t = schedule[0].t;
+    for (const s of schedule) {
+      if (s.x > x) break;
+      t = s.t;
+    }
+    return t;
+  };
+  const lethal = opts.theme === 'castle' ? 'L' : '.';
+  for (let x = 0; x < width; x++) {
+    const bits = TERRAIN[terrainAt(x)] || TERRAIN[1];
+    const solidRow = (r) => (r < 8 ? (bits[0] >> r) & 1 : (bits[1] >> (r - 8)) & 1);
+    for (let r = 0; r <= 12; r++) if (solidRow(r)) put(x, ROW(r), '#');
+    if (solidRow(12)) fillCol(x, ROW(12), H - 1, '#');
+    // A castle with no floor here is a lava lake, not a clean drop.
+    else if (lethal === 'L') fillCol(x, H - 3, H - 1, 'L');
+  }
 
   const meta = { pipes: [], flagpole: null, castle: null, axe: null, springs: [], vine: null, warpPipe: null };
   const contents = [];
@@ -187,7 +206,7 @@ if (process.argv[1] && process.argv[1].endsWith('smb-build.mjs')) {
 
 // --- level module emitter -------------------------------------------------
 export function emitLevel(id, opts = {}) {
-  const b = buildArea(id);
+  const b = buildArea(id, opts);
   const rows = b.tiles.slice();
   const W = b.width;
 

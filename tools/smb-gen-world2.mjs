@@ -70,30 +70,29 @@ function findSpawn(rows) {
 // leap; rendering it as plain stone made them erupt out of bedrock. Each one
 // gets a three-wide pool, which is inside a running jump exactly as 1-4's are,
 // and is re-seated on the lava surface.
-function lavaForPodoboos(rows, ents) {
+function seatPodoboos(rows, ents) {
+  // Terrain now supplies the lava (a castle with no floor is a lake), so the
+  // podoboos only need seating on its surface rather than pools of their own.
   const g = rows.map((r) => r.split(''));
-  // Walk UP from the bottom to the first gap; scanning down from the top finds
-  // the castle CEILING and buries the lava in it.
-  let floorTop = g.length;
-  for (let y = g.length - 1; y >= 0; y--) {
-    if (!'#B'.includes(g[y][8])) break;
-    floorTop = y;
-  }
   for (const e of ents) {
     if (e.type !== 'podoboo') continue;
-    for (let x = e.x - 1; x <= e.x + 1; x++) {
-      if (x < 0 || x >= g[0].length) continue;
-      for (let y = floorTop; y < g.length; y++) g[y][x] = 'L';
+    let top = g.length - 1;
+    for (let y = 0; y < g.length; y++) {
+      if (g[y][e.x] === 'L') { top = y; break; }
     }
-    e.y = floorTop;
+    e.y = top;
   }
-  // An item block inside the ceiling band has nothing to stand under it; drop
-  // it to a jump's height above the floor.
+  // An item block with nothing standable under it drops to a jump's height
+  // above the nearest ground in its column.
+  const SOLID2 = new Set(['#', 'B', '=', 'S', 'U']);
   const ITEMS = new Set(['?', 'M', '1', 'C']);
-  for (let y = 0; y < floorTop - 4; y++) {
+  for (let y = 0; y < g.length; y++) {
     for (let x = 0; x < g[y].length; x++) {
       if (!ITEMS.has(g[y][x])) continue;
-      const ty = floorTop - 4;
+      let ground = -1;
+      for (let k = y + 1; k < g.length; k++) if (SOLID2.has(g[k][x])) { ground = k; break; }
+      if (ground < 0 || ground - y <= 4) continue;
+      const ty = ground - 4;
       if (g[ty][x] !== '.') continue;
       g[ty][x] = g[y][x];
       g[y][x] = '.';
@@ -288,7 +287,7 @@ ${entsBlock(ents)}
 {
   const L = emitLevel('2-4', { theme: 'castle' });
   const ents = L.entities.slice();
-  const T24 = lavaForPodoboos(relieveBlocks(L.rows), ents);
+  const T24 = seatPodoboos(relieveBlocks(L.rows), ents);
   const SP24 = findSpawn(T24);
   const body = `
 export default {

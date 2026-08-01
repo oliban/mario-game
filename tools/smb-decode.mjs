@@ -171,6 +171,7 @@ export function decodeObjects(bytes) {
       row,
       index,
       param,
+      b1, // raw, because AlterAreaAttributes needs d6 and d5-d4 as well as the low nybble
       name: OBJECTS[index] || `obj#${index}`,
     });
     pageSel = false;
