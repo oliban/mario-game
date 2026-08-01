@@ -58,10 +58,22 @@ export function enemyMaxFall() {
   return PHYS.enemyMaxFall;
 }
 
-// Shell-chain scoring, matching the stomp chain the world uses.
+// The floatey-number table (smbdis.asm:1262 FloateyNumTileData), indexed from
+// zero. Matches STOMP_SCORES in ../player.js entry for entry.
 export function chainScore(i) {
   const CHAIN = [100, 200, 400, 500, 800, 1000, 2000, 4000, 5000, 8000];
   return CHAIN[Math.min(i | 0, CHAIN.length - 1)];
+}
+
+// A kicked shell mowing enemies down starts four table entries in, not at the
+// top: ShellCollisions (smbdis.asm:11642) does `lda ShellChainCounter,x /
+// adc #$04`, so the chain runs 500, 800, 1000, 2000, 4000, 5000, 8000. Past
+// that FloateyNumbersRoutine (smbdis.asm:1283) clamps the index at $0b, the
+// 1-UP entry, which keeps paying a life for every further enemy.
+// world.addScore() turns the '1UP' sentinel into a life.
+export function shellChainScore(i) {
+  const j = (i | 0) + 3;
+  return j > 9 ? '1UP' : chainScore(j);
 }
 
 // ---------------------------------------------------------------------------
@@ -231,6 +243,12 @@ export function spawnAt(world, type, x, y, opts) {
 
 // The standard non-stomp death: pop up, flip onto its back, tumble away.
 // Entity.kill() owns the corpse physics; this adds the feedback around it.
+//
+// `score` is per killer, and the original does not use one value for all of
+// them: a fire or shell kill pays ShellOrBlockDefeat's 200 (100 goomba, 1000
+// hammer bro, smbdis.asm:11172), while a block bumped out from under an enemy
+// pays GiveOEPoints' flat 100 for every enemy alike (smbdis.asm:12451). Keep
+// the onBlockBump/onBumped handlers at 100 across the roster.
 export function enemyDie(e, style, by, score) {
   if (e.dead) return false;
   e.kill(style === 'fireball' ? 'fireball' : 'shell', by || null);

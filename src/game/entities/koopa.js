@@ -118,7 +118,7 @@ export default class Koopa extends Entity {
 
   onFireball(fb) {
     if (this.dead) return false;
-    enemyDie(this, 'fireball', fb, 100);
+    enemyDie(this, 'fireball', fb, 200);
     return true;
   }
 

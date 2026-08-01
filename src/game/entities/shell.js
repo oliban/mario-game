@@ -10,6 +10,7 @@ import {
   spawnAt,
   addScore,
   chainScore,
+  shellChainScore,
   shellSpeed,
   enemyGravity,
   enemyMaxFall,
@@ -110,7 +111,7 @@ export default class Shell extends Entity {
       if (!o || o === this || o.removed || o.dead) continue;
       if (!o.isEnemy || o.shellProof) continue;
       if (typeof o.onShell !== 'function' || !this.hits(o)) continue;
-      const pts = chainScore(this.chain++);
+      const pts = shellChainScore(this.chain++);
       o.onShell(this);
       addScore(this.world, pts, o.centerX, o.y);
       sfx(this.world, 'kick');
@@ -194,13 +195,18 @@ export default class Shell extends Entity {
     let dir = player && player.centerX > this.centerX ? -1 : 1;
     if (player && Math.abs(player.vx || 0) > 0.15) dir = player.vx > 0 ? 1 : -1;
     this.kick(dir);
+    // The kick itself scores: HandlePECollisions (smbdis.asm:11366) does
+    // `lda #$03 / adc StompChainCounter`, so a fresh chain pays 400. Only the
+    // side-kick pays — a shell kicked by landing on it is already covered by
+    // the stomp chain the world awards.
+    addScore(this.world, chainScore(2 + (player ? player.stompChain | 0 : 0)), this.centerX, this.y);
   }
 
   onFireball(fb) {
     if (this.dead) return false;
     // The buzzy beetle's armour shrugs fire off even as a shell.
     if (this.variant === 'buzzy') return false;
-    enemyDie(this, 'fireball', fb, 100);
+    enemyDie(this, 'fireball', fb, 200);
     return true;
   }
 

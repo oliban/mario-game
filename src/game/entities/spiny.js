@@ -198,11 +198,11 @@ export default class Spiny extends Entity {
   }
 
   onBlockBump(tx, ty, by) {
-    enemyDie(this, 'shell', by, 200);
+    enemyDie(this, 'shell', by, 100);
   }
 
   onBumped(from) {
-    enemyDie(this, 'shell', from, 200);
+    enemyDie(this, 'shell', from, 100);
   }
 }
 

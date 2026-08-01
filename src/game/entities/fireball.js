@@ -153,14 +153,14 @@ export default class Fireball extends Entity {
       if (!(this.x < e.x + e.w && this.x + this.w > e.x && this.y < e.y + e.h && this.y + this.h > e.y)) {
         continue;
       }
-      let killed = false;
+      // The handler owns the score. ShellOrBlockDefeat (smbdis.asm:11172) awards
+      // exactly one floatey number per burned enemy, and every onFireball()
+      // already pays it through enemyDie(); adding a second award here stacked a
+      // flat 100 on top of it and drew two popups.
       try {
-        killed = e.onFireball(this) !== false;
+        e.onFireball(this);
       } catch (err) {
-        killed = false;
-      }
-      if (killed && this.world && typeof this.world.addScore === 'function') {
-        this.world.addScore(e.fireScore || 100, e.x, e.y);
+        /* a broken handler must not eat the ball */
       }
       this.explode();
       return true;
