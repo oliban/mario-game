@@ -21,6 +21,8 @@
 //         | ^ flagpole  X castle  t b h c decor
 // ---------------------------------------------------------------------------
 
+import { ORDER } from './roster.js';
+
 const TILES = [
   '....................................................................................................................................................................................................................',
   '....................................................................................................................................................................................................................',
@@ -81,51 +83,78 @@ const BONUS = {
 // behind a ceiling run or a vine; this one is deliberately on the very first
 // pipe, because its job is to get a tester into any level in two seconds.
 //
-// Each pipe is a two-tile stub standing on the floor at row 11, and the label
-// above it is a `signs` entry — level text painted into world space, which is
-// how SMB writes its world numbers onto the warp-zone backdrop.
-const WARP = {
-  id: '1-1w',
-  name: 'WARP ZONE',
-  theme: 'underground',
-  music: 'underground',
-  width: 26,
-  height: 15,
-  spawn: { x: 2, y: 10 },
-  tiles: [
-    '##########################',
-    '##########################',
-    '##[]######################',
-    '#.{}.....................#',
-    '#........................#',
-    '#........................#',
-    '#........................#',
-    '#........................#',
-    '#........................#',
-    '#........................#',
-    '#........................#',
-    '#....[]..[]..[]..[]..[]..#',
-    '#....{}..{}..{}..{}..{}..#',
-    '##########################',
-    '##########################',
-  ],
-  entities: [],
-  signs: [
-    { x: 5.75, y: 5, text: 'WARP ZONE' },
-    { x: 5.25, y: 9, text: '1-1' },
-    { x: 9.25, y: 9, text: '2-1' },
-    { x: 13.25, y: 9, text: '2-2' },
-    { x: 17.25, y: 9, text: '2-3' },
-    { x: 21.25, y: 9, text: '2-4' },
-  ],
-  warps: [
-    { from: { x: 5, y: 11 }, dir: 'down', to: { level: '1-1' } },
-    { from: { x: 9, y: 11 }, dir: 'down', to: { level: '2-1' } },
-    { from: { x: 13, y: 11 }, dir: 'down', to: { level: '2-2' } },
-    { from: { x: 17, y: 11 }, dir: 'down', to: { level: '2-3' } },
-    { from: { x: 21, y: 11 }, dir: 'down', to: { level: '2-4' } },
-  ],
-};
+// It is BUILT from the roster rather than written out, so every level that
+// exists has a pipe here and a new world needs no edit to this file. Each pipe
+// is a two-tile stub on the floor at row 11 and the label above it is a `signs`
+// entry — level text painted into world space, the way SMB writes its world
+// numbers onto the warp-zone backdrop.
+const WZ_FIRST = 5; // column of the first pipe
+const WZ_STEP = 4; // columns between pipe left edges
+
+function buildWarpZone(order) {
+  const width = WZ_FIRST + order.length * WZ_STEP + 2;
+  const pipeCols = order.map((_, i) => WZ_FIRST + i * WZ_STEP);
+  const blank = (fill) => fill.repeat(width);
+  const room = (mid) => '#' + mid + '#';
+  const open = () => room('.'.repeat(width - 2));
+
+  const pipeRow = (left, right) => {
+    const row = '.'.repeat(width).split('');
+    for (const c of pipeCols) {
+      row[c] = left;
+      row[c + 1] = right;
+    }
+    row[0] = '#';
+    row[width - 1] = '#';
+    return row.join('');
+  };
+
+  const tiles = [
+    blank('#'),
+    blank('#'),
+    '##[]' + '#'.repeat(width - 4),
+    '#.{}' + '.'.repeat(width - 5) + '#',
+    open(),
+    open(),
+    open(),
+    open(),
+    open(),
+    open(),
+    open(),
+    pipeRow('[', ']'),
+    pipeRow('{', '}'),
+    blank('#'),
+    blank('#'),
+  ];
+
+  const title = 'WARP ZONE';
+  const signs = [{ x: (width - title.length) / 2, y: 5, text: title }];
+  for (let i = 0; i < order.length; i++) {
+    // Centre the three-glyph label on the two-tile pipe: 24px of text over 32px
+    // of pipe leaves 4px, which is a quarter of a tile.
+    signs.push({ x: pipeCols[i] + 0.25, y: 9, text: order[i] });
+  }
+
+  return {
+    id: '1-1w',
+    name: 'WARP ZONE',
+    theme: 'underground',
+    music: 'underground',
+    width,
+    height: 15,
+    spawn: { x: 2, y: 10 },
+    tiles,
+    entities: [],
+    signs,
+    warps: order.map((id, i) => ({
+      from: { x: pipeCols[i], y: 11 },
+      dir: 'down',
+      to: { level: id },
+    })),
+  };
+}
+
+const WARP = buildWarpZone(ORDER);
 
 export default {
   id: '1-1',

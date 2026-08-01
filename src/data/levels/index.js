@@ -32,7 +32,8 @@ export const LEVELS = {
   '2-4': L24,
 };
 
-export const ORDER = ['1-1', '1-2', '1-3', '1-4', '2-1', '2-2', '2-3', '2-4'];
+export { ORDER } from './roster.js';
+import { ORDER } from './roster.js';
 
 function normalize(id) {
   if (id == null) return null;
