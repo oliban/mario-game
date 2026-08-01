@@ -86,19 +86,32 @@ const BONUS = {
 // which is the opposite of what the room is for. Eight per row keeps it at 39
 // columns, the width it had when there were only eight levels, and puts the
 // first sixteen on screen at once.
+// THE WARP ZONE — two floors in one room.
 //
-// Each row is a ledge with the pipes set FLUSH into it, so you walk along and
-// press down; the label sits one row above. The ledges alternate which end they
-// leave open, so you drop from one to the next in a zig-zag, and three rows is
-// inside a jump so you can always climb back.
-const WZ_FIRST = 5; // column of the first pipe in a row
+// Its whole job is getting a tester into any level in seconds, and it has been
+// through three shapes to get there. One long row of 32 was 135 columns, eight
+// screens of walking. Four stacked ledges fitted on a screen but you could only
+// ever fall DOWNWARD between them, so the top floor was a one-way trip and half
+// the room was unreachable in practice.
+//
+// So: two floors, and you move freely between them. The lower floor is solid
+// ground carrying worlds 1-4; the upper pipes are bare lips with two-tile gaps
+// between them, three rows up — inside a jump, so you hop up to any of worlds
+// 5-8 and drop back down through any gap. You arrive on the lower floor at the
+// far left, so world 1 is the first thing you can reach.
+//
+// Pipes are LIP ONLY. A pipe body hangs into the headroom of whatever is below
+// it, and big Mario is two tiles tall; bodies here stopped him dead at the first
+// pipe of every row.
+const WZ_FIRST = 5; // column of the first pipe on a floor
 const WZ_STEP = 4; // columns between pipe left edges
-const WZ_PER_ROW = 8; // pipes per ledge
-const WZ_ROWS = [4, 7, 10, 13]; // ledge rows, top to bottom
+const WZ_PER_ROW = 16; // pipes per floor
+const WZ_LOWER = 12; // the solid floor
+const WZ_UPPER = 9; // bare lips, three rows above it
 
 function buildWarpZone(order) {
-  const rows = [];
-  for (let i = 0; i < order.length; i += WZ_PER_ROW) rows.push(order.slice(i, i + WZ_PER_ROW));
+  const lower = order.slice(0, WZ_PER_ROW);
+  const upper = order.slice(WZ_PER_ROW);
   const width = WZ_FIRST + WZ_PER_ROW * WZ_STEP + 2;
   const colOf = (i) => WZ_FIRST + i * WZ_STEP;
 
@@ -111,59 +124,42 @@ function buildWarpZone(order) {
   for (let x = 0; x < width; x++) {
     put(x, 0, '#');
     put(x, 1, '#');
+    put(x, 13, '#');
     put(x, 14, '#');
   }
-  for (let y = 2; y < 14; y++) {
+  for (let y = 2; y < 13; y++) {
     put(0, y, '#');
     put(width - 1, y, '#');
   }
-  // The pipe you arrive through, set INTO the ceiling at the top left. Only its
-  // lip is drawn: a body hanging into row 2 would put big Mario's head inside it
-  // where the warp sets him down.
+  // The pipe you arrive through, set into the ceiling. Only its lip is drawn: a
+  // body hanging into row 2 would put big Mario's head inside it.
   put(2, 1, '[');
   put(3, 1, ']');
 
+  // Lower floor: solid, so you can walk the whole length of worlds 1-4.
+  for (let x = 1; x < width - 1; x++) put(x, WZ_LOWER, '#');
+
+  // Upper floor: ONE-WAY platforms. A solid ledge three rows up cannot be got
+  // onto from a flat floor — jumping under it just bumps your head, and a bare
+  // two-tile lip is too small to land on while drifting. A one-way platform is
+  // the piece that makes both directions work: you jump straight up THROUGH it
+  // anywhere and land on top, and the holes punched in it let you drop back.
+  for (let x = 1; x < width - 1; x++) put(x, WZ_UPPER, x % 8 === 3 ? '.' : 'P');
+
   const signs = [];
   const warps = [];
-  rows.forEach((ids, r) => {
-    const ly = WZ_ROWS[r];
-    // Full-width ledge. The earlier layout alternated which end was open and let
-    // you FALL to the next row, which stranded most of the room: you land at the
-    // right-hand end, and the camera never scrolls back, so the six pipes to your
-    // left are unreachable. Only 14 of 32 could be entered.
-    if (ly < 14) for (let x = 1; x < width - 1; x++) put(x, ly, '#');
+  const place = (ids, row) =>
     ids.forEach((id, i) => {
       const c = colOf(i);
-      // LIP ONLY. A pipe body one row below its lip hangs into the headroom of
-      // the ledge underneath, and big Mario is two tiles tall — he was stopped
-      // dead at the first pipe of every row below the top one, while small
-      // Mario walked on. Same reason the arrival pipe in the ceiling is a lip.
-      put(c, ly, '[');
-      put(c + 1, ly, ']');
+      put(c, row, '[');
+      put(c + 1, row, ']');
       // Centre the three-glyph label on the two-tile pipe: 24px of text over
       // 32px of pipe leaves 4px, which is a quarter of a tile.
-      signs.push({ x: c + 0.25, y: ly - 1, text: id });
-      warps.push({ from: { x: c, y: ly }, dir: 'down', to: { level: id } });
+      signs.push({ x: c + 0.25, y: row - 1, text: id });
+      warps.push({ from: { x: c, y: row }, dir: 'down', to: { level: id } });
     });
-
-    // Descent pipe at the far end, warping to the LEFT end of the next ledge.
-    // It has to be a warp rather than a hole: falling puts you at the right-hand
-    // end of the row below, and walking back left is exactly what the camera
-    // forbids. Taking a warp re-seats the camera, which is what makes the next
-    // row walkable from its start.
-    const next = WZ_ROWS[r + 1];
-    if (next != null && next < 14) {
-      const dc = width - 4;
-      put(dc, ly, '[');
-      put(dc + 1, ly, ']');
-      signs.push({ x: dc + 0.5, y: ly - 1, text: 'V' });
-      warps.push({
-        from: { x: dc, y: ly },
-        dir: 'down',
-        to: { area: '1-1w', x: 2.5, y: next - 1, exit: 'none' },
-      });
-    }
-  });
+  place(lower, WZ_LOWER);
+  place(upper, WZ_UPPER);
 
   return {
     id: '1-1w',
