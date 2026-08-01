@@ -65,6 +65,43 @@ function findSpawn(rows) {
   return { x: 2, y: 12 };
 }
 
+
+// Podoboos are lava bubbles. The original's castle floor is lava where they
+// leap; rendering it as plain stone made them erupt out of bedrock. Each one
+// gets a three-wide pool, which is inside a running jump exactly as 1-4's are,
+// and is re-seated on the lava surface.
+function lavaForPodoboos(rows, ents) {
+  const g = rows.map((r) => r.split(''));
+  // Walk UP from the bottom to the first gap; scanning down from the top finds
+  // the castle CEILING and buries the lava in it.
+  let floorTop = g.length;
+  for (let y = g.length - 1; y >= 0; y--) {
+    if (!'#B'.includes(g[y][8])) break;
+    floorTop = y;
+  }
+  for (const e of ents) {
+    if (e.type !== 'podoboo') continue;
+    for (let x = e.x - 1; x <= e.x + 1; x++) {
+      if (x < 0 || x >= g[0].length) continue;
+      for (let y = floorTop; y < g.length; y++) g[y][x] = 'L';
+    }
+    e.y = floorTop;
+  }
+  // An item block inside the ceiling band has nothing to stand under it; drop
+  // it to a jump's height above the floor.
+  const ITEMS = new Set(['?', 'M', '1', 'C']);
+  for (let y = 0; y < floorTop - 4; y++) {
+    for (let x = 0; x < g[y].length; x++) {
+      if (!ITEMS.has(g[y][x])) continue;
+      const ty = floorTop - 4;
+      if (g[ty][x] !== '.') continue;
+      g[ty][x] = g[y][x];
+      g[y][x] = '.';
+    }
+  }
+  return g.map((r) => r.join(''));
+}
+
 const j = (v) => JSON.stringify(v);
 const tilesBlock = (rows) => 'const TILES = [\n' + rows.map((r) => `  '${r}',\n`).join('') + '];\n';
 const entsBlock = (ents) =>
@@ -251,7 +288,7 @@ ${entsBlock(ents)}
 {
   const L = emitLevel('2-4', { theme: 'castle' });
   const ents = L.entities.slice();
-  const T24 = relieveBlocks(L.rows);
+  const T24 = lavaForPodoboos(relieveBlocks(L.rows), ents);
   const SP24 = findSpawn(T24);
   const body = `
 export default {
@@ -274,7 +311,7 @@ ${entsBlock(ents)}
   writeFileSync(
     join(OUT, '2-4.js'),
     header('2-4 — castle', "// Bowser at 135, the bridge at 128 and the axe at 141 are the original's.") +
-      tilesBlock(relieveBlocks(L.rows)) +
+      tilesBlock(T24) +
       body
   );
 }
