@@ -446,7 +446,15 @@ class Game {
   render() {
     if (this.fatal) return;
     try {
-      const sky = renderer.skyColor(this.world && this.world.theme);
+      // A level may override the sky without changing its theme. The original
+      // picks the backdrop from a palette index, not from the area type: with
+      // BackgroundColorCtrl at 4 or more it selects black, which is how 3-1,
+      // 3-2 and 3-3 are night while still being ordinary overworld levels.
+      // Overriding the sky alone keeps every tile, prop and animation resolving
+      // through the existing theme tables. Read off `level` rather than the
+      // root, so a sub-area can differ from the level that contains it.
+      const lvl = this.world && this.world.level;
+      const sky = renderer.skyColor((lvl && lvl.sky) || (this.world && this.world.theme));
       renderer.beginFrame(sky);
       if (this.world && this.world.level) this.world.submit(renderer);
       if (this.started && !screens.hudOwned) {

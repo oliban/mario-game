@@ -20,7 +20,10 @@ export const SKY = {
   castle: '#000000',
   water: '#2038ec',
   athletic: '#5c94fc',
-  night: '#0d1b3e',
+  // The original's night sky is not a dark blue: BackgroundColors selects $0f,
+  // which is black, and 3-1, 3-2 and 3-3 all resolve to it. This was '#0d1b3e'
+  // and unused by anything; matching the original is the point of the exercise.
+  night: '#000000',
 };
 
 // Shared ink colors so every art module outlines consistently.
