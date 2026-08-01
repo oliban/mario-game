@@ -282,11 +282,18 @@ function stompBounceFor(held) {
 // hitboxes / scoring
 // ---------------------------------------------------------------------------
 
+// A crouching big player is exactly as short as a small one — not a compromise
+// between the two. BoundBoxCtrlData entry 2 (big crouching) is $02,$14,$0e,$20,
+// byte for byte the same box as entry 1 (small), and ChkCollSize takes the same
+// branch for crouching as for small when it picks the BACKGROUND collision
+// offset. So a one-tile gap admits a ducking big player, which is why you can
+// slide under a low brick run. _unduck() already refuses to stand back up while
+// something is overhead, so he stays down until it is clear.
 export const HITBOX = {
   W: 12,
   SMALL_H: 16,
   BIG_H: 32,
-  DUCK_H: 24,
+  DUCK_H: 16,
 };
 
 // One stomp/shell chain table for the whole game. world.js (STOMP_CHAIN) and
