@@ -150,13 +150,14 @@ function buildWarpZone(order) {
   put(3, 1, ']');
 
   const signs = [];
+  const warps = [];
   rows.forEach((ids, r) => {
     const ly = WZ_ROWS[r];
-    // Open end alternates so the drop to the next ledge is always ahead of you.
-    const openRight = r % 2 === 0;
-    const x0 = openRight ? 1 : 4;
-    const x1 = openRight ? width - 5 : width - 2;
-    if (ly < 14) for (let x = x0; x < x1; x++) put(x, ly, '#');
+    // Full-width ledge. The earlier layout alternated which end was open and let
+    // you FALL to the next row, which stranded most of the room: you land at the
+    // right-hand end, and the camera never scrolls back, so the six pipes to your
+    // left are unreachable. Only 14 of 32 could be entered.
+    if (ly < 14) for (let x = 1; x < width - 1; x++) put(x, ly, '#');
     ids.forEach((id, i) => {
       const c = colOf(i);
       put(c, ly, '[');
@@ -168,7 +169,28 @@ function buildWarpZone(order) {
       // Centre the three-glyph label on the two-tile pipe: 24px of text over
       // 32px of pipe leaves 4px, which is a quarter of a tile.
       signs.push({ x: c + 0.25, y: ly - 1, text: id });
+      warps.push({ from: { x: c, y: ly }, dir: 'down', to: { level: id } });
     });
+
+    // Descent pipe at the far end, warping to the LEFT end of the next ledge.
+    // It has to be a warp rather than a hole: falling puts you at the right-hand
+    // end of the row below, and walking back left is exactly what the camera
+    // forbids. Taking a warp re-seats the camera, which is what makes the next
+    // row walkable from its start.
+    const next = WZ_ROWS[r + 1];
+    if (next != null && next < 14) {
+      const dc = width - 4;
+      put(dc, ly, '[');
+      put(dc + 1, ly, ']');
+      put(dc, ly + 1, '{');
+      put(dc + 1, ly + 1, '}');
+      signs.push({ x: dc + 0.5, y: ly - 1, text: 'V' });
+      warps.push({
+        from: { x: dc, y: ly },
+        dir: 'down',
+        to: { area: '1-1w', x: 2.5, y: next - 1, exit: 'none' },
+      });
+    }
   });
 
   return {
@@ -182,9 +204,7 @@ function buildWarpZone(order) {
     tiles: g.map((r) => r.join('')),
     entities: [],
     signs,
-    warps: rows.flatMap((ids, r) =>
-      ids.map((id, i) => ({ from: { x: colOf(i), y: WZ_ROWS[r] }, dir: 'down', to: { level: id } }))
-    ),
+    warps,
   };
 }
 
