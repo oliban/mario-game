@@ -300,7 +300,25 @@ export const HITBOX = {
 // entities/index.js (chainScore) must award exactly these values at the same
 // indices; past the end of the table the chain pays a 1-UP instead.
 export const STOMP_SCORES = [100, 200, 400, 500, 800, 1000, 2000, 4000, 5000, 8000];
-export const FLAGPOLE_SCORES = [5000, 2000, 800, 400, 200, 100];
+// Flagpole bands, in the original's order (FlagpoleScoreMods / FlagpoleScoreDigits,
+// smbdis.asm:6573-6577): $05/$02 at digit 3 and $08/$04/$01 at digit 4. FIVE bands
+// — there is no 200-point flagpole in SMB. Selected by absolute player Y against
+// FLAGPOLE_Y_OFFSETS below, not by fractions of the pole.
+export const FLAGPOLE_SCORES = [5000, 2000, 800, 400, 100];
+
+// FlagpoleYPosData (smbdis.asm:12150) .db $18,$22,$50,$68,$90 = y 24/34/80/104/144,
+// compared against Player_Y_Position — the TOP of the player, exactly like our
+// `this.y`. ChkFlagpoleYPosLoop walks the table from the back and takes the last
+// entry the player is at or below, falling back to index 0 for anything higher.
+//
+// Mapping to our geometry: the pole column itself is pixel-identical to SMB's —
+// ball tile top at y=32, shaft down to y=192 (verified on 1-1/2-1/3-1/4-1/8-1) —
+// so the thresholds are stored as offsets from the pole's top tile: 24/34/80/104/144
+// minus 32. What differs is the floor: ours is one row lower (top y=208 vs SMB's
+// 192), and that extra 16px simply widens the bottom band, which is the running-grab
+// band anyway. Anchoring to the pole rather than to the floor also keeps the bands
+// correct if a level ever hangs its pole at a different height.
+const FLAGPOLE_Y_OFFSETS = [-8, 2, 48, 72, 112];
 
 export const POWER = { SMALL: 'small', BIG: 'big', FIRE: 'fire' };
 
@@ -1488,22 +1506,67 @@ export default class Player extends EntityBase {
   // flagpole
   // -------------------------------------------------------------------------
 
+  // SMB grabs the pole through the ordinary player-to-background side collision:
+  // CheckSideMTiles -> CheckForClimbMTiles -> HandleClimbing (smbdis.asm:12153),
+  // which fires when the metatile beside the player is the flagpole ball ($24) or
+  // shaft ($25). Both are CLIMBABLE metatiles, not solid — FlagpoleObject
+  // (smbdis.asm:3966) renders the ball, nine rows of shaft, and its one solid tile
+  // ($61) into the floor row itself. So in the original the pole column is empty at
+  // body height and a running Mario walks straight into it; HandleClimbing's
+  // $06/$0a nybble window only makes the pole thinner than its 16px metatile.
+  //
+  // Our column is drawn one row above its floor: the grey base block sits in row 12,
+  // exactly where a standing player's body is, so the collider pins the right edge at
+  // poleX and the old `poleX + 6` port of that nybble window was unreachable on foot —
+  // the level could only be finished by jumping. Keying the grab off contact with the
+  // pole column restores the running grab without moving a single tile.
   _checkFlagpole() {
     const level = this.world.level;
     const fp = level && level.flagpole;
     if (!fp || typeof fp.x !== 'number') return false;
-    const poleX = fp.x * TILE;
-    if (this.x + this.w < poleX + 6) return false;
-    this.startFlagpole(fp);
+    // From the first grab onward the end-of-level sequence owns the world
+    // (FlagpoleCollision bails out when GameEngineSubroutine is already the slide
+    // or the end-of-level routine, smbdis.asm:12167). A co-op partner still on his
+    // feet must not restart the flag.
+    const wstate = this.world.state;
+    if (wstate === 'levelend' || wstate === 'complete') return false;
+
+    const tx = fp.x | 0;
+    const poleX = tx * TILE;
+    // Horizontal: the body has to be in contact with the pole column. Touching its
+    // left face is enough — that is where the base block stops us, and it is 6px
+    // short of where SMB's shaft would have been met.
+    if (this.x + this.w < poleX || this.x > poleX + TILE) return false;
+
+    // Vertical: the body has to overlap the pole, from the ball down to the ground
+    // the pole stands on (`span.bottom` is the top of the base block, one tile above
+    // that ground). This is what keeps the pole from being grabbed from below.
+    const span = this._findPole(tx, fp);
+    if (this.y + this.h <= span.top || this.y >= span.bottom + TILE) return false;
+
+    this.startFlagpole(fp, span);
     return true;
   }
 
-  startFlagpole(fp) {
+  // ChkFlagpoleYPosLoop (smbdis.asm:12187): walk FlagpoleYPosData from the back and
+  // take the last entry the player's Y is at or below; anything above the first entry
+  // falls through to index 0, the 5000 band.
+  _flagpoleBand(poleTop) {
+    for (let i = FLAGPOLE_Y_OFFSETS.length - 1; i > 0; i--) {
+      if (this.y >= poleTop + FLAGPOLE_Y_OFFSETS[i]) return i;
+    }
+    return 0;
+  }
+
+  startFlagpole(fp, knownSpan) {
     if (this.state === 'flagpole') return;
     const level = this.world.level;
     const tx = fp && typeof fp.x === 'number' ? fp.x : Math.floor((this.x + this.w) / TILE);
     const poleX = tx * TILE;
-    const span = this._findPole(tx, fp);
+    const span = knownSpan || this._findPole(tx, fp);
+    // Read the height BEFORE the slide moves anything: SMB stores
+    // Player_Y_Position into FlagpoleCollisionYPos at the moment of contact.
+    const band = this._flagpoleBand(span.top);
 
     this.state = 'flagpole';
     this.stateTimer = 0;
@@ -1516,8 +1579,6 @@ export default class Player extends EntityBase {
     this.facing = 1;
     this.x = poleX + 8 - this.w + 2;
 
-    const t = clamp((this.y - span.top) / Math.max(1, span.bottom - span.top), 0, 1);
-    const band = clamp(Math.floor(t * 6), 0, 5);
     const score = FLAGPOLE_SCORES[band];
     callAny(this.world, ['addScore', 'score', 'addPoints'], score, this.x, this.y);
 
