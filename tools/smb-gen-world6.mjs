@@ -9,7 +9,14 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource, skyAreaSource, bonusPagesFor, waterRoomSource } from './smb-build.mjs';
+import {
+  emitLevel,
+  bonusRoomSource,
+  skyAreaSource,
+  bonusPagesFor,
+  skyReturn,
+  waterRoomSource,
+} from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -145,12 +152,11 @@ ${entsBlock(L.entities)}
   const out2 = landingNear(rows, wps[2].x + 24);
   const outw = landingNear(rows, wps[1].x + 24);
   const vine = L.meta.vine;
-  const back = landingNear(rows, vine.x + 40);
   const body = `
 ${bonusRoomSource('6-2b', 'WORLD 6-2', pages[0], out, 12)}
 ${bonusRoomSource('6-2d', 'WORLD 6-2', pages[1], out2, 12, 'BONUS2')}
 ${waterRoomSource('6-2w', 'WORLD 6-2', outw)}
-${skyAreaSource('6-2c', 'WORLD 6-2', `{ area: 'main', x: ${back}.5, y: 12, exit: 'up' }`, 'GroundArea21')}
+${skyAreaSource('6-2c', 'WORLD 6-2', skyReturn(6, 'GroundArea21'), 'GroundArea21')}
 export default {
   id: '6-2',
   name: 'WORLD 6-2',

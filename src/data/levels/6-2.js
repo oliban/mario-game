@@ -166,7 +166,7 @@ const SKY = {
     'OOOO.OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO',
   ],
   entities: [],
-  warps: [{ from: { x: 79, y: 11 }, dir: 'down', to: { area: 'main', x: 122.5, y: 12, exit: 'up' } }],
+  warps: [{ from: { x: 79, y: 11 }, dir: 'down', to: { area: 'main', x: 162.5, y: 0, exit: 'none' } }],
 };
 
 export default {

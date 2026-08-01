@@ -10,7 +10,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource, skyAreaSource } from './smb-build.mjs';
+import { emitLevel, bonusRoomSource, skyAreaSource, bonusReturn, skyReturn } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -116,20 +116,10 @@ ${note}
   // creates them itself, centred on the pipe, so smb-build emits them.
   const ents = L.entities.slice();
   const rows21 = relieveBlocks(L.rows);
-  // HELD BACK, deliberately. The room's own record names column 115 for world 2
-  // and a pipe does stand there — but GroundArea9's enemy stream puts a goomba at
-  // column 116, right at that mouth, and coming up under it is fatal every time.
-  // The original is safe there because ProcessEnemyData never spawns an enemy
-  // already behind the screen's right edge on arrival (asm:7943-7957, and the
-  // silent skip at CheckThreeBytes 8041-8054); our activation rule
-  // (entity.js:397-403) has no such lower bound and wakes it. Switch this to
-  // `bonusReturn(L.meta, 2, 0)` the day that rule is fixed — every other world
-  // already takes the data.
-  const out = { col: landingNear(rows21, 108), top: 12 };
-  const backCol = landingNear(rows21, 128);
+  const out = bonusReturn(L.meta, 2, 0) || { col: landingNear(rows21, 108), top: 12 };
   const body = `
 ${bonusRoomSource('2-1b', 'WORLD 2-1', 0, out.col, out.top)}
-${skyAreaSource('2-1c', 'WORLD 2-1', `{ area: 'main', x: ${backCol}.5, y: 12, exit: 'up' }`, 'GroundArea12')}
+${skyAreaSource('2-1c', 'WORLD 2-1', skyReturn(2, 'GroundArea12'), 'GroundArea12')}
 export default {
   id: '2-1',
   name: 'WORLD 2-1',

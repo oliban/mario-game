@@ -15,6 +15,7 @@ import {
   skyAreaSource,
   bonusPagesFor,
   bonusReturn,
+  skyReturn,
   waterRoomSource,
 } from './smb-build.mjs';
 
@@ -160,10 +161,9 @@ ${entsBlock(L.entities)}
   const wp = L.meta.warpPipe;
   const vine = L.meta.vine;
   const out = landingNear(rows, wp.x + 26);
-  const back = landingNear(rows, vine.x + 40);
   const body = `
 ${waterRoomSource('5-2b', 'WORLD 5-2', out)}
-${skyAreaSource('5-2c', 'WORLD 5-2', `{ area: 'main', x: ${back}.5, y: 12, exit: 'up' }`)}
+${skyAreaSource('5-2c', 'WORLD 5-2', skyReturn(5, 'GroundArea12'))}
 export default {
   id: '5-2',
   name: 'WORLD 5-2',
