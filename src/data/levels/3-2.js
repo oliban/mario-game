@@ -38,6 +38,7 @@ export default {
   time: 400,
   theme: 'overworld',
   sky: 'night',
+  scenery: 'snow',
   music: 'overworld',
   width: 221,
   height: 15,
