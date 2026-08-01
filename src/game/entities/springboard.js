@@ -1,6 +1,5 @@
 import { Entity, registerEntity } from '../entity.js';
 import { makeSprite } from '../../core/gfx.js';
-import { TILE } from '../../core/constants.js';
 import input, { BTN } from '../../core/input.js';
 import * as ITEMS from '../../data/sprites/items.js';
 import { PHYS } from '../physics.js';
@@ -9,22 +8,23 @@ import { playersOf } from './index.js';
 
 const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
 
-// Launch speeds are derived from the gravity Mario actually rises under. The
-// distinction matters: he only falls at the reduced hold-gravity while the jump
-// button is DOWN, so the small bounce — taken with the button up — climbs under
-// full gravity and has to be solved for that, or it delivers a third of its
-// advertised height.
+// The launch speeds are the ROM's, in the same px/frame the rest of the engine
+// uses: ChkForLandJumpSpring (smbdis.asm:12249-12258) writes the default force
+// `lda #$f9` = -7, and JumpspringHandler (asm:6653-6655) replaces it with
+// `lda #$f4` = -12 when the boost is earned.
 //
-// The held launch is solved for 10 tiles rather than the original's advertised
-// 8. Measured against the wall the spring exists to clear (2-1, columns 190-191,
-// top at row 3): 8 tiles put his feet at row 3.1 and 9 tiles at 3.1 again — a
-// tenth of a tile short of standing on it, which read as the jump being broken.
-// 10 lands him on top with margin to spare.
-const ROW = (PHYS.jumpTable && PHYS.jumpTable[0]) || null;
-const RISE_G = num(ROW && ROW.gHold, 0.125);
+// That same routine writes `lda #$70 / sta VerticalForce` — the spring dictates
+// the gravity Mario rises under, and $70 is FULL gravity, not the reduced
+// hold-gravity a normal jump rises under. So neither bounce changes height with
+// the jump button, and the two heights come out at the original's ~3.7 and
+// ~10.7 tiles. This is why the speeds are no longer solved from a target height
+// against gHold: with the boost keyed to a fresh press (see _sampleBoost) the
+// button is no longer a proxy for which gravity applies, and a small bounce
+// taken with the button down would otherwise out-climb the big one.
 const FALL_G = num(PHYS.gravity || PHYS.playerGravity, 0.4375);
-export const SPRING_LAUNCH = -Math.sqrt(2 * FALL_G * 4 * TILE);
-export const SPRING_LAUNCH_HELD = -Math.sqrt(2 * RISE_G * 10 * TILE);
+export const SPRING_LAUNCH = -7; // $f9
+export const SPRING_LAUNCH_HELD = -12; // $f4
+export const SPRING_RISE_G = FALL_G; // VerticalForce = $70
 
 const SPRING_PAL = ['#1a1008', '#0d5c14', '#18a028', '#7cf07a'];
 
@@ -70,13 +70,13 @@ export default class SpringBoard extends Entity {
     this.stage = 0;
     this.phase = 'idle';
     this.phaseT = 0;
-    this.rider = null;
+    // Every player standing on the plate rides it: [{ player, boost }].
+    this.riders = [];
     this.isPlatform = true;
     this.oneWay = true;
     this.tangible = true;
     this.persistent = true;
     this.autoCorpse = false;
-    this.boost = false;
     this.strength = num(opts.strength, 1);
   }
 
@@ -100,32 +100,53 @@ export default class SpringBoard extends Entity {
     e.onPlatform = this;
   }
 
-  // Whoever is actually on the board drives it. The spring is a single-occupant
-  // state machine, so it picks one player rather than tracking both.
-  _occupant() {
-    for (const p of playersOf(this.world)) if (this.standing(p)) return p;
-    return this.world.player;
+  _padOf(p) {
+    return p && p.pad ? p.pad : input;
+  }
+
+  _riderOf(p) {
+    for (const r of this.riders) if (r.player === p) return r;
+    return null;
+  }
+
+  // Riders are LATCHED. Re-testing standing() each frame loses them: compressing
+  // moves the plate down 8px a frame, their feet fall outside the band, snap()
+  // stops being called and they drop off the board before it can launch them.
+  // The list is a list rather than one player because in co-op both brothers can
+  // land on the same plate, and an unlatched second brother falls straight
+  // through what is supposed to be a solid platform.
+  _pickUpRiders() {
+    for (const p of playersOf(this.world)) {
+      if (!p || p.removed || p.dead || p.vy < 0) continue;
+      if (!this.standing(p)) continue;
+      if (!this._riderOf(p)) this.riders.push({ player: p, boost: false });
+    }
+  }
+
+  // JumpspringHandler (smbdis.asm:6648-6656) takes the boost only on a FRESH
+  // press: `lda A_B_Buttons / and #A_Button / beq BounceJS` requires A down now,
+  // and `and PreviousA_B_Buttons / bne BounceJS` skips the boost when A was down
+  // last frame too. Holding A from the jump that carried you onto the plate
+  // therefore gives the ordinary hop ($f9), not the rocket ($f4).
+  _sampleBoost() {
+    for (const r of this.riders) {
+      if (!r.boost && this._padOf(r.player).pressed(BTN.JUMP)) r.boost = true;
+    }
   }
 
   update() {
     this.t++;
-    // The rider is LATCHED when the board starts compressing. Re-testing
-    // standing() each frame loses him: compressing moves the plate down, his
-    // feet fall outside the band, snap() stops being called and he drops off
-    // the board before it can ever launch him.
-    if (this.phase !== 'idle' && (!this.rider || this.rider.removed || this.rider.dead)) {
-      this.rider = null;
+    this.riders = this.riders.filter((r) => r.player && !r.player.removed && !r.player.dead);
+    this._pickUpRiders();
+    if (this.phase !== 'idle' && !this.riders.length) {
       this.phase = 'idle';
       this.phaseT = 0;
     }
-    const player = this.phase === 'idle' ? this._occupant() : this.rider;
-    const on = this.phase === 'idle' ? this.standing(player) : !!player;
 
     switch (this.phase) {
       case 'idle': {
         this.setStage(0);
-        if (on && player.vy >= 0) {
-          this.rider = player;
+        if (this.riders.length) {
           this.phase = 'compress';
           this.phaseT = 0;
         }
@@ -134,30 +155,32 @@ export default class SpringBoard extends Entity {
       case 'compress': {
         this.phaseT++;
         this.setStage(Math.min(3, this.phaseT));
-        if (on) this.snap(player);
+        this._sampleBoost();
+        for (const r of this.riders) this.snap(r.player);
         if (this.phaseT >= 3) {
           this.phase = 'release';
           this.phaseT = 0;
-          // Read the pad of whoever is on the board, not always player one's.
-          this.boost = (player && player.pad ? player.pad : input).down(BTN.JUMP);
         }
         break;
       }
       case 'release': {
         this.phaseT++;
-        this.boost = this.boost || (player && player.pad ? player.pad : input).down(BTN.JUMP);
+        this._sampleBoost();
         this.setStage(Math.max(0, 3 - this.phaseT));
         if (this.phaseT >= 3) {
           this.setStage(0);
-          // Launch the latched rider, not whoever happens to test as standing:
-          // the plate has just sprung back up and he is a few pixels clear of it.
-          if (player) this.launch(player);
-          this.rider = null;
+          // Launch the latched riders, not whoever happens to test as standing:
+          // the plate has just sprung back up and they are a few pixels clear of
+          // it. Both brothers go up — the plate served them both, and letting
+          // one ride while the other is dropped would be the same defect from
+          // the other side.
+          const going = this.riders;
+          this.riders = [];
           this.phase = 'idle';
           this.phaseT = 0;
-          this.boost = false;
-        } else if (player) {
-          this.snap(player);
+          for (const r of going) this.launch(r.player, r.boost);
+        } else {
+          for (const r of this.riders) this.snap(r.player);
         }
         break;
       }
@@ -166,8 +189,8 @@ export default class SpringBoard extends Entity {
     }
   }
 
-  launch(player) {
-    const held = this.boost || (player && player.pad ? player.pad : input).down(BTN.JUMP);
+  launch(player, boost) {
+    const held = boost === undefined ? this._padOf(player).pressed(BTN.JUMP) : !!boost;
     const v = (held ? SPRING_LAUNCH_HELD : SPRING_LAUNCH) * this.strength;
     player.y = this.y - player.h - 1;
     player.onPlatform = null;
@@ -176,12 +199,23 @@ export default class SpringBoard extends Entity {
       player.vy = v;
       player.grounded = false;
     }
+    // bounce() picks the rise gravity from a normal jump's speed row; the spring
+    // overrides it, exactly as ChkForLandJumpSpring overrides VerticalForce.
+    player._gHold = SPRING_RISE_G;
+    // ImposeGravity moves before it applies gravity, so the takeoff frame
+    // travels the whole launch speed — the same allowance a real jump gets.
+    player._launchFrame = true;
     sfx(this.world, held ? 'jump-super' : 'jump');
     fx(this.world, 'landingDust', this.x + 8, this.baseline - 2, 0.8);
   }
 
   onPlayerTouch(player) {
-    if (this.standing(player) && player.vy >= 0) this.snap(player);
+    if (!this.standing(player) || player.vy < 0) return;
+    // Latch him here too: the collision pass runs after update(), so a brother
+    // who arrives a frame late is caught before the plate can drop out from
+    // under him.
+    if (!this._riderOf(player)) this.riders.push({ player, boost: false });
+    this.snap(player);
   }
 
   onFireball() {
