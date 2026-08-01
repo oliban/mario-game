@@ -145,7 +145,13 @@ function makeGrid(lvl) {
     const r = at(x, y);
     if (!r) return false;
     if (r.harm) return false;
-    return !!(r.solid || r.platform);
+    // A bumpable question or hidden block counts as footing even though it is
+    // not solid in the map: striking it from below turns it into a used block,
+    // which IS solid, and the original builds puzzles on exactly that. 2-1
+    // stacks a hidden coin block at (28,9) under a hidden 1-up at (28,5) — you
+    // bump the lower one, stand on what it becomes, and take the upper one.
+    // Modelling only the static map called that faithful level unplayable.
+    return !!(r.solid || r.platform || (r.question && r.bumpable));
   };
 
   const liquid = (x, y) => {
