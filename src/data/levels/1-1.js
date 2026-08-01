@@ -134,12 +134,12 @@ function buildWarpZone(order) {
     if (ly < 14) for (let x = 1; x < width - 1; x++) put(x, ly, '#');
     ids.forEach((id, i) => {
       const c = colOf(i);
+      // LIP ONLY. A pipe body one row below its lip hangs into the headroom of
+      // the ledge underneath, and big Mario is two tiles tall — he was stopped
+      // dead at the first pipe of every row below the top one, while small
+      // Mario walked on. Same reason the arrival pipe in the ceiling is a lip.
       put(c, ly, '[');
       put(c + 1, ly, ']');
-      if (ly + 1 < 14) {
-        put(c, ly + 1, '{');
-        put(c + 1, ly + 1, '}');
-      }
       // Centre the three-glyph label on the two-tile pipe: 24px of text over
       // 32px of pipe leaves 4px, which is a quarter of a tile.
       signs.push({ x: c + 0.25, y: ly - 1, text: id });
@@ -156,8 +156,6 @@ function buildWarpZone(order) {
       const dc = width - 4;
       put(dc, ly, '[');
       put(dc + 1, ly, ']');
-      put(dc, ly + 1, '{');
-      put(dc + 1, ly + 1, '}');
       signs.push({ x: dc + 0.5, y: ly - 1, text: 'V' });
       warps.push({
         from: { x: dc, y: ly },
