@@ -252,8 +252,13 @@ export function buildArea(levelId, opts = {}) {
   // CloudTypeOverride: when the header's two MSB are 3 the terrain metatile
   // becomes $88, the cloud block, instead of the area type's own ground. That
   // is what the coin-heaven areas above the beanstalks are made of, and $88
-  // clears its block-buffer bar, so it is solid and you stand on it.
-  const groundChar = styleBits === 3 ? 'B' : '#';
+  // clears its block-buffer bar, so it is solid and you stand on it — 'O',
+  // solid exactly like 'B', not a one-way platform.
+  //
+  // In a cloud level the BRICK is the same metatile: BrickMetatiles is
+  // `$22, $51, $52, $52` plus a fifth entry `$88` that RowOfBricks picks when
+  // the override is set. So one tile is the entire contents of these areas.
+  const groundChar = styleBits === 3 ? 'O' : '#';
   for (let x = 0; x < width; x++) {
     const bits = TERRAIN[terrainAt(x)] || TERRAIN[1];
     const solidRow = (r) => (r < 8 ? (bits[0] >> r) & 1 : (bits[1] >> (r - 8)) & 1);
@@ -309,7 +314,14 @@ export function buildArea(levelId, opts = {}) {
         meta.sidePipes.push({ x, top });
         break;
       }
-      case 'RowOfBricks': for (let i = 0; i <= n; i++) put(x + i, y, '='); break;
+      // RowOfBricks, and ONLY RowOfBricks, takes the cloud override:
+      // `lda CloudTypeOverride / beq DrawBricks / ldy #$04` picks
+      // BrickMetatiles' fifth entry, which is $88 — the same cloud block the
+      // terrain uses. ColumnOfBricks is explicitly exempt ("no cloud override
+      // as for row"), so it stays a brick even up here.
+      case 'RowOfBricks':
+        for (let i = 0; i <= n; i++) put(x + i, y, styleBits === 3 ? 'O' : '=');
+        break;
       case 'RowOfSolidBlocks': for (let i = 0; i <= n; i++) put(x + i, y, 'B'); break;
       case 'RowOfCoins': for (let i = 0; i <= n; i++) put(x + i, y, 'o'); break;
       case 'ColumnOfBricks': fillCol(x, y, Math.min(ROW(12), y + n), '='); break;
@@ -659,7 +671,7 @@ export function skyAreaSource(id, name, dest, areaName = 'GroundArea12') {
   // floor simply stops. Crop to where it stops — past that there is nothing to
   // stand on and nothing to see.
   let W = b.width;
-  while (W > 1 && b.tiles[13][W - 1] !== 'B') W--;
+  while (W > 1 && b.tiles[13][W - 1] !== 'O') W--;
   const g = b.tiles.map((r) => r.slice(0, W).split(''));
   // The exit pipe sits on the cloud floor at the far end.
   const px = W - 4;
