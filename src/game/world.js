@@ -850,9 +850,86 @@ export class World {
       }
       // The coin tile has no entry in the tile sheet — it is an item sprite.
       if (rec.coin && !rec.sprite && !rec.anim && this.art.coin) rec.anim = this.art.coin;
+      this._bindTileVariants(rec, art ? art.id : null);
     }
     this.recByCode[code] = rec;
     return rec;
+  }
+
+  // -------------------------------------------------------------------------
+  // Per-position tile variants.
+  //
+  // tiles.js has always published the art that stops a run of one tile reading as
+  // one stamp printed on a lattice — two ground stones, two staircase stones, four
+  // water phases, eight lava frames — behind selectors (groundVariant,
+  // stairVariant, waterPhase, lavaPhase) that take a tile COORDINATE. Nothing
+  // called them. drawTiles resolved one sprite per tile RECORD and passed only a
+  // tick, so ground variant B had never been drawn on screen in the game's life
+  // and every cell of a lava pool ran the same frame on the same beat.
+  //
+  // Binding happens ONCE per record, here, and never per tile per frame: drawTiles
+  // is the hottest loop in the renderer and must not be doing module lookups,
+  // building closures or allocating. What it gets is a flat array whose length is
+  // a power of two, plus three small integers, so picking a variant is two
+  // multiplies, an add and a mask:
+  //
+  //   index = (tx * va + ty * vb + (vt ? tick >> 3 : 0)) & vmask
+  //
+  // The numbers reproduce the selectors tiles.js already publishes rather than
+  // inventing new ones — (x + y) & 1 for the two ground and staircase stones,
+  // (x + beat) & 3 for the water phases, (3x + 5y + beat) & 7 for the lava.
+  //
+  // The index is built from WORLD tile coordinates and never from screen position,
+  // so a tile keeps its variant wherever the camera is. A variant keyed off screen
+  // position would crawl as the level scrolled, which is far worse than wallpaper.
+  //
+  // NOTE for anyone tempted to call tiles.js's animatedSpriteFor from the draw loop
+  // instead, which looks like the smaller change: it falls through to spriteFor for
+  // every id it does not handle specially, and spriteFor returns the theme's STILL
+  // sprite. Routing the whole loop through it silently kills the question block's
+  // idle animation and every tile whose art came from a prop module rather than
+  // from the tile sheet.
+  _bindTileVariants(rec, id) {
+    const t = tilesMod;
+    const TID = t && t.TID;
+    if (!TID || id == null) return;
+    const pick = (table) => (table && (table[this.tileset] || table.overworld)) || null;
+
+    let frames = null;
+    let va = 1;
+    let vb = 1;
+    let vt = 0;
+    if (id === TID.GROUND) {
+      frames = pick(t.THEME_GROUND);
+    } else if (id === TID.STAIR) {
+      frames = pick(t.THEME_STAIR);
+    } else if (id === TID.WATER_SURF) {
+      frames = pick(t.THEME_WATER_PHASES);
+      vb = 0;
+      vt = 1;
+    } else if (id === TID.WATER_BODY) {
+      const bodies = pick(t.THEME_WATER_BODIES);
+      frames = bodies && bodies[0];
+      vb = 0;
+      vt = 1;
+    } else if (id === TID.LAVA) {
+      frames = pick(t.THEME_LAVA_FRAMES);
+      va = 3;
+      vb = 5;
+      vt = 1;
+    }
+    if (!Array.isArray(frames) || frames.length < 2) return;
+    // Masking is only valid on a power of two. If a table ever ships a length that
+    // is not one, leave the record on the old single-sprite path rather than
+    // silently dropping frames off the end of the run.
+    if (frames.length & (frames.length - 1)) return;
+    for (let i = 0; i < frames.length; i++) if (!isSprite(frames[i])) return;
+
+    rec.variants = frames;
+    rec.vmask = frames.length - 1;
+    rec.va = va;
+    rec.vb = vb;
+    rec.vt = vt;
   }
 
   // tiles.js first, then the prop modules. A tile sheet entry that exists but
@@ -867,6 +944,9 @@ export class World {
       sprite: prop.sprite,
       anim: prop.anim,
       harm: (fromTiles && fromTiles.harm) || null,
+      // Art that came from a prop module is not in the tile sheet's variant
+      // tables, so it deliberately carries no id and gets no position variants.
+      id: null,
     };
   }
 
@@ -922,7 +1002,7 @@ export class World {
       for (const c of candidates) {
         const up = String(c).toUpperCase();
         const v = unwrapArt(tilesMod['T_' + up] || tilesMod[up] || tilesMod['TILE_' + up]);
-        if (v) return { sprite: isSprite(v) ? v : null, anim: isAnim(v) ? v : null, harm: null };
+        if (v) return { sprite: isSprite(v) ? v : null, anim: isAnim(v) ? v : null, harm: null, id: null };
       }
       return null;
     }
@@ -939,7 +1019,10 @@ export class World {
       if (isAnim(themed)) anim = themed;
     }
     if (!isAnim(anim)) anim = null;
-    return { sprite, anim, harm: rec.harm || null };
+    // The tile id travels with the art so _makeRec can look this record up in the
+    // per-position variant tables tiles.js publishes. Object.keys gives it back as
+    // a string; the variant binder compares it against numeric TID constants.
+    return { sprite, anim, harm: rec.harm || null, id: Number(entry.id) };
   }
 
   // -------------------------------------------------------------------------
@@ -2227,12 +2310,22 @@ export class World {
   drawTiles(ctx, cam) {
     const r = this._visibleRange(cam);
     const blocks = this.blocks;
+    const tick = this.tick;
+    // One shared beat for every position-phased tile on this frame, so the whole
+    // screen advances together instead of each record re-deriving it.
+    const beat = tick >> 3;
     for (let ty = r.y0; ty <= r.y1; ty++) {
       const row = ty * this.w;
       for (let tx = r.x0; tx <= r.x1; tx++) {
         const rec = this.recByCode[this.map[row + tx]];
         if (!rec || rec.decor || rec.invisible || rec.code === 46) continue;
-        const s = this.tileSprite(rec, this.tick);
+        // Position variants (see _bindTileVariants). tx and ty are WORLD tile
+        // coordinates, so the choice is fixed to the map and cannot crawl with
+        // the camera.
+        const vs = rec.variants;
+        const s = vs
+          ? vs[(tx * rec.va + ty * rec.vb + (rec.vt ? beat : 0)) & rec.vmask]
+          : this.tileSprite(rec, tick);
         if (!s) continue;
         const off = rec.bumpable ? blocks.offsetAt(tx, ty) : 0;
         s.draw(
