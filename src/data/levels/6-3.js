@@ -44,6 +44,7 @@ export default {
   theme: 'athletic',
   sky: 'night',
   tileset: 'castle',
+  scenery: 'castle',
   music: 'overworld',
   width: 180,
   height: 15,

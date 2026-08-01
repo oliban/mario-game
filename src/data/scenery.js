@@ -169,6 +169,35 @@ const P_TREE_SNOW = [
   '#e6b061', // bark specular
 ];
 
+// Colour control 7's scenery. The castle tile palette in tiles.js is one cold
+// violet-slate key (#06060a -> #9a9ab6 on the masonry); foliage standing in front
+// of it has to sit in the SAME key or the deck reads as a cutout. Kept a shade
+// darker than the masonry ramp at every step so a canopy in front of a wall still
+// separates from it.
+const P_CASTLE = [
+  '#0a0a12', // outline
+  '#161622', // deep shadow
+  '#242438', // shadow
+  '#36364e', // mid dark
+  '#4a4a68', // mid
+  '#606082', // lit
+  '#7c7c9e', // bright
+  '#9c9cbc', // specular
+];
+
+// Bark goes cold too — see the comment on TREE_CASTLE. Pushed slightly toward
+// blue-violet against the foliage's neutral slate so trunk and canopy stay two
+// materials rather than one silhouette.
+const P_TREE_CASTLE = [
+  ...P_CASTLE,
+  '#0c0a16', // bark outline
+  '#1a1628', // bark shadow
+  '#2a2440', // bark mid dark
+  '#3c3458', // bark mid
+  '#524874', // bark lit
+  '#6f6396', // bark specular
+];
+
 const P_TREE = [
   ...P_GREEN,
   '#32190c', // bark outline
@@ -1948,4 +1977,37 @@ export const TREE_SNOW = {
   top: TREE_TOP_SNOW,
   trunk: makeSprite(TRUNK_PX, P_TREE_SNOW, { name: 'scenery.tree.trunk.snow' }),
   trunkB: makeSprite(TRUNK_B_PX, P_TREE_SNOW, { name: 'scenery.tree.trunk.b.snow' }),
+};
+
+// Castle-baked siblings, emitted as `scenery: 'castle'`. Unlike snow, this is NOT
+// a four-byte patch of background palette 0 — colour control 7 loads
+// CastlePaletteData, the FULL 32-byte palette, so bark is repainted along with
+// the foliage. That is why the whole ramp goes cold here and the trunks do not
+// stay brown: nothing on a control-7 screen is warm.
+const TREE_TOP_CASTLE = makeSprite(TREE_TOP_PX, P_TREE_CASTLE, {
+  name: 'scenery.tree.top.castle',
+});
+export const HILL_LARGE_CASTLE = {
+  sprite: makeSprite(HILL_LARGE_PX, P_CASTLE, { name: 'scenery.hill.large.castle' }),
+};
+export const HILL_SMALL_CASTLE = {
+  sprite: makeSprite(HILL_SMALL_PX, P_CASTLE, { name: 'scenery.hill.small.castle' }),
+};
+export const BUSH_CASTLE = {
+  small: makeSprite(BUSH_S_PX, P_CASTLE, { name: 'scenery.bush.small.castle' }),
+  medium: makeSprite(BUSH_M_PX, P_CASTLE, { name: 'scenery.bush.medium.castle' }),
+  large: makeSprite(BUSH_L_PX, P_CASTLE, { name: 'scenery.bush.large.castle' }),
+};
+export const TREE_CASTLE = {
+  top: TREE_TOP_CASTLE,
+  trunk: makeSprite(TRUNK_PX, P_TREE_CASTLE, { name: 'scenery.tree.trunk.castle' }),
+  trunkB: makeSprite(TRUNK_B_PX, P_TREE_CASTLE, { name: 'scenery.tree.trunk.b.castle' }),
+  rustle: new Anim(
+    [
+      TREE_TOP_CASTLE,
+      makeSprite(TREE_TOP_B_PX, P_TREE_CASTLE, { name: 'scenery.tree.top.b.castle' }),
+      makeSprite(TREE_TOP_C_PX, P_TREE_CASTLE, { name: 'scenery.tree.top.c.castle' }),
+    ],
+    [10, 8, 12]
+  ),
 };
