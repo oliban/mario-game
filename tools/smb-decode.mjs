@@ -1,0 +1,178 @@
+#!/usr/bin/env node
+// ---------------------------------------------------------------------------
+// Decode the extracted SMB area data into positions we can author levels from.
+//
+//   node tools/smb-decode.mjs 1-1        one level
+//   node tools/smb-decode.mjs --all      every level
+//
+// The formats below are taken from the disassembly's own parsers rather than
+// from any second-hand description: ProcessEnemyData / PositionEnemyObj for the
+// enemy stream, and ProcessAreaData / DecodeAreaData for the object stream.
+//
+// ENEMY STREAM (2 bytes, sometimes 3)
+//   byte0  bits 7-4  column within the page
+//          bits 3-0  row; $0f is a page-control command, $0e a 3-byte special
+//   byte1  bit 7     advance to the next page before placing
+//          bit 6     hard-mode only (skipped on a first quest)
+//          bits 5-0  enemy id
+//
+// OBJECT STREAM (2 bytes)
+//   byte0  bits 7-4  column within the page
+//          bits 3-0  row; $0d/$0e/$0f are commands rather than rows
+//   byte1  bit 7     advance to the next page before placing
+//          bits 6-0  object id and parameter
+// ---------------------------------------------------------------------------
+
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const REF = JSON.parse(readFileSync(join(ROOT, 'reference', 'smb-areas.json'), 'utf8'));
+
+export const ENEMY_NAMES = {
+  0x00: 'greenkoopa', 0x02: 'buzzy', 0x03: 'redkoopa', 0x05: 'hammerbro',
+  0x06: 'goomba', 0x07: 'blooper', 0x08: 'bulletbill-frenzy', 0x09: 'tall',
+  0x0a: 'greycheep', 0x0b: 'redcheep', 0x0c: 'podoboo', 0x0d: 'piranha',
+  0x0e: 'greenparatroopa-jump', 0x0f: 'redparatroopa', 0x10: 'greenparatroopa-fly',
+  0x11: 'lakitu', 0x12: 'spiny', 0x14: 'flyingcheep', 0x15: 'bowserflame',
+  0x16: 'fireworks', 0x17: 'bbill-ccheep-frenzy', 0x18: 'stop-frenzy',
+  0x1b: 'goomba-group-3-row10', 0x1c: 'goomba-group-3-row6',
+  0x1d: 'koopa-group-3-row10', 0x1e: 'koopa-group-3-row6',
+  0x2d: 'bowser', 0x2e: 'powerup', 0x2f: 'vine', 0x30: 'flagpole',
+  0x31: 'starflag', 0x32: 'jumpspring', 0x33: 'bulletbill-cannon', 0x35: 'toad',
+};
+
+export function decodeEnemies(bytes) {
+  const out = [];
+  let page = 0;
+  let pageSel = false;
+  let i = 0;
+  while (i < bytes.length) {
+    const b0 = bytes[i];
+    if (b0 === 0xff) break;
+    const row = b0 & 0x0f;
+    const b1 = bytes[i + 1];
+
+    if (row === 0x0f) {
+      // Page control: the second byte IS the page, and nothing is spawned.
+      page = b1 & 0x3f;
+      pageSel = true;
+      i += 2;
+      continue;
+    }
+    if (row === 0x0e) {
+      // Three-byte world-specific area pointer, not an enemy.
+      i += 3;
+      continue;
+    }
+    // The MSB advances the page, but only once per page-select window.
+    if (b1 & 0x80 && !pageSel) {
+      page += 1;
+      pageSel = true;
+    }
+    const id = b1 & 0x3f;
+    out.push({
+      x: page * 16 + (b0 >> 4),
+      y: row,
+      id,
+      name: ENEMY_NAMES[id] || `id$${id.toString(16)}`,
+      hardOnly: (b1 & 0x40) !== 0,
+    });
+    pageSel = false;
+    i += 2;
+  }
+  return out;
+}
+
+function report(levelId) {
+  const entry = REF.levelMap[levelId];
+  if (!entry) {
+    console.log(`unknown level ${levelId}`);
+    return;
+  }
+  const area = REF.areas[entry.area];
+  const enemies = decodeEnemies(area.enemyBytes);
+  console.log(`\n${levelId}  (${entry.area})`);
+  console.log(
+    '  enemies: ' +
+      enemies.map((e) => `${e.name}@${e.x},${e.y}${e.hardOnly ? '*' : ''}`).join('  ')
+  );
+}
+
+const args = process.argv.slice(2);
+const ids = args.includes('--all')
+  ? Object.keys(REF.levelMap).filter((k) => !k.endsWith('-sub'))
+  : args.length
+    ? args
+    : ['1-1'];
+for (const id of ids) report(id);
+
+// --- object stream -------------------------------------------------------
+// Index = row-dependent offset + id, exactly as the parser computes it:
+//   rows 0-11, (b1 & $70) == 0 : small object, offset 22, id = b1 & $0f
+//   rows 0-11, otherwise       : large object, offset 0,  id = (b1 & $70) >> 4
+//                                ($70 with d3 set is a warp pipe, id 0)
+//   row 12                     : offset 8,  id = (b1 & $70) >> 4
+//   row 15                     : offset 16, id = (b1 & $70) >> 4
+//   row 13, d6 set             : offset 34, id = b1 & $3f
+//   row 13, d6 clear           : page control, page = b1 & $1f
+//   row 14                     : offset 46 (alter area attributes)
+export const OBJECTS = [
+  'VerticalPipe(warp)', 'AreaStyleObject', 'RowOfBricks', 'RowOfSolidBlocks',
+  'RowOfCoins', 'ColumnOfBricks', 'ColumnOfSolidBlocks', 'VerticalPipe',
+  'Hole_Empty', 'PulleyRope', 'Bridge_High', 'Bridge_Middle', 'Bridge_Low',
+  'Hole_Water', 'QuestionBlockRow_High', 'QuestionBlockRow_Low',
+  'EndlessRope', 'BalancePlatRope', 'CastleObject', 'StaircaseObject',
+  'ExitPipe', 'FlagBalls_Residual',
+  'QBlock(powerup)', 'QBlock(coin)', 'QBlock(hidden coin)', 'Hidden1Up',
+  'Brick(powerup)', 'Brick(vine)', 'Brick(star)', 'Brick(coins)', 'Brick(1up)',
+  'WaterPipe', 'EmptyBlock', 'Jumpspring',
+  'IntroPipe', 'Flagpole', 'Axe', 'Chain', 'CastleBridge',
+  'ScrollLockWarp', 'ScrollLock', 'ScrollLock', 'Frenzy(cheeps)',
+  'Frenzy(bullets)', 'Frenzy(stop)', 'LoopCmd', 'AlterAreaAttributes',
+];
+
+export function decodeObjects(bytes) {
+  const out = [];
+  let page = 0;
+  let pageSel = false;
+  for (let i = 0; i + 1 < bytes.length; i += 2) {
+    const b0 = bytes[i];
+    if (b0 === 0xfd) break;
+    const b1 = bytes[i + 1];
+    const row = b0 & 0x0f;
+
+    if (b1 & 0x80 && !pageSel) {
+      page += 1;
+      pageSel = true;
+    }
+
+    if (row === 0x0d && !(b1 & 0x40)) {
+      if (!pageSel) {
+        page = b1 & 0x1f;
+        pageSel = true;
+      }
+      continue;
+    }
+
+    let index;
+    let param = b1 & 0x0f;
+    if (row === 0x0e) index = 46;
+    else if (row === 0x0d) index = 34 + (b1 & 0x3f);
+    else if (row === 0x0c) index = 8 + ((b1 & 0x70) >> 4);
+    else if (row === 0x0f) index = 16 + ((b1 & 0x70) >> 4);
+    else if ((b1 & 0x70) === 0) index = 22 + (b1 & 0x0f);
+    else index = (b1 & 0x70) === 0x70 && b1 & 0x08 ? 0 : (b1 & 0x70) >> 4;
+
+    out.push({
+      x: page * 16 + (b0 >> 4),
+      row,
+      index,
+      param,
+      name: OBJECTS[index] || `obj#${index}`,
+    });
+    pageSel = false;
+  }
+  return out;
+}
