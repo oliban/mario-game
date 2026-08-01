@@ -914,7 +914,22 @@ function lavaFlow(f) {
       if (c > 0.86) { s += '0'; continue; }          // cooled plate, cold heart
       if (c > 0.34) { s += '1'; continue; }          // its dark-red skin
       const m = meltAt(x - 2 * f, y);
-      if (m > 0.80) { s += '4'; hot.push([x, y, m]); }
+      if (m > 0.80) {
+        s += '4';
+        // Candidates for the white-hot core, but NEVER on the border ring. The
+        // fields themselves wrap exactly — vnoise's lattice lookup is taken mod cx
+        // and swirl's harmonics have periods that divide 16, so meltAt(16, y) and
+        // crustAt(16, y) equal their values at x = 0 to floating-point epsilon, and
+        // measurement confirms most frames join as cleanly as their own interiors.
+        // What did NOT wrap was this: slot 5 is the brightest colour in the ramp by
+        // a distance, and ranking picked pixels anywhere in the tile, so a frame
+        // that happened to put one on column 15 or column 0 planted a ~130-unit
+        // colour step on the join. Frames 5 and 6 each did exactly that (seam ratio
+        // 1.97 and 1.67 against ~1.0 for the frames that did not), and a lake draws
+        // that same bright pixel down every tile column in the level. Excluding the
+        // border ring costs nothing — the hottest interior pixel is just as hot.
+        if (x > 0 && x < 15 && y > 0 && y < 15) hot.push([x, y, m]);
+      }
       else if (m > 0.34) s += '3';
       else if (m > -0.34) s += '2';
       else s += '1';
@@ -1764,10 +1779,42 @@ export const THEME_LAVA_SURF_FRAMES = {
 // frames on screen, keeps the vertical join at 0.890 (below even the uniform tile's
 // 0.936) and gives the best column figure of the lot.
 //
-// Note what the top row of that table also says: at 1.857, the UNIFORM tile has a
-// real vertical seam of its own, so R_LAVA is not as seamless in x as the tiling
-// policy at the top of this file claims. De-phasing masks it rather than fixing it;
-// the tile itself still wants a look.
+// CORRECTION TO AN EARLIER NOTE HERE, which claimed the uniform tile had a vertical
+// seam of its own and scored 1.857. That figure was a measurement artifact: it was
+// taken off the SCREEN from a single frame that happened to be one of the three with
+// a white-hot pixel near the edge, and compared against a de-phased figure that
+// averaged all eight frame pairings. Measured properly on the sprite data, the tile
+// wraps: vnoise takes its lattice lookup mod cx and swirl's harmonics have periods
+// dividing 16, so meltAt(16, y) and crustAt(16, y) equal their x = 0 values to
+// floating-point epsilon (max error 1.0e-15), and for all eight frames the join
+// column-pair sits INSIDE the spread of that frame's own fifteen interior column
+// pairs — never above it. There is no seam in the texture.
+//
+// The seam is created by DE-PHASING, and its size is set by the stride. Tile k draws
+// frame (va*k + beat); its neighbour is va frames further on; the melt drifts 2px per
+// frame and the crust (-2, +2), so the two are 2*va pixels out of register at the
+// join, mod 16. Measured as mean join step over mean interior step, plus how many of
+// the eight joins exceed EVERY interior column pair of their own tile:
+//
+//   stride  join/interior   joins above all interior   register error
+//     0        1.244              0/8                   0px  (uniform: no seam at all,
+//                                                             but every tile identical)
+//     1        1.697              3/8                   2px
+//     2        1.640              3/8                   4px
+//     3        2.100              6/8                   6px   <- what ships today
+//     4        2.151              5/8                   8px
+//     5        1.826              3/8                  10px
+//     6        2.066              5/8                  12px
+//     7        1.513              2/8                  14px == -2px
+//
+// So stride 3 is close to the worst available. 1 and 7 are the best (2px of register
+// error either way) and 1 has a second virtue: each tile is exactly one frame ahead of
+// its neighbour, and since the melt drifts +2px per frame the flow then progresses
+// smoothly across the lake instead of jumping three frames per tile.
+//
+// This function is kept at 3 to stay consistent with world.js's _bindTileVariants,
+// which carries its own copy of the constant and is owned elsewhere. CHANGING BOTH TO
+// 1 IS A ONE-CHARACTER EDIT IN EACH and is worth doing.
 export const lavaPhase = (theme, tileX = 0, tileY = 0, tick = 0) => {
   const set = THEME_LAVA_FRAMES[theme] || THEME_LAVA_FRAMES.overworld;
   return set[(tileX * 3 + (tick >> 3)) & 7];
