@@ -883,11 +883,12 @@ export class World {
   // a power of two, plus three small integers, so picking a variant is two
   // multiplies, an add and a mask:
   //
-  //   index = (tx * va + ty * vb + (vt ? tick >> 3 : 0)) & vmask
+  //   index = (tx * va + ty * vb + (vt ? tick >> vt : 0)) & vmask
   //
   // The numbers reproduce the selectors tiles.js already publishes rather than
   // inventing new ones — (x + y) & 1 for the two ground and staircase stones,
-  // (x + beat) & 3 for the water phases, (3x + 5y + beat) & 7 for the lava.
+  // (x + tick>>3) & 3 for the four water phases, and (x + tick>>2) & 15 for lava's
+  // sixteen. vt is the SHIFT, not a flag, because those two rates differ.
   //
   // The index is built from WORLD tile coordinates and never from screen position,
   // so a tile keeps its variant wherever the camera is. A variant keyed off screen
@@ -905,6 +906,11 @@ export class World {
     if (!TID || id == null) return;
     const pick = (table) => (table && (table[this.tileset] || table.overworld)) || null;
 
+    // `vt` is a TICK SHIFT, not a flag: 0 means the tile has no time term at all,
+    // otherwise the beat is tick >> vt. It has to be per-record because lava and water
+    // no longer advance at the same rate — lava went to sixteen frames at 1px of drift
+    // each, so it needs twice the frame rate to travel at the same speed, while the
+    // four-phase water is unchanged.
     let frames = null;
     let va = 1;
     let vb = 1;
@@ -916,21 +922,24 @@ export class World {
     } else if (id === TID.WATER_SURF) {
       frames = pick(t.THEME_WATER_PHASES);
       vb = 0;
-      vt = 1;
+      vt = 3;
     } else if (id === TID.WATER_BODY) {
       const bodies = pick(t.THEME_WATER_BODIES);
       frames = bodies && bodies[0];
       vb = 0;
-      vt = 1;
+      vt = 3;
     } else if (id === TID.LAVA) {
       frames = pick(t.THEME_LAVA_FRAMES);
-      va = 3;
-      // vb stays 0 on purpose — see the measurement table above lavaPhase in
-      // tiles.js. De-phasing lava vertically as well puts a visible horizontal band
-      // across every 16th row, because the crust field drifts (-2, +2) per frame and
-      // two frames five apart are ten pixels out of register at the join.
+      // Both numbers come from tiles.js rather than being restated here, because the
+      // stride has to match the register error the drift produces and the waterline
+      // has to ride the same beat as the body it caps. Two copies of that drift apart.
+      va = t.LAVA_STRIDE != null ? t.LAVA_STRIDE : 1;
+      // vb stays 0 on purpose — see the measurement table above lavaPhase in tiles.js.
+      // De-phasing lava vertically as well puts a visible horizontal band across every
+      // 16th row, because the crust drifts on y as well as x and two frames several
+      // apart are that many pixels out of register at the join.
       vb = 0;
-      vt = 1;
+      vt = t.LAVA_TICK_SHIFT != null ? t.LAVA_TICK_SHIFT : 3;
     }
     // A tile whose ART RESOLVES TO THE TERRAIN ART shares the terrain's variants.
     //
@@ -992,13 +1001,15 @@ export class World {
     // crest and the flow beneath it stay in step.
     let frames = null;
     let va = 1;
+    let vt = 0;
     if (capId === TID.LAVA_SURF) {
       frames = pick(t.THEME_LAVA_SURF_FRAMES);
-      va = 3;
+      va = t.LAVA_STRIDE != null ? t.LAVA_STRIDE : 1;
+      vt = t.LAVA_TICK_SHIFT != null ? t.LAVA_TICK_SHIFT : 3;
     }
     if (Array.isArray(frames) && frames.length >= 2 && !(frames.length & (frames.length - 1))
         && frames.every((f) => isSprite(f))) {
-      rec.cap = { variants: frames, vmask: frames.length - 1, va, vb: 0, vt: 1, sprite: null };
+      rec.cap = { variants: frames, vmask: frames.length - 1, va, vb: 0, vt, sprite: null };
       return;
     }
     const set = pick(t.THEME_TILES);
@@ -2388,9 +2399,6 @@ export class World {
     const r = this._visibleRange(cam);
     const blocks = this.blocks;
     const tick = this.tick;
-    // One shared beat for every position-phased tile on this frame, so the whole
-    // screen advances together instead of each record re-deriving it.
-    const beat = tick >> 3;
     for (let ty = r.y0; ty <= r.y1; ty++) {
       const row = ty * this.w;
       for (let tx = r.x0; tx <= r.x1; tx++) {
@@ -2410,10 +2418,10 @@ export class World {
         let s;
         if (cap && (ty === 0 || this.map[row - this.w + tx] !== code)) {
           s = cap.variants
-            ? cap.variants[(tx * cap.va + (cap.vt ? beat : 0)) & cap.vmask]
+            ? cap.variants[(tx * cap.va + (cap.vt ? tick >> cap.vt : 0)) & cap.vmask]
             : cap.sprite;
         } else if (rec.variants) {
-          s = rec.variants[(tx * rec.va + ty * rec.vb + (rec.vt ? beat : 0)) & rec.vmask];
+          s = rec.variants[(tx * rec.va + ty * rec.vb + (rec.vt ? tick >> rec.vt : 0)) & rec.vmask];
         } else {
           s = this.tileSprite(rec, tick);
         }

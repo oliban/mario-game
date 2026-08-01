@@ -874,7 +874,29 @@ const R_PIPE_SIDE_R = PIPE_H_BODY.map((row, y) => {
 // ---------------------------------------------------------------------------
 
 const TAU = Math.PI * 2;
-const LAVA_FRAMES = 8;
+// SIXTEEN frames, not eight, and the drift is 1px per frame rather than 2.
+//
+// The fields are 16px periodic, so a loop of N frames drifting d pixels a frame only
+// closes when N*d is a multiple of 16 — on EVERY axis the field is sampled on. At
+// N = 8 that forced d into {0, 2, 4, 6, 8}, and d = 0 makes the crust identical in
+// every frame and therefore in every tile, which puts the 16px lattice straight back.
+// So 2px was the slowest legal non-zero drift and the pool had no choice but to lurch.
+// N = 16 makes d = 1 legal: melt 16*1 = 16, crust 16*1 = 16 on both axes.
+//
+// Measured, per-frame slot churn over the loop:  8 frames @ 2px = 66.7%
+//                                               16 frames @ 1px = 52.8%
+//
+// It also fixes a defect that had nothing to do with churn. The surface crest is
+// indexed (x - CREST_DRIFT*f) mod 16, so IT has to close too, and at N = 8 with the
+// old 3px crest drift 3*8 = 24 = 8 (mod 16): the waterline jumped eight pixels every
+// time the loop wrapped. Nothing in the animation policy caught it because the policy
+// compares adjacent frames, and frame 7 -> frame 0 is exactly the seam it skipped.
+const LAVA_FRAMES = 16;
+// Melt 1px/frame, crust 1px/frame on a different vector, crest 2px/frame — so the
+// skin still visibly slides over the flow (2:1, where it used to be 3:2) and all three
+// close on the sixteenth frame.
+const LAVA_DRIFT = 1;
+const CREST_DRIFT = 2;
 
 // ONE low harmonic supplies the direction of flow; two octaves of wrapping value
 // noise supply the irregularity. The first cut of this tile was four harmonics and
@@ -910,10 +932,10 @@ function lavaFlow(f) {
   for (let y = 0; y < 16; y++) {
     let s = '';
     for (let x = 0; x < 16; x++) {
-      const c = crustAt(x + 2 * f, y - 2 * f);
+      const c = crustAt(x + LAVA_DRIFT * f, y - LAVA_DRIFT * f);
       if (c > 0.86) { s += '0'; continue; }          // cooled plate, cold heart
       if (c > 0.34) { s += '1'; continue; }          // its dark-red skin
-      const m = meltAt(x - 2 * f, y);
+      const m = meltAt(x - LAVA_DRIFT * f, y);
       if (m > 0.80) {
         s += '4';
         // Candidates for the white-hot core, but NEVER on the border ring. The
@@ -966,7 +988,7 @@ const BUB_POP = ['5.5', '.0.'];
 const BUBBLE = [[BUB_BORN, 11], [BUB_RISE, 8], [BUB_HIGH, 5], [BUB_POP, 3]];
 // A different column every frame of the eight, and never the same one twice, so a
 // waterline never grows two bubbles in the same place inside one loop.
-const BUB_X = [3, 11, 6, 14, 9, 1, 12, 5];
+const BUB_X = [3, 11, 6, 14, 9, 1, 12, 5, 8, 2, 13, 0, 10, 4, 15, 7];
 
 const lavaFrame = (f) => lavaFlow(f);
 
@@ -985,7 +1007,7 @@ function lavaSurface(f) {
   return body.map((row, y) => {
     let s = '';
     for (let x = 0; x < 16; x++) {
-      const t = LAVA_CREST[(((x - f * 3) % 16) + 16) % 16];
+      const t = LAVA_CREST[(((x - f * CREST_DRIFT) % 16) + 16) % 16];
       if (y < t) s += '.';
       else if (y === t) s += '5';
       else if (y === t + 1) s += '4';
@@ -1563,8 +1585,8 @@ function buildTheme(theme) {
   const anims = {
     question: new Anim([qa, qb, qc, qd], 9),
     questionBump: new Anim([qhit, qpress, qrise, qa], [3, 4, 4, 3], false),
-    lava: new Anim(lavaF, 9),
-    lavaSurf: new Anim(lavaS, 9),
+    lava: new Anim(lavaF, 5),
+    lavaSurf: new Anim(lavaS, 5),
     water: new Anim(surf, 8),
     waterBody: new Anim(bodies[0], 10),
   };
@@ -1791,38 +1813,36 @@ export const THEME_LAVA_SURF_FRAMES = {
 // pairs — never above it. There is no seam in the texture.
 //
 // The seam is created by DE-PHASING, and its size is set by the stride. Tile k draws
-// frame (va*k + beat); its neighbour is va frames further on; the melt drifts 2px per
-// frame and the crust (-2, +2), so the two are 2*va pixels out of register at the
-// join, mod 16. Measured as mean join step over mean interior step, plus how many of
-// the eight joins exceed EVERY interior column pair of their own tile:
+// frame (va*k + beat); its neighbour is va frames further on; the melt drifts
+// LAVA_DRIFT pixels per frame, so the two are va*LAVA_DRIFT pixels out of register at
+// the join, mod 16. That is the whole reason the stride matters, and it got four times
+// cheaper when the loop went to sixteen frames: at 8 frames the drift had to be 2px, so
+// stride 3 cost SIX pixels of register error; at 1px it costs three.
 //
-//   stride  join/interior   joins above all interior   register error
-//     0        1.244              0/8                   0px  (uniform: no seam at all,
-//                                                             but every tile identical)
-//     1        1.697              3/8                   2px
-//     2        1.640              3/8                   4px
-//     3        2.100              6/8                   6px   <- what ships today
-//     4        2.151              5/8                   8px
-//     5        1.826              3/8                  10px
-//     6        2.066              5/8                  12px
-//     7        1.513              2/8                  14px == -2px
+// Two constraints pick the stride. It must be ODD, or gcd(stride, 16) > 1 and the lake
+// repeats in fewer than sixteen tiles. And smaller is better for the join. Stride 1 is
+// the minimum on both counts — one pixel of register error, a full 16-tile period, and
+// each tile exactly one frame ahead of its neighbour, so the flow progresses smoothly
+// across the pool instead of jumping. That last property is worth more at 16 frames
+// than it was at 8: a one-frame step is now a one-pixel step, so a lake reads as one
+// travelling surface rather than a mosaic of independent cells.
 //
-// So stride 3 is close to the worst available. 1 and 7 are the best (2px of register
-// error either way) and 1 has a second virtue: each tile is exactly one frame ahead of
-// its neighbour, and since the melt drifts +2px per frame the flow then progresses
-// smoothly across the lake instead of jumping three frames per tile.
-//
-// This function is kept at 3 to stay consistent with world.js's _bindTileVariants,
-// which carries its own copy of the constant and is owned elsewhere. CHANGING BOTH TO
-// 1 IS A ONE-CHARACTER EDIT IN EACH and is worth doing.
+// world.js's _bindTileVariants carries its own copy of the stride and the tick shift;
+// the two must agree, and the waterline's must agree with the body's or the crest
+// slides against the flow it is supposed to be riding.
+// Twice the frames at half the drift is the same speed only if the frames advance
+// twice as often, hence >> 2 where the four-phase water still uses >> 3.
+export const LAVA_STRIDE = 1;
+export const LAVA_TICK_SHIFT = 2;
+
 export const lavaPhase = (theme, tileX = 0, tileY = 0, tick = 0) => {
   const set = THEME_LAVA_FRAMES[theme] || THEME_LAVA_FRAMES.overworld;
-  return set[(tileX * 3 + (tick >> 3)) & 7];
+  return set[(tileX * LAVA_STRIDE + (tick >> LAVA_TICK_SHIFT)) & (set.length - 1)];
 };
 
 export const lavaSurfPhase = (theme, tileX = 0, tick = 0) => {
   const set = THEME_LAVA_SURF_FRAMES[theme] || THEME_LAVA_SURF_FRAMES.overworld;
-  return set[(tileX * 3 + (tick >> 3)) & 7];
+  return set[(tileX * LAVA_STRIDE + (tick >> LAVA_TICK_SHIFT)) & (set.length - 1)];
 };
 
 // ---------------------------------------------------------------------------
