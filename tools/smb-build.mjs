@@ -442,6 +442,16 @@ export function buildArea(levelId, opts = {}) {
   const pairedBalance = new Set();
   for (const e of enemies) {
     if (e.hardOnly) continue;
+    // DEVIATION: skip a walker that would spawn inside the opening screen.
+    // 1-1's stream really does carry a goomba at column 6 — the decode is
+    // anchored by the explicit page marker later in the same stream, and every
+    // other enemy in it lands where the original's do. But the original plainly
+    // has nothing there: you do not meet a goomba until around column 22, which
+    // is the next record. Whatever suppresses it in the original (its spawner
+    // walks the stream as the screen scrolls, and this object sits behind the
+    // camera's start) is not something we reproduce, so the faithful byte gives
+    // an unfaithful experience. One line to restore if that is ever understood.
+    if (e.x < 8 && e.id < 0x37 && ENEMY_MAP[e.id]) continue;
     const gr = groupOf(e.id);
     if (gr) {
       for (let i = 0; i < gr.count; i++) ents.push({ type: gr.type, x: e.x + i, y: gr.row + 1 });

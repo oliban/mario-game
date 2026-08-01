@@ -197,7 +197,6 @@ export default {
     {x: 101,y: 9,item: 'star'},
   ],
   entities: [
-    {type: 'goomba',x: 6,y: 12},
     {type: 'goomba',x: 24,y: 12},
     {type: 'goomba',x: 38,y: 12},
     {type: 'goomba',x: 39,y: 12},
