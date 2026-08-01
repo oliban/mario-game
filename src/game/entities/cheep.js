@@ -38,10 +38,15 @@ export default class Cheep extends Entity {
       this.vx = opts.vx == null ? dir * 1.1 : opts.vx;
       this.vy = opts.vy == null ? LEAP_V0 : opts.vy;
       this.leapG = opts.gravity == null ? LEAP_G : opts.gravity;
+      this.leapMaxFall = opts.maxFall == null ? 0 : opts.maxFall;
       this.active = true;
-      // 'swim' is the water burst in sfx.js — the closest thing to a splash.
-      sfx(world, 'swim');
-      fx(world, 'splash', x + 8, y + 16);
+      // A frenzy launches its fish from below the bottom of the screen, where
+      // there is no surface to break — the original plays nothing there either.
+      if (opts.silent !== true) {
+        // 'swim' is the water burst in sfx.js — the closest thing to a splash.
+        sfx(world, 'swim');
+        fx(world, 'splash', x + 8, y + 16);
+      }
     } else {
       this.facing = opts.facing || -1;
       const base = this.variant === 'red' ? 0.95 : 0.62;
@@ -55,6 +60,7 @@ export default class Cheep extends Entity {
 
     if (this.leaping) {
       this.vy += this.leapG;
+      if (this.leapMaxFall && this.vy > this.leapMaxFall) this.vy = this.leapMaxFall;
       this.x += this.vx;
       this.y += this.vy;
       // Back under the surface it came from.

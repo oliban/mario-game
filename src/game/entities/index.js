@@ -26,6 +26,7 @@ import Lakitu from './lakitu.js';
 import Piranha from './piranha.js';
 import BulletBill from './bulletbill.js';
 import Cheep from './cheep.js';
+import Frenzy from './frenzy.js';
 import Blooper from './blooper.js';
 import Podoboo from './podoboo.js';
 import HammerBro from './hammerbro.js';
@@ -303,6 +304,7 @@ export {
   Piranha,
   BulletBill,
   Cheep,
+  Frenzy,
   Blooper,
   Podoboo,
   HammerBro,
