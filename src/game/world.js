@@ -1403,6 +1403,20 @@ export class World {
     // In co-op the level only holds still when EVERY live brother is dying, so one
     // player's death does not freeze the other mid-jump.
     const dying = roster.length > 0 && roster.every((q) => q && (q.dead || q.state === 'dying'));
+    // SMB halts its whole game engine for the grow/shrink animation: the injury
+    // and power-up routines set TimerControl to $ff, and that one flag gates
+    // enemy movement, platforms, firebars, the level timer and every other
+    // subroutine until the change-size routine clears it. Only the player's own
+    // animation keeps ticking — which is why this cannot go through freeze(),
+    // whose early return would stop the very stateTimer that ends the state.
+    //
+    // NOTE the asymmetry with `dying` above: that one is every(), this one is
+    // some(). Deliberate. A death arc runs for seconds and ends in a respawn, so
+    // holding the level for it would strand the other brother; a size change is
+    // ~35 frames, and pausing the enemies briefly for both is far less intrusive
+    // than letting a goomba walk through a frozen player. Flip this to every()
+    // if co-op should never hold still for one brother's mushroom.
+    const changing = roster.some((q) => q && (q.state === 'growing' || q.state === 'shrinking'));
 
     // The player reports its own death once the fall animation clears the
     // screen. If it never does — a broken update, a death off the bottom of a
@@ -1415,13 +1429,13 @@ export class World {
       }
     } else {
       this._deadTicks = 0;
-      this._updateTimer();
+      if (!changing) this._updateTimer();
     }
 
     for (const q of roster) if (q) this._safe(q, 'update');
 
     // SMB holds the whole level still while Mario's death arc plays.
-    if (!dying) {
+    if (!dying && !changing) {
       this._updateBridgeFall();
       this.blocks.update();
       this._updateEntities();
