@@ -866,7 +866,7 @@ function entriesInto(lvl, areaKey) {
 function main() {
   const dir = join(ROOT, 'src/data/levels');
   const files = readdirSync(dir)
-    .filter((f) => /^\d+-\d+\.js$/.test(f))
+    .filter((f) => /^(?:\d+|h)-\d+\.js$/.test(f))
     .sort();
   return (async () => {
     let total = 0;

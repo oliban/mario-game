@@ -73,7 +73,7 @@ const onlyLevel = argv.find((a) => !a.startsWith('-') && a !== onlyCheck) || nul
 
 const levelDir = join(ROOT, 'src/data/levels');
 const areas = [];
-for (const f of readdirSync(levelDir).filter((n) => /^\d+-\d+\.js$/.test(n)).sort()) {
+for (const f of readdirSync(levelDir).filter((n) => /^(?:\d+|h)-\d+\.js$/.test(n)).sort()) {
   const id = f.replace('.js', '');
   if (onlyLevel && id !== onlyLevel) continue;
   const lvl = (await import(pathToFileURL(join(levelDir, f)).href)).default;
