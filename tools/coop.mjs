@@ -438,7 +438,16 @@ const checks = await page.evaluate(async (want) => {
       for (let i = 0; i < 700; i++) {
         g.tick(1);
         if (w.state === 'levelend') phases.add(w.endPhase);
-        if (w.state === 'complete') break;
+        // Stop AT the assertion target, not past it. Letting a sub-run reach
+        // 'complete' advances the game to the next level, and that advance lands
+        // asynchronously — after the following bed() has already awaited
+        // loadLevel('1-1') — so the NEXT sub-run silently measures 1-2, finds no
+        // flagpole column (fx === -1), parks its grabber at x=-16 and reports
+        // "luigi never reached the flag". That reads as a co-op bug and is not one.
+        // This was latent: it only bites once a sub-run can finish inside 700
+        // ticks, which it could not while the end-of-level tally ran at half the
+        // original's rate (world.js TALLY_TICKS, smbdis.asm:10487-10502).
+        if (phases.has('tally') || w.state === 'complete') break;
       }
       relAll();
       return { phases: [...phases].join('>'), otherAlive: !other || (!other.dead && !other.out) };

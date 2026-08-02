@@ -198,8 +198,15 @@ const STOMP_CHAIN = [100, 200, 400, 500, 800, 1000, 2000, 4000, 5000, 8000];
 const TIME_TICKS = 24; // frames per unit of game time
 const HURRY_AT = 100;
 const DEATH_WATCHDOG = 300; // ticks before the world takes the life itself
-const TALLY_TICKS = 2; // frames per time unit during the end-of-level tally
+// AwardGameTimerPoints (smbdis.asm:10487-10502) is one star flag task tick, and
+// the task runs once a frame — so the clock sheds one unit and pays 50 points
+// EVERY frame. At 2 a 300-unit bonus took ten seconds instead of five.
+const TALLY_TICKS = 1; // frames per time unit during the end-of-level tally
 const TALLY_POINTS = 50;
+
+// DisplayDigits is a fixed six-digit field and DigitsMathRoutine (asm:2583-2610)
+// carries straight off the end of it, so the original's score wraps at 1,000,000.
+const SCORE_WRAP = 1000000;
 const FLAG_DROP = 2.6;
 
 const AIR_REC = Object.freeze({ name: 'air', char: '.', code: 46, solid: false });
@@ -612,6 +619,9 @@ export class World {
     this.flagY = 0;
     this.flagFalling = false;
     this.castleX = null;
+    // Clock reading at the moment the flagpole was grabbed; the fireworks count
+    // is derived from its last digit. See lowerFlag().
+    this._flagTime = null;
 
     this.safeMode = opts.safeMode !== false;
     this.resolveEnemyCollisions = opts.resolveEnemyCollisions !== false;
@@ -787,6 +797,7 @@ export class World {
     this.endPhase = null;
     this.endTimer = 0;
     this.flagFalling = false;
+    this._flagTime = null;
     this.state = 'playing';
 
     if (!opts.silent) this.music(lvl.music || this.theme || 'overworld');
@@ -1575,11 +1586,11 @@ export class World {
     const m = this._merge;
     if (m && x != null && Math.abs(x - m.x) < 28 && Math.abs(y - m.y) < 28) {
       if (v <= m.best) return;
-      this.score += v - m.best;
+      this.score = (this.score + v - m.best) % SCORE_WRAP;
       m.best = v;
       return;
     }
-    this.score += v;
+    this.score = (this.score + v) % SCORE_WRAP;
     if (x != null && y != null) this._popup(String(v), x, y);
   }
 
@@ -2301,6 +2312,13 @@ export class World {
     this.state = 'levelend';
     this.endPhase = 'flag';
     this.endTimer = 0;
+    // The fireworks are keyed off the LAST DIGIT OF THE CLOCK AT THIS MOMENT, and
+    // the tally below is about to run that clock to zero. GameTimerFireworks
+    // (smbdis.asm:10466-10479) is star flag task 1 and reads GameTimerDisplay+2
+    // before AwardGameTimerPoints (task 2) touches it; RaiseFlagSetoffFWorks
+    // (task 3) then fires them. Reading this.time after the tally always yields 0,
+    // which is the whole reason to snapshot it here.
+    this._flagTime = this.time;
     this.cam.lock(true);
   }
 
@@ -2363,17 +2381,55 @@ export class World {
       if (this.endTimer % TALLY_TICKS === 0) {
         if (this.time > 0) {
           this.time--;
-          this.score += TALLY_POINTS;
-          this.sfx('coin');
+          this.addScore(TALLY_POINTS);
+          // AwardGameTimerPoints (asm:10493-10497) queues the tick on
+          // `FrameCounter AND #%00000100` — four frames sounding, four silent,
+          // which is what gives the tally its stutter instead of a flat buzz.
+          // The tick itself is authored in src/audio/sfx.js ('timer-tick'), sized
+          // for exactly this firing rate.
+          if (this.endTimer & 4) this.sfx('timer-tick');
         } else {
-          this.endPhase = 'hold';
-          this.endTimer = 0;
+          this._beginFireworks();
         }
       }
+    } else if (this.endPhase === 'fireworks') {
+      // Watchdog: a missing or wedged show must not strand the level.
+      if (this.endTimer > 600) this.onFireworksDone();
     } else if (this.endPhase === 'hold' && this.endTimer > 90) {
       this.state = 'complete';
       if (this.onLevelComplete) this.onLevelComplete(this);
     }
+  }
+
+  // Star flag task 3, RaiseFlagSetoffFWorks (smbdis.asm:10516-10525): once the
+  // tally has finished, set off however many shells task 1 banked. The count rule
+  // (last digit 1/3/6 -> 1/3/6 shells, nothing otherwise) and the 500 points a
+  // shell pays (FireworksSoundScore asm:10432-10439) both live in the entity, so
+  // this hands it the snapshotted clock rather than restating the rule.
+  //
+  // Flagpole levels only. A castle ends on the axe with no star flag object, and
+  // the original fires nothing there.
+  _beginFireworks() {
+    this.endPhase = 'fireworks';
+    this.endTimer = 0;
+    const t = this._flagTime;
+    this._flagTime = null;
+    if (t == null || !this.flag) {
+      this.onFireworksDone();
+      return;
+    }
+    // Anchored on the castle, which is where the star flag stands. The shells'
+    // own spread carries them up into the sky from here.
+    const x = this.castleX != null ? this.castleX + TILE / 2 : this.flag.x + TILE * 4;
+    const y = this.flag.top + 100;
+    const show = this.spawn('fireworks', x, y, { time: t });
+    if (!show || show.removed) this.onFireworksDone();
+  }
+
+  onFireworksDone() {
+    if (this.endPhase !== 'fireworks') return;
+    this.endPhase = 'hold';
+    this.endTimer = 0;
   }
 
   _updatePopups() {
