@@ -419,7 +419,7 @@ export class BlockSystem {
   _canBreak(by) {
     if (!by) return false;
     if (by.canBreakBlocks === true) return true;
-    if (by !== this.world.player && by.isPlayer !== true) return false;
+    if (by.isPlayer !== true) return false;
     if (by.big === true) return true;
     const p = by.power || by.state;
     return !!p && p !== 'small' && p !== 'tiny';
@@ -431,9 +431,16 @@ export class BlockSystem {
     return item || null;
   }
 
-  _resolveItem(item) {
+  // A "power" block yields a mushroom to a small player and a fire flower to a
+  // big one. In co-op that has to follow whoever actually hit the block: reading
+  // it off world.player handed small Luigi a fire flower whenever Mario happened
+  // to be big, and handed big Luigi a useless mushroom whenever Mario was small.
+  // `by` is absent only when something other than a player opens the block (a
+  // shell, a star-struck bump); those fall back to the primary brother, which is
+  // the closest thing to "the player" such a bump has.
+  _resolveItem(item, by) {
     if (item !== 'power' && item !== 'powerup') return item;
-    const p = this.world.player;
+    const p = by && by.isPlayer === true ? by : this.world.player;
     const big = p && (p.big === true || (p.power && p.power !== 'small'));
     return big ? 'fireflower' : 'mushroom';
   }
@@ -465,7 +472,7 @@ export class BlockSystem {
     }
 
     w.sfx('sprout');
-    this.spawnFromBlock(this._resolveItem(raw), tx, ty, by);
+    this.spawnFromBlock(this._resolveItem(raw, by), tx, ty, by);
   }
 
   // The Coin entity banks the coin and the 200 points itself, so only the

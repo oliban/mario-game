@@ -2133,7 +2133,12 @@ export class World {
     return null;
   }
 
-  warp(wdef) {
+  // `by` is the brother who actually entered the pipe or rode the vine. Without
+  // it the emerging animation always played on world.player, so Luigi could walk
+  // into a pipe and watch Mario climb out of it. Both brothers travel either way
+  // — _placePlayer puts them side by side at the destination — so this decides
+  // who performs the exit, not who arrives.
+  warp(wdef, by) {
     const to = wdef && wdef.to;
     if (!to) return false;
 
@@ -2167,7 +2172,9 @@ export class World {
       resetTime: false,
       spawnAt: { x: to.x, y: to.y },
     });
-    const p = this.player;
+    // The exit belongs to whoever entered; the camera still anchors on the
+    // primary brother, so `world.player` keeps meaning exactly what it did.
+    const p = by && by.isPlayer === true ? by : this.player;
     if (!p) return true;
     const exit = to.exit || to.dir || null;
     if (exit && exit !== 'none' && typeof p.exitPipe === 'function') {
@@ -2177,12 +2184,12 @@ export class World {
       p.controlsLocked = false;
       p.state = 'normal';
     }
-    this.cam.reset(this.level, p);
+    this.cam.reset(this.level, this.player || p);
     return true;
   }
 
-  doWarp(wdef) {
-    return this.warp(wdef);
+  doWarp(wdef, by) {
+    return this.warp(wdef, by);
   }
 
   // -------------------------------------------------------------------------

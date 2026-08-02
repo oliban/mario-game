@@ -670,6 +670,16 @@ export default class Player extends EntityBase {
   // public surface
   // -------------------------------------------------------------------------
 
+  // Entity's base getter answers this by comparing against `world.player`, which
+  // in co-op names only ONE of the two brothers. Every consumer of it asks "is
+  // this A player" — may it break a brick, skip it in the axe hazard sweep, keep
+  // it safe from despawn — and Luigi answering false to all three made him a
+  // second-class brother who could not open a brick wall. `world.player` keeps
+  // its own meaning (the primary/camera brother); this is a different question.
+  get isPlayer() {
+    return true;
+  }
+
   get big() {
     return this.power !== POWER.SMALL;
   }
@@ -1960,7 +1970,7 @@ export default class Player extends EntityBase {
         this.state = 'done';
         this.hidden = true;
         this.climbVine = null;
-        if (typeof this.world.warp === 'function') this.world.warp(v.warp);
+        if (typeof this.world.warp === 'function') this.world.warp(v.warp, this);
         return;
       }
       this.y = v.y + 2;
@@ -1990,7 +2000,7 @@ export default class Player extends EntityBase {
     const wdef = p.warp;
     const to = wdef && wdef.to;
     if (hasAny(this.world, ['warp', 'doWarp', 'takeWarp', 'enterWarp'])) {
-      callAny(this.world, ['warp', 'doWarp', 'takeWarp', 'enterWarp'], wdef);
+      callAny(this.world, ['warp', 'doWarp', 'takeWarp', 'enterWarp'], wdef, this);
     } else if (to && hasAny(this.world, ['loadArea', 'gotoArea', 'loadLevel'])) {
       callAny(this.world, ['loadArea', 'gotoArea', 'loadLevel'], to.area, to.x, to.y);
     } else {
