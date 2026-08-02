@@ -678,9 +678,30 @@ export function returnColumnFor(world, { area = 'UndergroundArea3', page = null,
 // record, leaving the caller to fall back to its terrain search.
 export function bonusReturn(meta, world, bonusPage) {
   const col = returnColumnFor(world, { page: bonusPage });
-  if (col == null) return null;
+  return col == null ? null : { col, top: pipeTopAt(meta, col) };
+}
+
+// The same pairing for the water rooms, read out of THEIR area's stream.
+// WaterArea1 is a whole area rather than a 32-column window onto a page, so like
+// skyReturn it passes no page and the world match alone decides; its stream
+// carries one row-$0e record for world 5 and one for world 6, and both name
+// EntrancePage 7.
+//
+// The offset is 3, not skyReturn's 2: you leave a water room through a SIDE
+// pipe, and SideExitPipeEntry sets AltEntranceControl to 2 (asm:5706-5710), so
+// PlayerStarting_X_Pos is read at index 2 = $38 = three columns and a half. The
+// caller appends the half.
+export function waterReturn(meta, world) {
+  const col = returnColumnFor(world, { area: 'WaterArea1', offset: 3 });
+  return col == null ? null : { col, top: pipeTopAt(meta, col) };
+}
+
+// The top of the pipe standing in that column, so an exit names a real pipe
+// mouth rather than a bare floor tile. 12 is floor level, and a return that
+// carries it is a return no pipe was found for.
+function pipeTopAt(meta, col) {
   const pipe = (meta.pipes || []).find((p) => p.x <= col && col <= p.x + 1);
-  return { col, top: pipe ? pipe.top : 12 };
+  return pipe ? pipe.top : 12;
 }
 
 // A coin heaven does not put you back through a pipe at all, which is why no
@@ -801,8 +822,23 @@ ${g.map((r) => `    '${r.join('')}',`).join('\n')}
 }
 
 // The underwater bonus room, WaterArea1 — 5-2 and 6-2 each have a pipe into it.
-// You drop in at the left, swim right, and leave by the water pipe.
-export function waterRoomSource(id, name, back) {
+// You drop in at the top left, swim right, and leave by the water pipe.
+//
+// The drop-in is NOT the coin rooms' emergence out of a ceiling, and the room
+// has no ceiling to emerge from: rows 0 and 1 are open water. Coming down a pipe
+// into a sub-area leaves AltEntranceControl at 0 (PlayerRdy clears it,
+// asm:5546-5547; only SideExitPipeEntry sets 2 and CloudExit 3), so PlayerEntrance
+// takes neither pipe branch — it reads `ldy Player_Y_Position / cpy #$30 / bcc
+// AutoControlPlayer` (asm:5498-5501) and simply lets him sink under no control
+// until he is past $30. Position comes from index 0 of both tables: X =
+// PlayerStarting_X_Pos[0] = $28 = column 2.5, and Y = PlayerStarting_Y_Pos
+// [PlayerEntranceCtrl] where WaterArea1's header byte 0 is $41, so
+// (($41 & %00111000) >> 3) = 0 = $00 (asm:2801-2807 for the header bits,
+// 2850-2858 for the lookup) — the very top of the screen, row 0.
+//
+// Hence `spawn: { x: 2, y: 0 }` and callers warping in with `exit: 'none'`: no
+// pipe animation, because the original plays none here.
+export function waterRoomSource(id, name, back, backTop) {
   const b = buildArea('WaterArea1', { theme: 'water' });
   const rows = b.tiles.map((r) => {
     let out = '';
@@ -820,13 +856,13 @@ const WATERROOM = {
   music: 'underwater',
   width: ${b.width},
   height: 15,
-  spawn: { x: 3, y: 12 },
+  spawn: { x: 2, y: 0 },
   tiles: [
 ${rows.map((r) => `    '${r}',`).join('\n')}
   ],
   entities: [],
   warps: [
-    { from: { x: ${wp.x - 1}, y: ${wp.top} }, dir: 'right', to: { area: 'main', x: ${back}.5, y: 12, exit: 'up' } },
+    { from: { x: ${wp.x - 1}, y: ${wp.top} }, dir: 'right', to: { area: 'main', x: ${back}.5, y: ${backTop}, exit: 'up' } },
   ],
 };
 `;
