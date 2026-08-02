@@ -2234,13 +2234,24 @@ export class World {
       this.cam.player = this.player;
     }
 
+    // PlayerLoseLife (smbdis.asm:2911-2916) decrements FIRST and only then tests
+    // the result — `dec NumberofLives / bpl StillInGame` — so the life being taken
+    // is the one just spent, and the game ends when nothing is left to spend.
+    // Testing before the decrement gave a fourth attempt the original never grants
+    // and let `lives` sit at 0 for a life the player was still playing.
+    //
+    // We keep our own storage convention rather than the ROM's: `lives` counts
+    // attempts REMAINING INCLUDING THE CURRENT ONE (3 at the start), where SMB
+    // stores 2 and prints NumberofLives+1 (asm:1723-1726) for the same display.
+    // The two agree on every number the player ever sees, and ours keeps the HUD,
+    // the co-op roster and the intermediate screen free of the +1.
+    this.lives--;
     if (this.lives <= 0) {
       this.state = 'gameover';
       this.music('game-over');
       if (this.onGameOver) this.onGameOver(this);
       return;
     }
-    this.lives--;
     const handled = this.onLifeLost ? this.onLifeLost(this) === true : false;
     if (!handled) this.respawn();
   }
