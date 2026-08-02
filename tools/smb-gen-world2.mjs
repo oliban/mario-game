@@ -138,7 +138,7 @@ ${L.contents.map((c) => `    ${j(c).replace(/"([a-z]+)":/g, '$1: ').replace(/"/g
 ${entsBlock(ents)}
   ],
   warps: [
-    { from: { x: ${warp.x}, y: ${warp.top} }, dir: 'down', to: { area: '2-1b', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: ${warp.x}, y: ${warp.top} }, dir: 'down', to: { area: '2-1b', x: 3.5, y: 3, exit: 'down' } },
   ],
   areas: { '2-1b': BONUS, '2-1c': SKY },
   flagpole: { x: ${L.meta.flagpole.x} },

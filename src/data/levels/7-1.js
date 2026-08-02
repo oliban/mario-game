@@ -97,7 +97,7 @@ export default {
     {type: 'springboard',x: 151,y: 11},
   ],
   warps: [
-    { from: { x: 93, y: 10 }, dir: 'down', to: { area: '7-1b', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: 93, y: 10 }, dir: 'down', to: { area: '7-1b', x: 3.5, y: 3, exit: 'down' } },
   ],
   areas: { '7-1b': BONUS },
   flagpole: { x: 179 },

@@ -180,9 +180,9 @@ ${contentsBlock(L.contents)}
 ${entsBlock(L.entities)}
   ],
   warps: [
-    { from: { x: ${wps[0].x}, y: ${wps[0].top} }, dir: 'down', to: { area: '6-2b', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: ${wps[0].x}, y: ${wps[0].top} }, dir: 'down', to: { area: '6-2b', x: 3.5, y: 3, exit: 'down' } },
     { from: { x: ${wps[1].x}, y: ${wps[1].top} }, dir: 'down', to: { area: '6-2w', x: 3.5, y: 12, exit: 'down' } },
-    { from: { x: ${wps[2].x}, y: ${wps[2].top} }, dir: 'down', to: { area: '6-2d', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: ${wps[2].x}, y: ${wps[2].top} }, dir: 'down', to: { area: '6-2d', x: 3.5, y: 3, exit: 'down' } },
   ],
   areas: { '6-2b': BONUS, '6-2d': BONUS2, '6-2w': WATERROOM, '6-2c': SKY },
   flagpole: { x: ${L.meta.flagpole.x} },

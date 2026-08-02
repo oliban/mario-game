@@ -197,7 +197,7 @@ export default {
     {type: 'piranha',x: 214.5,y: 10},
   ],
   warps: [
-    { from: { x: 84, y: 10 }, dir: 'down', to: { area: '4-2b', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: 84, y: 10 }, dir: 'down', to: { area: '4-2b', x: 3.5, y: 3, exit: 'down' } },
     { from: { x: 187, y: 8 }, dir: 'right', to: { complete: true } },
     { from: { x: 214, y: 10 }, dir: 'down', to: { area: '4-2w', x: 2.5, y: 12, exit: 'down' } },
   ],

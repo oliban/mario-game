@@ -132,7 +132,7 @@ ${contentsBlock(L.contents)}
 ${entsBlock(L.entities)}
   ],
   warps: [
-    { from: { x: ${wp.x}, y: ${wp.top} }, dir: 'down', to: { area: '7-1b', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: ${wp.x}, y: ${wp.top} }, dir: 'down', to: { area: '7-1b', x: 3.5, y: 3, exit: 'down' } },
   ],
   areas: { '7-1b': BONUS },
   flagpole: { x: ${L.meta.flagpole.x} },

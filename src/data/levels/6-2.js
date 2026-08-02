@@ -228,9 +228,9 @@ export default {
     {type: 'piranha',x: 201.5,y: 9},
   ],
   warps: [
-    { from: { x: 19, y: 9 }, dir: 'down', to: { area: '6-2b', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: 19, y: 9 }, dir: 'down', to: { area: '6-2b', x: 3.5, y: 3, exit: 'down' } },
     { from: { x: 56, y: 8 }, dir: 'down', to: { area: '6-2w', x: 3.5, y: 12, exit: 'down' } },
-    { from: { x: 153, y: 10 }, dir: 'down', to: { area: '6-2d', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: 153, y: 10 }, dir: 'down', to: { area: '6-2d', x: 3.5, y: 3, exit: 'down' } },
   ],
   areas: { '6-2b': BONUS, '6-2d': BONUS2, '6-2w': WATERROOM, '6-2c': SKY },
   flagpole: { x: 216 },

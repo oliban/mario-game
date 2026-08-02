@@ -123,7 +123,7 @@ export default {
     {type: 'piranha',x: 163.5,y: 11},
   ],
   warps: [
-    { from: { x: 156, y: 7 }, dir: 'down', to: { area: '5-1b', x: 3.5, y: 12, exit: 'down' } },
+    { from: { x: 156, y: 7 }, dir: 'down', to: { area: '5-1b', x: 3.5, y: 3, exit: 'down' } },
   ],
   areas: { '5-1b': BONUS },
   flagpole: { x: 199 },
