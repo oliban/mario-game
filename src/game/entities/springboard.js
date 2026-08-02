@@ -63,6 +63,12 @@ const MID_H = 24;
 const LOW_H = 16;
 const HEIGHTS = [FULL_H, MID_H, LOW_H, LOW_H];
 
+// ChkFootMTile (asm:12009-12015) lands Mario on the metatile under his feet
+// only when the low nybble of his vertical position is under 5 — within 5px of
+// the tile top. Deeper than that and it jumps to ImpedePlayerMove instead: he
+// is beside the block, not on it.
+const LAND_SLACK = 5;
+
 export default class SpringBoard extends Entity {
   static type = 'springboard';
 
@@ -227,8 +233,42 @@ export default class SpringBoard extends Entity {
     fx(this.world, 'landingDust', this.x + 8, this.baseline - 2, 0.8);
   }
 
+  // The original's jumpspring is not merely something to stand on. The level
+  // object writes the metatiles $67 (top) and $68 (bottom) into the block
+  // buffer, and CheckForSolidMTiles (asm:12355-12360) calls everything from
+  // $61 up in that group SOLID — so the board blocks Mario from the side and he
+  // has to step up onto it. Ours was a pass-through platform, and a player
+  // arriving at any speed slid straight through the plate and jammed against
+  // whatever stood beyond it. In 2-1 that is the ten-tile wall the spring
+  // exists to clear, one column to the right: the plate was unreachable in
+  // ordinary play and the spring looked broken.
+  //
+  // The metatiles do not move. Only the sprite dips through
+  // Jumpspring_Y_PosData, so the solid box is always the full two tiles from
+  // the baseline up, never the compressed height.
+  _impede(player) {
+    const top = this.baseline - FULL_H;
+    if (player.y + player.h <= top + LAND_SLACK) return; // above it: he clears the block
+    if (player.y >= this.baseline) return;
+    const outLeft = player.x + player.w - this.x;
+    const outRight = this.x + this.w - player.x;
+    if (outLeft <= 0 || outRight <= 0) return;
+    // ImpedePlayerMove (asm:12318-12345) nulls Player_X_Speed and walks him
+    // back off the block; push to the nearer face, never deeper in.
+    if (outLeft < outRight) {
+      player.x = Math.min(player.x, this.x - player.w);
+      if (player.vx > 0) player.vx = 0;
+    } else {
+      player.x = Math.max(player.x, this.x + this.w);
+      if (player.vx < 0) player.vx = 0;
+    }
+  }
+
   onPlayerTouch(player) {
-    if (!this.standing(player) || player.vy < 0) return;
+    if (!this.standing(player) || player.vy < 0) {
+      if (!this._riderOf(player)) this._impede(player);
+      return;
+    }
     // Latch him here too: the collision pass runs after update(), so a brother
     // who arrives a frame late is caught before the plate can drop out from
     // under him.
