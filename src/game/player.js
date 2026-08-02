@@ -578,6 +578,12 @@ const LEDGE_SNAP = 5;
 // $20 foot adder), so the bottom of the body never catches on a ledge face.
 const SIDE_FOOT_SKIP = 8;
 
+// ImpedePlayerMove moves Mario ONE PIXEL away from a wall he is pressed into
+// every frame the side collision lasts (smbdis.asm:12318-12351), which is what
+// stops the original ever leaving him embedded in solid geometry. Player-only:
+// the ROM routine is, and resolveX is shared with every enemy.
+const SIDE_EJECT = 1;
+
 // ---------------------------------------------------------------------------
 
 export default class Player extends EntityBase {
@@ -640,6 +646,7 @@ export default class Player extends EntityBase {
     this.autoCorpse = false;
     this.persistent = true;
     this.colOpts.footSkip = SIDE_FOOT_SKIP;
+    this.colOpts.ejectX = SIDE_EJECT;
 
     this.walkPhase = 0;
     this.animPhase = 0;
