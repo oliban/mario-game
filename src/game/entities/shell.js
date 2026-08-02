@@ -18,7 +18,19 @@ import {
   sfx,
 } from './index.js';
 
-const STILL_FRAMES = 140;
+// HandleStompedShellE (smbdis.asm:11499-11510) sets EnemyIntervalTimer from
+// RevivalRateData (asm:11496) to $10. EnemyIntervalTimer is $0796, ABOVE the
+// frame-timer cut at offset $14, so DecTimers (asm:786-799) only decrements it
+// once per 21 frames: 16 * 21 = 336 frames before the koopa climbs back in.
+//
+// The last WOBBLE_FRAMES of that are the shiver that telegraphs it. The original
+// has no wobble — it is ours — so it is spent out of the 336, not added to it.
+//
+// NOT YET FAITHFUL: RevivalRateData's second entry is $0b (231 frames) under
+// PrimaryHardMode, i.e. worlds 5-8. We have no hard-mode flag at all yet — see
+// the hard-mode item in agent-reports/enemies.md, which covers enemy walk speed,
+// the hammer interval and Bowser's flame timer as well.
+const STILL_FRAMES = 256;
 const WOBBLE_FRAMES = 80;
 
 const ART = {
