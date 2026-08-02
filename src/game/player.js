@@ -247,10 +247,13 @@ const approach =
 // horizontal speed at takeoff. physics.js's jumpVelocityFor(speed) returns that whole
 // row as { vy0, gHold, gFall } — never a bare number, so it is consumed directly here
 // rather than through the numeric resolver. The row is latched for the whole jump.
+// Thresholds are the ROM's, $09/$10/$19/$1c over 16 — see the table in
+// physics.js for the derivation. The third is 1.5625 ($19, exactly maxWalk),
+// not 2.3125; this copy must not drift from that one.
 const FALLBACK_JUMP_ROWS = [
   { at: 0.0, vy0: -4.0, gHold: 0.125, gFall: 0.4375 },
   { at: 1.0, vy0: -4.0, gHold: 0.1171875, gFall: 0.375 },
-  { at: 2.3125, vy0: -5.0, gHold: 0.15625, gFall: 0.5625 },
+  { at: 1.5625, vy0: -5.0, gHold: 0.15625, gFall: 0.5625 },
 ];
 
 function fallbackJumpRow(speed) {
