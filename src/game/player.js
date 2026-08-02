@@ -1480,18 +1480,20 @@ export default class Player extends EntityBase {
 
   _awardChain(x, y, field) {
     const i = this[field];
-    const last = STOMP_SCORES.length - 1; // index 9 -> 8000
-    // Saturate the counter: past the 1-UP step the chain keeps paying the top
-    // value, it does not keep minting lives.
-    this[field] = Math.min(i + 1, STOMP_SCORES.length + 1);
-    if (i === STOMP_SCORES.length) {
-      // exactly one 1-UP per chain
+    // Saturate the counter ON the 1-UP step, not past it. FloateyNumbersRoutine
+    // (smbdis.asm:1286-1289) clamps FloateyNum_Control at $0b and $0b IS the 1-UP
+    // entry of ScoreUpdateData (asm:1278-1281, `inc NumberofLives` asm:1300), so
+    // once a chain reaches the top EVERY further enemy pays another life — it does
+    // not fall back to 8000. entities/index.js:shellChainScore models the same
+    // clamp for a kicked shell's chain; these two must not disagree.
+    this[field] = Math.min(i + 1, STOMP_SCORES.length);
+    if (i >= STOMP_SCORES.length) {
       callAny(this.world, ['addLife', 'oneUp', 'gainLife', 'addLives'], 1);
       sfx(this.world, '1up', 'oneup');
       fx(this.world, 'powerupSparkle', x, y);
       return 0;
     }
-    const score = STOMP_SCORES[Math.min(i, last)];
+    const score = STOMP_SCORES[i];
     callAny(this.world, ['addScore', 'score', 'addPoints'], score, x, y);
     return score;
   }

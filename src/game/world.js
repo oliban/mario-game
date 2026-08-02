@@ -1890,11 +1890,15 @@ export class World {
 
     p.vy = -6.4;
     p.grounded = false;
+    // Past the top of the table the chain keeps paying LIVES, not 8000 again:
+    // FloateyNumbersRoutine (asm:1286-1289) clamps FloateyNum_Control at $0b, and
+    // $0b is the 1-UP entry of ScoreUpdateData (asm:1278-1281, `inc NumberofLives`
+    // asm:1300) — so every further enemy in an unbroken chain is another life.
+    // entities/index.js:shellChainScore already models this for the shell chain.
     const i = p.stompChain | 0;
-    p.stompChain = Math.min(i + 1, STOMP_CHAIN.length + 1);
+    p.stompChain = Math.min(i + 1, STOMP_CHAIN.length);
     if (i < STOMP_CHAIN.length) this.addScore(STOMP_CHAIN[i], e.x + e.w * 0.5, e.y);
-    else if (i === STOMP_CHAIN.length) this.addLife(1, e.x + e.w * 0.5, e.y);
-    else this.addScore(STOMP_CHAIN[STOMP_CHAIN.length - 1], e.x + e.w * 0.5, e.y);
+    else this.addLife(1, e.x + e.w * 0.5, e.y);
   }
 
   // Free-standing coins, hazard tiles and the castle axe.
