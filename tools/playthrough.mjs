@@ -146,7 +146,12 @@ const PAGE_HELPERS = () => {
       const w = g.world;
       if (!keepEntities) {
         w.entities.length = 0;
-        if (w.level) w.level.entities = [];
+        // `w.level` is the imported level module, shared by every load in this
+        // page. Emptying its `entities` in place does not just clear this run —
+        // it strips the level's platforms and enemies from every LATER load too,
+        // so a check that asks to keep entities gets none. Swap in a shallow
+        // clone instead and leave the module alone.
+        if (w.level) w.level = { ...w.level, entities: [] };
       }
       return w;
     },
@@ -383,7 +388,21 @@ if (wanted('blocks')) {
         // item still rising is frozen mid-rise and looks like it "never finished".
         // The caller re-sites and tries again.
         const trial = async (s, spot) => {
-          const w = await window.__PT.load(id, areaId);
+          // KEEP THE PLATFORMS. bumpSpots deliberately counts virtual lift nodes
+          // as places to stand — 6-3's power block hangs over a twelve-tile void
+          // with a horizontal lift running under it, and riding it is exactly
+          // what the original intends. Clearing every entity deleted that lift
+          // and dropped the player into the pit. Enemies still go, because this
+          // check is about level design and not combat.
+          //
+          // keepEntities also matters because __PT.load's clearing path empties
+          // `w.level.entities`, which is the CACHED level module: once cleared,
+          // every later load of that level in the same page comes back with no
+          // platforms at all.
+          const w = await window.__PT.load(id, areaId, { keepEntities: true });
+          for (let i = w.entities.length - 1; i >= 0; i--) {
+            if (!w.entities[i].isPlatform) w.entities.splice(i, 1);
+          }
           const p = window.__PT.place(spot.x, spot.y, 'small');
           const lives0 = w.lives;
           const power0 = p.power;
@@ -451,8 +470,12 @@ if (wanted('blocks')) {
 
     const why = (r) => {
       if (!r.spawned) return 'nothing spawned';
-      if (r.stillEmerging) return `${r.kindName} never finished rising out of the block`;
+      // removedEarly BEFORE stillEmerging. An item destroyed while it was still
+      // rising satisfies both, and "was destroyed" is the accurate half — the
+      // other way round it was reported as having simply stalled, which sends
+      // you looking at the emerge code instead of at whatever killed it.
       if (r.removedEarly) return `${r.kindName} was destroyed before it emerged`;
+      if (r.stillEmerging) return `${r.kindName} never finished rising out of the block`;
       if (r.emerged && (r.emerged.insideSolid || r.emerged.headInSolid)) {
         return `${r.kindName} emerged INSIDE a solid tile at ${r.emerged.tx},${r.emerged.ty}`;
       }
@@ -477,9 +500,10 @@ if (wanted('blocks')) {
         detail(
           invalid,
           (r) =>
-            `HARNESS: player died at all ${r.spotsTried} candidate bump spot(s), so the trial never ran.` +
-            ` Every spot for this block is a lift node and __PT.load clears entities, which deletes the lift` +
-            ` the player was supposed to be standing on. No verdict on the block.`
+            `HARNESS: player died at all ${r.spotsTried} candidate bump spot(s), so the trial never ran` +
+            ` and there is no verdict on this block. A death gates _updateEntities (world.js:1711),` +
+            ` the only caller of stepEmerge, so the item freezes mid-rise and would otherwise be` +
+            ` misreported as "never finished rising".`
         ),
         true
       );
