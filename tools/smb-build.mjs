@@ -840,9 +840,15 @@ ${g.map((r) => `    '${r.join('')}',`).join('\n')}
 // pipe animation, because the original plays none here.
 export function waterRoomSource(id, name, back, backTop) {
   const b = buildArea('WaterArea1', { theme: 'water' });
-  const rows = b.tiles.map((r) => {
+  // The surface band is the top two ROWS, exactly as emitLevel floods a water
+  // level (`r[x] = y <= 1 ? '~' : '_'`). This once read `x < 2`, the same rule
+  // with the axis swapped, which put the waterline down the left-hand EDGE:
+  // columns 0-1 were surface all the way to the seabed and every row above the
+  // crest was open water. The room now enters at row 0, so it faced the player
+  // on arrival.
+  const rows = b.tiles.map((r, y) => {
     let out = '';
-    for (let x = 0; x < b.width; x++) out += r[x] === '.' ? (x < 2 ? '~' : '_') : r[x];
+    for (let x = 0; x < b.width; x++) out += r[x] === '.' ? (y <= 1 ? '~' : '_') : r[x];
     return out;
   });
   const wp = b.meta.waterPipe;
