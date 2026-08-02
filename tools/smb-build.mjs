@@ -878,9 +878,33 @@ ${rows.map((r) => `    '${r}',`).join('\n')}
 // two rows for it: `$24, $05, $24` — blank, five, blank — for the beanstalk
 // route, and `$08, $07, $06` for the other one. So which pipes work depends on
 // how you arrived, and `dests` says which.
+// The room ENDS at the wall the player cannot pass, and the emitted width is the
+// camera's right limit (camera.js: maxX = width*16 - screenW). Emitting anything
+// past the wall therefore lets the camera scroll beyond the warp pipes, and
+// because the camera is forward-only and player.js pins the player to cam.x, a
+// pipe that crosses the left edge is gone for good. That was the bug: at width
+// 70 the camera reached column 54, so walking to the last pipe put the world-8
+// pipe at column 50 permanently out of reach — aiming for it landed you in 7-1.
+//
+// The original solves this with a ScrollLockObject (smbdis.asm:3566) that stops
+// the camera dead. We have no such mechanism, but we do not need one here: the
+// lock exists so the player can walk BACK to a pipe he has passed, which reduces
+// to "the camera's left edge must never pass the first pipe". Ending the room at
+// the wall gives exactly that, from the data, with no camera code.
+//
+// NOTE the trap this replaces: `buildArea` computes width as furthest object + 8
+// (see the width line near the top of this file), and objects that place no
+// tiles — ScrollLockWarp, the Frenzy commands, LoopCmd — count. For GroundArea16
+// the furthest object IS the scroll lock at column 70, so the camera command that
+// exists to constrain the camera was defining the limit it was meant to
+// constrain. That affects 16 of the 34 areas and is its own task; do not "fix"
+// the width line without measuring, because every castle is padded by a trailing
+// LoopCmd 8 columns past the axe and the bridge.
 export function warpZoneSource(id, name, dests) {
   const b = buildArea('GroundArea16', { theme: 'overworld' });
-  const W = 70;
+  const wall = b.objs.filter((o) => o.name === 'ColumnOfSolidBlocks').map((o) => o.x);
+  if (!wall.length) throw new Error('warpZoneSource: no wall found — cannot bound the room');
+  const W = Math.max(...wall) + 1;
   const rows = b.tiles.map((r) => r.slice(0, W));
   const pipes = b.meta.pipes.filter((p) => p.warp);
   const warps = pipes
