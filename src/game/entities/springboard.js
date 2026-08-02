@@ -179,7 +179,24 @@ export default class SpringBoard extends Entity {
         // Jumpspring_Y_PosData is $08,$10,$08,$00 (asm:6625-6626): dip, deepest,
         // dip, flush -- it springs back before it launches.
         this.setStage([2, 3, 2, 0][step]);
-        if (step >= 1) this._sampleBoost();
+        // DEVIATION: the original does NOT check the A button on the first
+        // animation step. `tay / dey` makes Y = JumpspringAnimCtrl - 1
+        // (asm:6631-6633) and the check is gated on `cpy #$01 / bcc BounceJS`,
+        // so step 0's four frames are dead: a player who taps the instant he
+        // lands -- the most natural input there is -- earns nothing, and the
+        // real window is 4 + 4 + 1 = 9 frames.
+        //
+        // Measured here at exactly that: frames 3-11 after contact boosted to
+        // 12.44 tiles, 0-2 and 12+ gave the plain 4.37. Faithful, and reported
+        // twice as not working. The user chose to widen it rather than keep a
+        // mechanic he could not trigger, so the check now runs from contact to
+        // launch, ~13 frames with no dead zone.
+        //
+        // The RULE is untouched: still a FRESH press, never a held button
+        // (_sampleBoost, asm:6648-6656), so holding jump from the approach jump
+        // still gives the small hop and the choice between the two bounces
+        // survives. Only the window moved.
+        this._sampleBoost();
         for (const r of this.riders) this.snap(r.player);
         if (step >= 3) {
           this.phase = 'release';
