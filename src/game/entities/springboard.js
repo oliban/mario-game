@@ -211,6 +211,17 @@ export default class SpringBoard extends Entity {
       default:
         break;
     }
+
+    // JumpspringAnimCtrl. While it is set the player's own jump routine is
+    // skipped (asm:6064-6066) and so is the landing routine (asm:12007-12008) —
+    // snap() otherwise leaves a rider looking grounded for the whole compress,
+    // so the fresh press the boost is keyed to doubles as an ordinary jump and
+    // he hops off the plate under his own power. Re-asserted every animating
+    // frame rather than latched: player.update() consumes it, so a rider
+    // carried off by a level change, a warp or a death is never left unable to
+    // jump. JumpspringHandler clears it on the frame it writes Player_Y_Speed
+    // (asm:6657-6661), which is the frame this stops setting it.
+    if (this.phase !== 'idle') for (const r of this.riders) r.player.springAnim = true;
   }
 
   launch(player, boost) {

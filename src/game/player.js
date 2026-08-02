@@ -772,6 +772,15 @@ export default class Player extends EntityBase {
 
     this._checkVines();
 
+    // JumpspringAnimCtrl, consumed once per frame. A springboard re-asserts it
+    // on every frame it animates (SpringBoard.update, which runs after the
+    // roster — world.js:1642 then :1651), so reading it here and dropping it
+    // means it can never outlive the board that set it. A latch the board had
+    // to clear would strand the player unable to jump for good the moment he
+    // rode one through a level change, a warp or a death.
+    this._springLock = this.springAnim;
+    this.springAnim = false;
+
     switch (this.state) {
       case 'normal':
         this._updateNormal();
@@ -894,6 +903,17 @@ export default class Player extends EntityBase {
     if (this.jumpBuffer > 0) this.jumpBuffer--;
     if (this.grounded) this.coyote = P.coyote;
     else if (this.coyote > 0) this.coyote--;
+
+    // CheckForJumping (smbdis.asm:6064-6066) reads JumpspringAnimCtrl BEFORE it
+    // reads the A button and skips the whole jump routine while a jumpspring is
+    // animating; the vertical collision path does the same at asm:12007-12008,
+    // branching away from LandPlyr. Ours has to say it out loud because
+    // SpringBoard.snap() holds a rider `grounded` for the entire compress, so
+    // the fresh press the boost is keyed to is also a legal ordinary jump and
+    // _doJump() fires on it — Mario hops under his own power mid-compress. The
+    // buffer goes with it: the original has none, and a press that survived the
+    // animation would only fire the jump on the frame the spring let go.
+    if (this._springLock) this.jumpBuffer = 0;
 
     if (this.inWater) {
       if (this.jumpBuffer > 0) {
