@@ -22,6 +22,13 @@ const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
 // button is no longer a proxy for which gravity applies, and a small bounce
 // taken with the button down would otherwise out-climb the big one.
 const FALL_G = num(PHYS.gravity || PHYS.playerGravity, 0.4375);
+
+// Frames per animation step. JumpspringTimer is reloaded with $04 and the frame
+// control only advances when it expires (asm:6668-6672), so each of the four
+// steps lasts four frames and the whole spring runs ~13 frames rather than the
+// six ours used to take. This is the constant that decides whether a human can
+// land the fresh press the boost requires.
+const STEP_FRAMES = 4;
 export const SPRING_LAUNCH = -7; // $f9
 export const SPRING_LAUNCH_HELD = -12; // $f4
 export const SPRING_RISE_G = FALL_G; // VerticalForce = $70
@@ -153,11 +160,22 @@ export default class SpringBoard extends Entity {
         break;
       }
       case 'compress': {
+        // The original holds each animation step for FOUR frames --
+        // JumpspringTimer is reloaded with $04 (asm:6670-6672) and only then does
+        // JumpspringAnimCtrl advance. The A-check runs while Y = ctrl-1 is 1 or 2
+        // and the launch fires when it reaches 3, so a player has roughly NINE
+        // frames to land a fresh press. Ours ran a step per frame, which gave six
+        // frames across compress and release together and made the boost feel
+        // like it did nothing. STEP_FRAMES is what makes the window hittable; do
+        // not collapse it back to one.
         this.phaseT++;
-        this.setStage(Math.min(3, this.phaseT));
-        this._sampleBoost();
+        const step = Math.min(3, Math.floor(this.phaseT / STEP_FRAMES));
+        // Jumpspring_Y_PosData is $08,$10,$08,$00 (asm:6625-6626): dip, deepest,
+        // dip, flush -- it springs back before it launches.
+        this.setStage([2, 3, 2, 0][step]);
+        if (step >= 1) this._sampleBoost();
         for (const r of this.riders) this.snap(r.player);
-        if (this.phaseT >= 3) {
+        if (step >= 3) {
           this.phase = 'release';
           this.phaseT = 0;
         }
@@ -166,8 +184,8 @@ export default class SpringBoard extends Entity {
       case 'release': {
         this.phaseT++;
         this._sampleBoost();
-        this.setStage(Math.max(0, 3 - this.phaseT));
-        if (this.phaseT >= 3) {
+        this.setStage(0);
+        if (this.phaseT >= 1) {
           this.setStage(0);
           // Launch the latched riders, not whoever happens to test as standing:
           // the plate has just sprung back up and they are a few pixels clear of
