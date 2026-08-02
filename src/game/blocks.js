@@ -31,12 +31,22 @@ const DEBRIS_G = 0.42;
 const MULTICOIN_TICKS = 300;
 const MULTICOIN_DEFAULT = 10;
 
-// Item emerging from a block: 16px over 32 frames, drawn behind the tile layer.
-const EMERGE_SPEED = 0.5;
+// Item emerging from a block, drawn behind the tile layer. GrowThePowerUp
+// (smbdis.asm:7181-7196) opens with `lda FrameCounter / and #$03 / bne ChkPUSte`
+// and only then does `dec Enemy_Y_Position+5` — one pixel every FOURTH frame.
+// So the 16px rise takes 64 frames, not the 32 that 0.5 px/frame gave it.
+const EMERGE_SPEED = 0.25;
 
 const ITEM_GRAVITY = 0.35;
 const ITEM_MAX_FALL = 4.5;
-const ITEM_WALK = 0.75;
+// `lda #$10 / sta Enemy_X_Speed,x` at the end of GrowThePowerUp (asm:7190-7191).
+// Speeds are sixteenths of a pixel per frame — anchored by NormalXSpdData
+// `.db $f8, $f4` (asm:8162), the goomba's own 0.5 — so $10 is exactly 1.0.
+//
+// DUPLICATED: entities/mushroom.js:83 exports the same constant for items that
+// did not come out of a block. Both must move together; they are separate only
+// because there is no shared home for an item constant yet (PHYS would be it).
+const ITEM_WALK = 1.0;
 const STAR_BOUNCE = -5.6;
 const STAR_WALK = 1.35;
 
