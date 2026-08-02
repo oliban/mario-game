@@ -825,6 +825,8 @@ export class World {
     // tile-accurate swimming, which is what lets 2-2 have a dry shore.
     this.hasWaterTiles = seen.has(95) || seen.has(126); // '_' and '~'
 
+    this._buildWaterBackdrop();
+
     // Emptied blocks fall back to the solid stone tile when tiles.js has no
     // dedicated "used" art — never to a bare rectangle.
     const used = this.recByCode[85];
@@ -835,6 +837,60 @@ export class World {
         used.anim = stone.anim;
       }
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // The water body behind a see-through tile.
+  //
+  // A water area paints its sea as TILES ('_' and '~'), and the renderer's base
+  // clear underneath them is palette.SKY.water — a flat #2038ec that nothing is
+  // ever supposed to show, because the body tiles cover the screen. A coin is a
+  // hole in that cover: its record is `28: { name: 'coin', sprite: null }`
+  // (src/data/tiles.js:2008) and resolves to the ITEM sprite, which is a coin on
+  // a transparent background rather than a coin on water. So every underwater
+  // coin drew its own 16x16 patch of raw clear colour, and a row of three coins
+  // read as one solid blue bar pasted over the sea. Coin heaven has no such box
+  // because its clear IS the sky it wants.
+  //
+  // The fix is a backdrop pass rather than new coin art, for two reasons. It is
+  // the whole CLASS: any non-solid, non-liquid tile in a water area punches the
+  // same hole — the anchors, the platform, the invisible blocks, a flagpole —
+  // and only the coin happens to be used in a water area today. And the water is
+  // animated: baking a still blue behind the coin would leave a static square
+  // sitting in a sea that visibly runs past it. Reusing the '_' record's own
+  // sprite table with the same selector drawTiles uses means the cell picks the
+  // frame its neighbours pick, from its own WORLD x, forever in step.
+  //
+  // `waterTop[tx]` is the first row of sea in that column, so the shore columns
+  // of 2-2 — dry ground above the waterline — get no backdrop and the sky above
+  // the waterline is untouched. Below it every cell is sea, air included: none of
+  // the four water areas spells an air pocket, and the air a collected coin
+  // leaves behind is a hole in the cover like any other.
+  _buildWaterBackdrop() {
+    this.waterTop = null;
+    this.waterBack = null;
+    if (!this.hasWaterTiles) return;
+    const rec = this.recByCode[95] || this._makeRec(95);
+    const art = rec && (rec.variants || (isSprite(rec.sprite) ? [rec.sprite] : null));
+    if (!art) return;
+
+    const w = this.w;
+    const h = this.h;
+    const top = new Int16Array(w).fill(h);
+    for (let ty = 0; ty < h; ty++) {
+      const row = ty * w;
+      for (let tx = 0; tx < w; tx++) {
+        const code = this.map[row + tx];
+        if ((code === 95 || code === 126) && top[tx] > ty) top[tx] = ty;
+      }
+    }
+    this.waterTop = top;
+    this.waterBack = {
+      variants: art,
+      vmask: art.length - 1,
+      va: rec.variants ? rec.va : 0,
+      vt: rec.variants ? rec.vt : 0,
+    };
   }
 
   _makeRec(code) {
@@ -2438,12 +2494,28 @@ export class World {
     const r = this._visibleRange(cam);
     const blocks = this.blocks;
     const tick = this.tick;
+    // See _buildWaterBackdrop. Null everywhere except a water area that tiles its
+    // sea, so every other level pays one null test per row.
+    const back = this.waterBack;
+    const wtop = this.waterTop;
     for (let ty = r.y0; ty <= r.y1; ty++) {
       const row = ty * this.w;
       for (let tx = r.x0; tx <= r.x1; tx++) {
         const code = this.map[row + tx];
         const rec = this.recByCode[code];
-        if (!rec || rec.decor || rec.invisible || rec.code === 46) continue;
+        if (!rec) continue;
+        // A tile that does not fill its cell with something opaque gets the sea
+        // painted behind it first, on the same beat and from the same world x as
+        // the body tiles either side of it. Solid and liquid tiles cover their own
+        // cell, so they skip the pass and it costs them one property read. Air is
+        // in the pass rather than skipped with the rest: collecting an underwater
+        // coin turns its cell into air, which is the very same hole in the cover,
+        // and it would leave the box behind exactly where a coin had just been.
+        if (back && !rec.solid && !rec.liquid && ty >= wtop[tx]) {
+          const b = back.variants[(tx * back.va + (back.vt ? tick >> back.vt : 0)) & back.vmask];
+          if (b) b.draw(ctx, Math.floor(tx * TILE - cam.x), Math.floor(ty * TILE + (TILE - b.h) - cam.y));
+        }
+        if (rec.decor || rec.invisible || rec.code === 46) continue;
         // Cap art (see _bindTileCap). Only lava and stairs carry a cap, so every
         // other tile pays one property test and no map read. The extra read is the
         // cell DIRECTLY ABOVE: a run is capped where the thing above it is not the
