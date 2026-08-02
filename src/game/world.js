@@ -1853,7 +1853,17 @@ export class World {
       const feetBefore = p.y + p.h - (p.vy || 0);
       const stompable = typeof e.onStomp === 'function' && !e.isItem;
 
-      if (stompable && p.vy > 0 && feetBefore <= e.y + e.h * 0.55) {
+      // ChkETmrs (smbdis.asm:11388-11389) is the second half of
+      // ChkForPlayerInjury: `lda StompTimer / bne EnemyStomped`. While the
+      // stomp timer is live, a contact that would otherwise injure resolves as
+      // a stomp instead — the ROM decides stomp-vs-injury per enemy, and this
+      // is what lets one landing take out two enemies standing together.
+      // Without it the loop poisons itself: the first enemy's stompBounce sets
+      // p.vy negative, so the second overlapping enemy fails `p.vy > 0` (and
+      // the recomputed feetBefore with it) and falls through to onPlayerTouch,
+      // i.e. the player kills one and is hurt by the other.
+      const stompTimed = stompable && (p.stompTimer | 0) > 0;
+      if (stompTimed || (stompable && p.vy > 0 && feetBefore <= e.y + e.h * 0.55)) {
         const absorbed = this._safeCall(e, 'onStomp', p);
         // A broken onStomp absorbed nothing. _reportError has already dropped
         // the entity, so there is no touch to fall through to either — awarding
@@ -1873,6 +1883,19 @@ export class World {
     }
   }
 
+  // `inc StompTimer` (asm:11507) lives in HandleStompedShellE, the CHAIN path —
+  // the fixed-value stomps do not set it. EnemyStompedPts (asm:11464-11476, the
+  // cheep-cheep/hammer bro/lakitu/bloober values) and ChkForDemoteKoopa
+  // (asm:11480-11493, the paratroopa's flat 400) both bounce the player and
+  // return without ever touching the timer. Same test the score uses, so an
+  // entity that opts out of the chain with `stompPoints` opts out of both.
+  _stompPaysChain(e) {
+    const fn = playerMod && playerMod.stompPointsOf;
+    if (typeof fn === 'function') return !fn(e);
+    const v = e && e.stompPoints;
+    return !(typeof v === 'number' && isFinite(v) && v > 0);
+  }
+
   _onStompLanded(p, e) {
     // No hit-stop on a stomp. SMB has none, and freezing here breaks chain-stomping:
     // every frozen frame costs ~2.6px of horizontal travel at run speed, so a player
@@ -1883,6 +1906,13 @@ export class World {
 
     // The player normally owns the bounce and the chain score. If its bounce
     // throws, the world still has to launch Mario off the enemy's head.
+    //
+    // The timer is bumped AFTER the award, never before: HandleStompedShellE
+    // reads StompTimer into the floatey number and only then does `inc
+    // StompTimer` (asm:11502-11507), so the enemy that sets the timer is not
+    // paid by it. It is still live in time for the next enemy, because the
+    // next enemy is the next turn of the collision loop.
+    const paysChain = this._stompPaysChain(e);
     let bounced = false;
     if (typeof p.stompBounce === 'function') {
       if (this.safeMode) {
@@ -1897,7 +1927,10 @@ export class World {
         bounced = true;
       }
     }
-    if (bounced) return;
+    if (bounced) {
+      if (p && paysChain) p.stompTimer = (p.stompTimer | 0) + 1;
+      return;
+    }
 
     p.vy = -6.4;
     p.grounded = false;
@@ -1906,10 +1939,16 @@ export class World {
     // $0b is the 1-UP entry of ScoreUpdateData (asm:1278-1281, `inc NumberofLives`
     // asm:1300) — so every further enemy in an unbroken chain is another life.
     // entities/index.js:shellChainScore already models this for the shell chain.
+    // The floatey number is StompChainCounter + StompTimer (asm:11502-11506),
+    // so a second enemy taken in the same frame is paid TWO rungs up the
+    // ladder, not one — see player._awardChain, which does the same arithmetic
+    // on the path that actually runs.
     const i = p.stompChain | 0;
+    const idx = Math.min(i + (p.stompTimer | 0), STOMP_CHAIN.length);
     p.stompChain = Math.min(i + 1, STOMP_CHAIN.length);
-    if (i < STOMP_CHAIN.length) this.addScore(STOMP_CHAIN[i], e.x + e.w * 0.5, e.y);
+    if (idx < STOMP_CHAIN.length) this.addScore(STOMP_CHAIN[idx], e.x + e.w * 0.5, e.y);
     else this.addLife(1, e.x + e.w * 0.5, e.y);
+    if (p && paysChain) p.stompTimer = (p.stompTimer | 0) + 1;
   }
 
   // Free-standing coins, hazard tiles and the castle axe.

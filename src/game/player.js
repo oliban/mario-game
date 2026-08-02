@@ -635,6 +635,11 @@ export default class Player extends EntityBase {
     this.starTick = 0;
     this.starChain = 0;
     this.stompChain = 0;
+    // StompTimer ($0791). Set when a stomp is absorbed, decremented once per
+    // frame like every other frame timer, and read by the collision loop to
+    // turn what would be an injury into another stomp — see update() and
+    // world._playerEntityCollisions.
+    this.stompTimer = 0;
 
     this.throwTimer = 0;
     this.fireCooldown = 0;
@@ -754,6 +759,7 @@ export default class Player extends EntityBase {
     this.starFrames = 0;
     this.stompChain = 0;
     this.starChain = 0;
+    this.stompTimer = 0;
     this.fireballs.length = 0;
     this.controlsLocked = false;
     this._clip = null;
@@ -787,6 +793,16 @@ export default class Player extends EntityBase {
     if (this.landSquash > 0) this.landSquash--;
     if (this.stretch > 0) this.stretch--;
     if (this.invulnFrames > 0) this.invulnFrames--;
+    // StompTimer is $0791, offset $11 into Timers ($0780), which is inside the
+    // frame-timer range DecTimers walks (`ldx #$14`, asm:788-799) — so it ticks
+    // down every frame, not on an interval. DecTimers runs at the top of the
+    // main loop, BEFORE GameEngine and therefore before the enemy collision
+    // pass; decrementing it here, in the roster update that world.js runs ahead
+    // of _playerEntityCollisions (world.js:1709 then :1742), reproduces that
+    // order. The effect is that a stomp keeps the timer live for the remainder
+    // of the frame that set it, which is exactly the window in which a second
+    // enemy standing next to the first is still being walked by the loop.
+    if (this.stompTimer > 0) this.stompTimer--;
     this._updateStar();
     this._pruneFireballs();
 
@@ -1440,7 +1456,14 @@ export default class Player extends EntityBase {
     const ex = entity ? entity.x + (entity.w || 16) / 2 : this.x + this.w / 2;
     const ey = entity ? entity.y : this.y + this.h;
     const fixed = stompPointsOf(entity);
-    const score = fixed ? this._awardFixed(ex, ey, fixed) : this._awardChain(ex, ey, 'stompChain');
+    // HandleStompedShellE builds the floatey number as StompChainCounter PLUS
+    // StompTimer (asm:11502-11506), so every enemy already taken this frame
+    // pushes the next one an extra rung up the ladder: two goombas in one
+    // landing pay 100 then 400, not 100 then 200. A single stomp has the timer
+    // at zero and is unaffected, which is why the ordinary ladder is unchanged.
+    const score = fixed
+      ? this._awardFixed(ex, ey, fixed)
+      : this._awardChain(ex, ey, 'stompChain', this.stompTimer | 0);
     sfx(this.world, 'stomp', 'squish');
     // Deliberately no freeze() here — see world._onStompLanded. The stomp was
     // being frozen twice (3 + 2 frames), which is what desynced chain-stomps.
@@ -1485,22 +1508,28 @@ export default class Player extends EntityBase {
     return score;
   }
 
-  _awardChain(x, y, field) {
+  // `bonus` is the ROM's StompTimer, added to the chain counter to pick the
+  // floatey number (asm:11503-11506). It shifts what is PAID without moving the
+  // counter itself — the counter still advances by exactly one per enemy, the
+  // way `inc StompChainCounter` does.
+  _awardChain(x, y, field, bonus = 0) {
     const i = this[field];
     // Saturate the counter ON the 1-UP step, not past it. FloateyNumbersRoutine
     // (smbdis.asm:1286-1289) clamps FloateyNum_Control at $0b and $0b IS the 1-UP
     // entry of ScoreUpdateData (asm:1278-1281, `inc NumberofLives` asm:1300), so
     // once a chain reaches the top EVERY further enemy pays another life — it does
     // not fall back to 8000. entities/index.js:shellChainScore models the same
-    // clamp for a kicked shell's chain; these two must not disagree.
+    // clamp for a kicked shell's chain; these two must not disagree. The same
+    // clamp catches an index the bonus pushed past the end.
+    const idx = Math.min(i + (bonus | 0), STOMP_SCORES.length);
     this[field] = Math.min(i + 1, STOMP_SCORES.length);
-    if (i >= STOMP_SCORES.length) {
+    if (idx >= STOMP_SCORES.length) {
       callAny(this.world, ['addLife', 'oneUp', 'gainLife', 'addLives'], 1);
       sfx(this.world, '1up', 'oneup');
       fx(this.world, 'powerupSparkle', x, y);
       return 0;
     }
-    const score = STOMP_SCORES[i];
+    const score = STOMP_SCORES[idx];
     callAny(this.world, ['addScore', 'score', 'addPoints'], score, x, y);
     return score;
   }

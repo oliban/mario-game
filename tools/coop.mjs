@@ -460,6 +460,46 @@ const checks = await page.evaluate(async (want) => {
              coop: `luigi ${k.phases}, other alive=${k.otherAlive}` };
   });
 
+  await check('C12', 'the stomp timer belongs to the brother who is stomping', async () => {
+    // ChkETmrs (smbdis.asm:11388-11389) turns a contact that would injure into
+    // a stomp while StompTimer is live. That timer is PER PLAYER — it lives in
+    // the player's own timer block, not the world's — so one brother stomping
+    // must not make the other brother invulnerable to a goomba he is walking
+    // into. This project's worst defect of the day was a singleton that meant
+    // "the main one" being read as "any one"; C12 exists so the stomp timer
+    // cannot become the next one.
+    const hit = async (armed) => {
+      const w = await bed({ p1: 'big', p2: 'big' });
+      const p1 = w.player, p2 = w.player2;
+      // Luigi is the rightmost brother by default — trap 2 — so nothing shoves
+      // him into or out of the goomba while we measure.
+      const foe = w.spawn('goomba', p2.x + 20, FLOOR * TILE - 16, { fromEnemyStream: false });
+      if (!foe) throw new Error('PROBE BROKEN: could not spawn a goomba');
+      foe.speed = 0; foe.vx = 0;          // `speed` is what walkStep reads, not vx
+      g.tick(4);
+      if (foe.active === false) throw new Error('PROBE BROKEN: goomba never activated');
+      const power0 = p2.power;
+      let hurt = false;
+      for (let i = 0; i < 30 && !hurt; i++) {
+        // Re-arm every frame. The timer decrements once per frame exactly like
+        // the ROM's DecTimers, so a one-shot set expires before contact.
+        (armed === 'mario' ? p1 : p2).stompTimer = 2;
+        p2.x += 1.5; p2.y = FLOOR * TILE - p2.h; p2.vy = 0;
+        g.tick(1);
+        if (p2.dead || p2.power !== power0) hurt = true;
+      }
+      return { hurt, other: (armed === 'mario' ? p2 : p1).stompTimer | 0 };
+    };
+    const byMario = await hit('mario');   // must NOT shield Luigi
+    const byLuigi = await hit('luigi');   // Luigi's own timer must shield him
+    return {
+      ok: byMario.hurt === true && byLuigi.hurt === false,
+      expect: "mario's stomp timer does not shield luigi; luigi's own does",
+      control: `luigi armed himself -> hurt=${byLuigi.hurt}`,
+      coop: `mario armed -> luigi hurt=${byMario.hurt} (luigi's own timer stayed ${byMario.other})`,
+    };
+  });
+
   relAll();
   return out;
 }, WANT);
