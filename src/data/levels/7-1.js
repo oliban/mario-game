@@ -31,7 +31,7 @@ const TILES = [
 
 // The coin room, rendered from UndergroundArea3 page 0 — the room this
 // level's own enemy stream names. You drop in at the left, take the coins, and
-// walk right into the pipe, which surfaces at column 118.
+// walk right into the pipe, which surfaces at column 115.
 const BONUS = {
   id: '7-1b',
   name: 'WORLD 7-1',
@@ -62,7 +62,7 @@ const BONUS = {
   ],
   entities: [],
   warps: [
-    { from: { x: 13, y: 11 }, dir: 'right', to: { area: 'main', x: 118.5, y: 12, exit: 'up' } },
+    { from: { x: 13, y: 11 }, dir: 'right', to: { area: 'main', x: 115.5, y: 11, exit: 'up' } },
   ],
 };
 

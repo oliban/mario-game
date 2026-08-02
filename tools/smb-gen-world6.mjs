@@ -14,6 +14,7 @@ import {
   bonusRoomSource,
   skyAreaSource,
   bonusPagesFor,
+  bonusReturn,
   skyReturn,
   waterRoomSource,
 } from './smb-build.mjs';
@@ -148,13 +149,16 @@ ${entsBlock(L.entities)}
   // beanstalk 81 -> coin heaven, pipe 153 -> coin room page 6.
   const wps = L.meta.pipes.filter((p) => p.warp);
   const pages = bonusPagesFor('6-2');
-  const out = landingNear(rows, wps[0].x + 24);
-  const out2 = landingNear(rows, wps[2].x + 24);
+  // The return column is DATA, not a search: each coin room's own row-$0e record
+  // names the page it puts you back on, and a pipe is standing there. landingNear
+  // walked past it to bare floor, so the exit played a pipe emergence in thin air.
+  const back = bonusReturn(L.meta, 6, pages[0]) || { col: landingNear(rows, wps[0].x + 24), top: 12 };
+  const back2 = bonusReturn(L.meta, 6, pages[1]) || { col: landingNear(rows, wps[2].x + 24), top: 12 };
   const outw = landingNear(rows, wps[1].x + 24);
   const vine = L.meta.vine;
   const body = `
-${bonusRoomSource('6-2b', 'WORLD 6-2', pages[0], out, 12)}
-${bonusRoomSource('6-2d', 'WORLD 6-2', pages[1], out2, 12, 'BONUS2')}
+${bonusRoomSource('6-2b', 'WORLD 6-2', pages[0], back.col, back.top)}
+${bonusRoomSource('6-2d', 'WORLD 6-2', pages[1], back2.col, back2.top, 'BONUS2')}
 ${waterRoomSource('6-2w', 'WORLD 6-2', outw)}
 ${skyAreaSource('6-2c', 'WORLD 6-2', skyReturn(6, 'GroundArea21'), 'GroundArea21')}
 export default {

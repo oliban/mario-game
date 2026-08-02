@@ -9,7 +9,13 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource, skyAreaSource, bonusPagesFor } from './smb-build.mjs';
+import {
+  emitLevel,
+  bonusRoomSource,
+  skyAreaSource,
+  bonusPagesFor,
+  bonusReturn,
+} from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -99,9 +105,15 @@ ${note}
   const rows = relieveBlocks(L.rows);
   const sp = findSpawn(rows);
   const wp = L.meta.warpPipe;
-  const out = landingNear(rows, wp.x + 24);
+  // The return column is DATA, not a search: the coin room's own row-$0e record
+  // names the page it puts you back on, and a pipe is standing there. landingNear
+  // walked past it to bare floor, so the exit played a pipe emergence in thin air.
+  const back = bonusReturn(L.meta, 7, bonusPagesFor('7-1')[0]) || {
+    col: landingNear(rows, wp.x + 24),
+    top: 12,
+  };
   const body = `
-${bonusRoomSource('7-1b', 'WORLD 7-1', bonusPagesFor('7-1')[0], out, 12)}
+${bonusRoomSource('7-1b', 'WORLD 7-1', bonusPagesFor('7-1')[0], back.col, back.top)}
 export default {
   id: '7-1',
   name: 'WORLD 7-1',
