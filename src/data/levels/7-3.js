@@ -45,6 +45,7 @@ export default {
 
   ],
   entities: [
+    {type: 'cheep',x: 144,y: 16,variant: 'grey'},
     {type: 'frenzy',x: 26,y: 2,kind: 'cheep'},
     {type: 'frenzy',x: 137,y: 2,kind: 'cheep'},
     {type: 'frenzy',x: 197,y: 2,kind: 'stop'},

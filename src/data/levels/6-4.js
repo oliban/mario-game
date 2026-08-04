@@ -52,7 +52,7 @@ export default {
     {type: 'firebar',x: 84,y: 9,count: 6,speed: 1,dir: -1},
     {type: 'firebar',x: 88,y: 4,count: 6,speed: 1,dir: 1},
     {type: 'bowser',x: 135,y: 9},
-    {type: 'platform',x: 138.75,y: 7,mode: 'horizontal',tiles: 3,range: 64,speed: 0.75},
+    {type: 'platform',x: 138.75,y: 6,mode: 'horizontal',tiles: 3,range: 64,speed: 0.75},
   ],
   flagpole: null,
   castle: { x: 151, tall: true },
