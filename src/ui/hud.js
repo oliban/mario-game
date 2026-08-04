@@ -498,6 +498,9 @@ export class Hud {
       timeUp: (w.time | 0) <= 0 && w.deathCause === 'timeup',
       // Harry mode and two-player both rename the left-hand label.
       name: w.playerName || null,
+      // In Harry mode the coins are a wallet, not a countdown to a 1-up, so the
+      // field has to hold three digits.
+      wallet: w.harryMode === true,
     };
   }
 
@@ -538,8 +541,12 @@ export class Hud {
     const coinSprite = COIN_CYCLE[(t >> 3) % COIN_CYCLE.length];
     coinSprite.draw(ctx, L.coinIconX, L.rowValue);
     drawTextOutlined(ctx, '×', L.coinTimesX, L.rowValue);
-    const coins = Math.max(0, Math.min(99, d.coins | 0));
-    drawTextOutlined(ctx, pad(coins, 2), L.coinNumX, L.rowValue);
+    // Two digits normally, exactly as SMB: the counter never reaches 100 because
+    // the hundredth coin is a 1-up. A Harry-mode wallet does reach it, and there
+    // is room for the third digit — the field ends at 128 and WORLD starts at 144.
+    const wide = d.wallet === true;
+    const coins = Math.max(0, Math.min(wide ? 999 : 99, d.coins | 0));
+    drawTextOutlined(ctx, pad(coins, wide ? 3 : 2), L.coinNumX, L.rowValue);
 
     // World label, centred inside the WORLD field.
     const label = String(d.label || DEFAULT_STATE.label);

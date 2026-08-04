@@ -15,6 +15,7 @@ import * as EntityMod from './entity.js';
 import * as Phys from './physics.js';
 import * as MarioArt from '../data/sprites/mario.js';
 import * as LuigiArt from '../data/sprites/luigi.js';
+import { BRICKBOMB_COST, brickRowTiles, throwBrickBomb } from './entities/brickbomb.js';
 
 const EntityBase = EntityMod.default || EntityMod.Entity;
 
@@ -355,7 +356,10 @@ export const FLAGPOLE_SCORES = [5000, 2000, 800, 400, 100];
 // correct if a level ever hangs its pole at a different height.
 const FLAGPOLE_Y_OFFSETS = [-8, 2, 48, 72, 112];
 
-export const POWER = { SMALL: 'small', BIG: 'big', FIRE: 'fire' };
+// TOOL is the Harry-mode toolbelt: a fourth power that sits alongside FIRE
+// rather than above it. It is big-sized, it takes one hit to lose like FIRE,
+// and it replaces FIRE (and vice versa) — one costume at a time.
+export const POWER = { SMALL: 'small', BIG: 'big', FIRE: 'fire', TOOL: 'toolbelt' };
 
 // ---------------------------------------------------------------------------
 // sprite set resolution
@@ -363,6 +367,17 @@ export const POWER = { SMALL: 'small', BIG: 'big', FIRE: 'fire' };
 // src/data/sprites/mario.js is authored by another agent; accept any reasonable
 // key naming (idle/stand, throw/fire, ...) and either Anims, Sprites or arrays.
 // ---------------------------------------------------------------------------
+
+// Every spelling the debug API, a level's `power` field or a save slot might
+// hand us, mapped onto the four real powers. 'tool' is what a test harness
+// naturally types; 'toolbelt' is what the item itself grants.
+function normalizePowerName(name) {
+  const n = String(name || '').toLowerCase();
+  if (n === POWER.TOOL || n === 'tool' || n === 'builder' || n === 'belt') return POWER.TOOL;
+  if (n === POWER.FIRE || n === 'flower' || n === 'fireflower') return POWER.FIRE;
+  if (n === POWER.BIG || n === 'super' || n === 'mushroom') return POWER.BIG;
+  return POWER.SMALL;
+}
 
 const setCache = new Map();
 
@@ -391,17 +406,28 @@ const SET_RAW = {
   small: MarioArt.SMALL_MARIO || MarioArt.MARIO_SMALL || MarioArt.SMALL,
   big: MarioArt.BIG_MARIO || MarioArt.MARIO_BIG || MarioArt.BIG,
   fire: MarioArt.FIRE_MARIO || MarioArt.MARIO_FIRE || MarioArt.FIRE,
+  toolbelt: MarioArt.TOOLBELT_MARIO || MarioArt.MARIO_TOOLBELT || MarioArt.TOOLBELT,
+};
+
+// Which set stands in when a power has no art of its own. Falling through to
+// `small` — what a bare `SET_RAW[power] || SET_RAW.small` does — would draw a
+// big-hitbox power at half height, so every big power falls back big.
+const SET_FALLBACK = {
+  small: ['small', 'big', 'fire'],
+  big: ['big', 'fire', 'small'],
+  fire: ['fire', 'big', 'small'],
+  toolbelt: ['toolbelt', 'fire', 'big', 'small'],
 };
 
 const LUIGI_RAW = LuigiArt.LUIGI_SETS || LuigiArt.default || null;
 
 function setFor(power, luigi) {
+  const order = SET_FALLBACK[power] || SET_FALLBACK.small;
   if (luigi && LUIGI_RAW) {
-    const alt = LUIGI_RAW[power] || LUIGI_RAW.small || LUIGI_RAW.big || LUIGI_RAW.fire;
-    if (alt) return normalizeSet(alt);
+    for (const k of order) if (LUIGI_RAW[k]) return normalizeSet(LUIGI_RAW[k]);
   }
-  const raw = SET_RAW[power] || SET_RAW.small || SET_RAW.big || SET_RAW.fire;
-  return normalizeSet(raw);
+  for (const k of order) if (SET_RAW[k]) return normalizeSet(SET_RAW[k]);
+  return normalizeSet(SET_RAW.small);
 }
 
 // The half-grown art is published by mario.js as its own top-level export, not as a
@@ -704,6 +730,9 @@ export default class Player extends EntityBase {
   get isFire() {
     return this.power === POWER.FIRE;
   }
+  get isTool() {
+    return this.power === POWER.TOOL;
+  }
   get starPower() {
     return this.starFrames > 0;
   }
@@ -727,7 +756,7 @@ export default class Player extends EntityBase {
       this.giveStar();
       return;
     }
-    const p = name === POWER.FIRE ? POWER.FIRE : name === POWER.BIG ? POWER.BIG : POWER.SMALL;
+    const p = normalizePowerName(name);
     const wasBig = this.big;
     this.power = p;
     if (this.big && !wasBig) this._setHeight(HITBOX.BIG_H, true);
@@ -1003,6 +1032,7 @@ export default class Player extends EntityBase {
 
     // --- fireball -----------------------------------------------------------
     if (this.power === POWER.FIRE && this._pressed(BTN.RUN)) this._throwFireball();
+    else if (this.power === POWER.TOOL && this._pressed(BTN.RUN)) this._throwBrickBomb();
 
     // --- integrate ----------------------------------------------------------
     const vyBefore = this.vy;
@@ -1198,6 +1228,64 @@ export default class Player extends EntityBase {
     this.fireCooldown = P.fireCooldown;
     this.throwTimer = 10;
     sfx(this.world, 'fireball', 'fire', 'throw');
+  }
+
+  // The toolbelt's RUN. Unlike a fireball this one costs money: 50 coins a
+  // throw, out of the same counter the HUD shows. Too poor and nothing leaves
+  // his hand — the coins are only spent once the bomb actually exists, so a
+  // throw refused for any other reason (two already in flight) is free.
+  _throwBrickBomb() {
+    if (this.fireCooldown > 0) return;
+    const w = this.world;
+    if (!w) return;
+    if (this._coins() < BRICKBOMB_COST) {
+      sfx(w, 'bump');
+      this.fireCooldown = P.fireCooldown;
+      return;
+    }
+    // A bomb only turns AIR into brick, so a row aimed at a wall, a pipe or the
+    // lava row he is standing on lays nothing. Charging 50 coins for that reads
+    // as the game eating your money, so the throw is refused instead.
+    if (!this._rowCanBuild()) {
+      sfx(w, 'bump');
+      this.fireCooldown = P.fireCooldown;
+      return;
+    }
+    const bomb = throwBrickBomb(w, this);
+    if (!bomb) return;
+    this._spendCoins(BRICKBOMB_COST);
+    this.fireCooldown = P.fireCooldown;
+    this.throwTimer = 10;
+  }
+
+  // Would this throw place at least one brick? Only the tile test is repeated
+  // here — bodies standing in the way are the bomb's business, and they will
+  // have moved by the time it lands.
+  _rowCanBuild() {
+    const w = this.world;
+    if (!w || typeof w.recAt !== 'function') return true;
+    const row = brickRowTiles(w, this, this.facing);
+    for (const { tx, ty } of row) {
+      if (tx < 0 || ty < 0 || tx >= w.w || ty >= w.h) continue;
+      const rec = w.recAt(tx, ty);
+      if (rec && rec.name === 'air') return true;
+    }
+    return false;
+  }
+
+  _coins() {
+    const w = this.world;
+    return w && typeof w.coins === 'number' ? w.coins : 0;
+  }
+
+  // world.spendCoins() is the only path that may lower the wallet; falling back
+  // to a direct write keeps this working if world.js has not landed it yet.
+  _spendCoins(n) {
+    const w = this.world;
+    if (!w) return false;
+    if (typeof w.spendCoins === 'function') return w.spendCoins(n);
+    w.coins = Math.max(0, (w.coins | 0) - n);
+    return true;
   }
 
   _pruneFireballs() {
@@ -1550,8 +1638,14 @@ export default class Player extends EntityBase {
       case 'flower':
       case 'fireflower':
       case 'fire':
-        if (this.power === POWER.SMALL) this._beginGrow(POWER.FIRE);
-        else if (this.power === POWER.BIG) this._beginGrow(POWER.FIRE);
+        if (this.power !== POWER.FIRE) this._beginGrow(POWER.FIRE);
+        else callAny(this.world, ['addScore'], 1000, this.x, this.y);
+        sfx(this.world, 'powerup', 'grow');
+        return true;
+      case 'toolbelt':
+      case 'tool':
+      case 'belt':
+        if (this.power !== POWER.TOOL) this._beginGrow(POWER.TOOL);
         else callAny(this.world, ['addScore'], 1000, this.x, this.y);
         sfx(this.world, 'powerup', 'grow');
         return true;

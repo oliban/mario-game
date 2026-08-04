@@ -274,6 +274,9 @@ class Game {
   // The HUD's left label follows who is actually playing.
   syncPlayerName() {
     if (!this.world) return;
+    // playerName is a display string; the toolbelt, the coin wallet and the
+    // suspended 1-up rule all need the mode itself, so the world carries a flag.
+    this.world.harryMode = this.harryMode === true;
     setHero(this.harryMode ? 'HARRY' : null);
     if (this.harryMode) this.world.playerName = 'HARRY';
     else if (this.playerCount > 1) this.world.playerName = this.turn === 0 ? t('mario') : t('luigi');
@@ -410,8 +413,10 @@ class Game {
   async endSession() {
     this.started = false;
     this.playerCount = 1;
+    this.harryMode = false;
     this.slots = [this.newSlot(), this.newSlot()];
     this.turn = 0;
+    this.syncPlayerName();
     this.world.lives = 3;
     this.world.score = 0;
     this.world.coins = 0;
@@ -579,6 +584,18 @@ window.__GAME = {
     game.world.rcam.x = cam.x;
     game.world.rcam.y = cam.y;
     return true;
+  },
+
+  // Harry mode without going through the title menu. The level is reloaded
+  // because the toolbelt blocks are chosen once, at load.
+  async setHarry(on = true) {
+    game.harryMode = on !== false;
+    game.syncPlayerName();
+    if (game.world && game.world.level) {
+      await game.loadLevel(game.levelId, game.world.areaId, { resetPlayer: true });
+      game.loop.step(1);
+    }
+    return game.harryMode;
   },
 
   setPower(power) {

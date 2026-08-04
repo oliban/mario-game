@@ -600,6 +600,9 @@ export class World {
 
     this.score = 0;
     this.coins = 0;
+    // Set by main.js from the title menu. Gates the toolbelt blocks, the coin
+    // wallet and the three-digit HUD counter.
+    this.harryMode = false;
     this.lives = opts.lives != null ? opts.lives : 3;
     this.worldNum = 1;
     this.levelNum = 1;
@@ -1617,10 +1620,21 @@ export class World {
 
   addCoin(n = 1) {
     this.coins += n;
+    // Harry mode spends coins on brick bombs, so they are a wallet: no reset at
+    // 100 and no 1-up. Every other mode keeps SMB's rule exactly.
+    if (this.harryMode === true) return;
     while (this.coins >= 100) {
       this.coins -= 100;
       this.addLife(1);
     }
+  }
+
+  // The only path that may take coins back out of the wallet.
+  spendCoins(n = 1) {
+    const cost = Math.max(0, n | 0);
+    if ((this.coins | 0) < cost) return false;
+    this.coins -= cost;
+    return true;
   }
 
   // Called as addLife(1) by the player, and as addLife(1, x, y) internally.
