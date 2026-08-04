@@ -2,8 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>SUPER MARIO</title>
+<meta name="description" content="An original-art homage to the 1985 platformer, built from scratch in vanilla JavaScript — every sprite, tile and note authored in code. Playable in the browser, keyboard or on-screen joypad." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://mario-game.fly.dev/" />
+<meta property="og:title" content="SUPER MARIO — a from-scratch homage" />
+<meta property="og:description" content="An original-art homage to the 1985 platformer, built from scratch in vanilla JavaScript — every sprite, tile and note authored in code. Playable in the browser, keyboard or on-screen joypad." />
+<meta property="og:image" content="https://mario-game.fly.dev/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="SUPER MARIO — a from-scratch homage" />
+<meta name="twitter:description" content="An original-art homage to the 1985 platformer, built from scratch in vanilla JavaScript. Playable in the browser." />
+<meta name="twitter:image" content="https://mario-game.fly.dev/og.png" />
+<!-- Question block, drawn at 16x16 so it survives the favicon slot. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23000'/%3E%3Crect x='1' y='1' width='14' height='14' fill='%23e39b52'/%3E%3Crect x='1' y='1' width='14' height='2' fill='%23fcd8a8'/%3E%3Crect x='1' y='12' width='14' height='3' fill='%23a85820'/%3E%3Crect x='2' y='2' width='1' height='1' fill='%23fff'/%3E%3Crect x='13' y='2' width='1' height='1' fill='%23fff'/%3E%3Crect x='2' y='13' width='1' height='1' fill='%23fff'/%3E%3Crect x='13' y='13' width='1' height='1' fill='%23fff'/%3E%3Cpath d='M5 5h6v1H5zM4 6h2v2H4zM10 6h2v2h-2zM8 8h2v2H8zM7 10h2v2H7zM7 13h2v1H7z' fill='%23000'/%3E%3Cpath d='M6 6h4v1H6zM9 7h1v1H9zM8 9h1v1H8z' fill='%23fcd8a8'/%3E%3C/svg%3E" />
 <style>
   :root {
     --bezel: #0a0c12;
@@ -21,6 +35,7 @@
   body {
     display: grid;
     place-items: center;
+    align-content: center;
     background:
       radial-gradient(120% 90% at 50% 0%, #131a2e 0%, #070910 55%, #04050a 100%);
   }
@@ -110,6 +125,314 @@
   body.headless #stage { box-shadow: none; background: none; padding: 0; border-radius: 0; }
   body.headless #screen { box-shadow: none; border-radius: 0; }
   body.headless #hint { display: none; }
+  body.headless #joypad { display: none; }
+
+  /* ------------------------------------------------------------------
+     On-screen joypad. Drawn from scratch in CSS on one `em` grid: the body
+     is 42em x 19em (the hardware's 2.21:1 face), every feature is placed at
+     its measured fraction of that box, and src/ui/joypad.js sets the single
+     font-size to whatever vertical room is left under the TV.
+     ------------------------------------------------------------------ */
+  #joypad {
+    --shell-hi: #dddce2;
+    --shell: #d5d4da;
+    --face: #363636;
+    --ridge: #949490;
+    --housing: #cecece;
+    --btn: #d04b42;
+    --ink: #a8453f;
+    /* Hit area is deliberately divorced from the art: the drawn face keeps the
+       hardware's proportions, these grow the invisible target under a thumb.
+       The em caps stop a target on a small pad from swallowing its neighbour. */
+    --hit-dpad: min(180px, 16.6em);
+    --hit-ab-y: min(11px, 1.1em);
+    --hit-ab-out: min(14px, 1.4em);
+    --hit-ab-in: min(4px, .45em);
+    --hit-pill-w: min(50px, 5.3em);
+    --hit-pill-h: min(52px, 5.8em);
+    font-size: 9px;
+    margin-top: 1.6em;
+    position: relative;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    z-index: 4;
+  }
+  #joypad .jp-body {
+    position: relative;
+    width: 42em;
+    height: 19em;
+    border-radius: 1.18em;
+    background: linear-gradient(180deg, var(--shell) 0%, var(--shell-hi) 100%);
+    box-shadow:
+      inset 0 .14em 0 rgba(255,255,255,.9),
+      inset 0 -.2em .5em -.15em rgba(0,0,0,.12),
+      0 1.4em 2.6em -.9em rgba(0,0,0,.85);
+  }
+  #joypad .jp-face {
+    position: absolute;
+    left: 1.13em;
+    top: 4.18em;
+    width: 39.6em;
+    height: 13.63em;
+    border-radius: .32em;
+    background: linear-gradient(180deg, #3d3d3d 0%, var(--face) 30%, #2e2e2e 100%);
+    box-shadow:
+      inset 0 .1em .25em rgba(255,255,255,.1),
+      inset 0 -.15em .3em rgba(0,0,0,.5),
+      0 .08em 0 rgba(255,255,255,.65);
+  }
+
+  /* --- d-pad: one continuous cross with a light rim --- */
+  #joypad .jp-dpad {
+    position: absolute;
+    left: 3.03em;
+    top: 7.73em;
+    width: 8.44em;
+    height: 8.28em;
+    perspective: 26em;
+  }
+  #joypad .jp-cross {
+    position: absolute;
+    inset: 0;
+    transition: transform .06s ease-out;
+  }
+  /* rim (light) and bar (dark) are each two overlapping rects, so the cross
+     reads as one moulded piece with no seam where the arms meet */
+  #joypad .jp-rim, #joypad .jp-bar { position: absolute; }
+  #joypad .jp-rim {
+    background: linear-gradient(180deg, #f2f2f4, #d8d8dc);
+    box-shadow: 0 .12em .25em rgba(0,0,0,.55);
+  }
+  #joypad .jp-rim.v { left: 1.96em; top: 0; width: 4.53em; height: 100%; border-radius: .3em; }
+  #joypad .jp-rim.h { top: 1.88em; left: 0; height: 4.53em; width: 100%; border-radius: .3em; }
+  #joypad .jp-bar { background: linear-gradient(180deg, #3a3a3f 0%, #26262a 55%, #1a1a1d 100%); }
+  #joypad .jp-bar.v { left: 2.38em; top: .42em; width: 3.69em; height: 7.44em; border-radius: .22em; }
+  #joypad .jp-bar.h { top: 2.3em; left: .42em; height: 3.69em; width: 7.6em; border-radius: .22em; }
+  #joypad .jp-hub {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 1.77em; height: 1.77em;
+    margin: -.885em 0 0 -.885em;
+    border-radius: 50%;
+    background: radial-gradient(circle at 38% 34%, #45454b, #212125 72%);
+    box-shadow:
+      inset 0 .1em .2em rgba(0,0,0,.8),
+      0 .1em .1em rgba(255,255,255,.14);
+  }
+  /* per-arm press shading, laid over the moulded cross */
+  #joypad .jp-arm {
+    position: absolute;
+    opacity: 0;
+    background: rgba(0,0,0,.42);
+    box-shadow: inset 0 .18em .3em rgba(0,0,0,.6);
+    transition: opacity .06s ease-out;
+  }
+  #joypad .jp-arm.up    { left: 2.38em; top: .42em;    width: 3.69em; height: 3.6em; border-radius: .22em .22em 0 0; }
+  #joypad .jp-arm.down  { left: 2.38em; bottom: .42em; width: 3.69em; height: 3.6em; border-radius: 0 0 .22em .22em; }
+  #joypad .jp-arm.left  { top: 2.3em; left: .42em;     height: 3.69em; width: 3.6em; border-radius: .22em 0 0 .22em; }
+  #joypad .jp-arm.right { top: 2.3em; right: .42em;    height: 3.69em; width: 3.6em; border-radius: 0 .22em .22em 0; }
+  #joypad .jp-arm::after {
+    content: '';
+    position: absolute;
+    inset: -.42em;
+    border-radius: .3em;
+    background: rgba(0,0,0,.16);
+  }
+
+  #joypad .jp-hits {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(calc(100% + .9em), var(--hit-dpad));
+    height: max(calc(100% + .9em), var(--hit-dpad));
+    transform: translate(-50%, -50%);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+  }
+  #joypad .jp-hits span { display: block; }
+
+  #joypad.is-up    .jp-arm.up,
+  #joypad.is-down  .jp-arm.down,
+  #joypad.is-left  .jp-arm.left,
+  #joypad.is-right .jp-arm.right { opacity: 1; }
+  #joypad.is-up    .jp-cross { transform: rotateX(6deg); }
+  #joypad.is-down  .jp-cross { transform: rotateX(-6deg); }
+  #joypad.is-left  .jp-cross { transform: rotateY(-6deg); }
+  #joypad.is-right .jp-cross { transform: rotateY(6deg); }
+  #joypad.is-up.is-right   .jp-cross { transform: rotateX(5deg) rotateY(5deg); }
+  #joypad.is-up.is-left    .jp-cross { transform: rotateX(5deg) rotateY(-5deg); }
+  #joypad.is-down.is-right .jp-cross { transform: rotateX(-5deg) rotateY(5deg); }
+  #joypad.is-down.is-left  .jp-cross { transform: rotateX(-5deg) rotateY(-5deg); }
+
+  /* --- centre column: four moulded ridges, then the pill housing --- */
+  #joypad .jp-ridge {
+    position: absolute;
+    left: 13.3em;
+    width: 11.9em;
+    border-radius: .3em;
+    background: linear-gradient(180deg, #a6a6a2 0%, var(--ridge) 55%, #7e7e7a 100%);
+    box-shadow: inset 0 .12em 0 rgba(255,255,255,.35), 0 .1em .2em rgba(0,0,0,.45);
+  }
+  #joypad .jp-ridge.r1 { top: 4.33em;  height: 1.61em; }
+  #joypad .jp-ridge.r2 { top: 6.67em;  height: 1.77em; }
+  #joypad .jp-ridge.r3 { top: 9.21em;  height: 1.79em; display: flex; align-items: center; }
+  #joypad .jp-ridge.r4 { top: 16.72em; height: 1.1em; }
+  #joypad .jp-ridge.r3 span {
+    flex: 1;
+    text-align: center;
+    font-family: ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 1.5em;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    line-height: 1;
+    color: #b35650;
+    text-shadow: 0 .08em 0 rgba(255,255,255,.35);
+  }
+  #joypad .jp-mid {
+    position: absolute;
+    left: 13.54em;
+    top: 11.78em;
+    width: 11.7em;
+    height: 4.07em;
+    border-radius: .55em;
+    background: linear-gradient(180deg, #e0e0e4 0%, var(--housing) 55%, #b8b8bd 100%);
+    box-shadow: inset 0 .12em 0 rgba(255,255,255,.8), 0 .12em .25em rgba(0,0,0,.5);
+  }
+  #joypad .jp-pill {
+    position: absolute;
+    top: 1.31em;
+    width: 3.4em;
+    height: 1.39em;
+    border-radius: .7em;
+    background: linear-gradient(180deg, #5e5d5e 0%, #4a494a 55%, #3a393a 100%);
+    box-shadow:
+      inset 0 .12em 0 rgba(255,255,255,.22),
+      0 .22em 0 #262526,
+      0 .3em .3em rgba(0,0,0,.45);
+    transition: transform .07s ease-out, box-shadow .07s ease-out, filter .07s ease-out;
+  }
+  #joypad .jp-pill::before {
+    content: '';
+    position: absolute;
+    left: .5em;
+    top: 50%;
+    width: max(100%, var(--hit-pill-w));
+    height: max(100%, var(--hit-pill-h));
+    transform: translateY(-50%);
+  }
+  #joypad .jp-pill[data-btn="select"] { left: 1.5em; }
+  #joypad .jp-pill[data-btn="start"]  { left: 6.94em; }
+  #joypad.is-select .jp-pill[data-btn="select"],
+  #joypad.is-start  .jp-pill[data-btn="start"] {
+    transform: translateY(.28em);
+    box-shadow: inset 0 .2em .22em rgba(0,0,0,.65), 0 0 0 #262526;
+    filter: brightness(.86);
+  }
+
+  /* --- A / B --- */
+  #joypad .jp-housing {
+    position: absolute;
+    top: 11.67em;
+    width: 4.58em;
+    height: 4.4em;
+    border-radius: .55em;
+    background: linear-gradient(180deg, #e2e2e2 0%, var(--housing) 55%, #b6b6b6 100%);
+    box-shadow: inset 0 .12em 0 rgba(255,255,255,.8), 0 .12em .25em rgba(0,0,0,.5);
+  }
+  #joypad .jp-housing.b { left: 27.2em; }
+  #joypad .jp-housing.a { left: 32.67em; }
+  #joypad .jp-housing::before {
+    content: '';
+    position: absolute;
+    top: calc(var(--hit-ab-y) * -1);
+    bottom: calc(var(--hit-ab-y) * -1);
+  }
+  #joypad .jp-housing.b::before { left: calc(var(--hit-ab-out) * -1); right: calc(var(--hit-ab-in) * -1); }
+  #joypad .jp-housing.a::before { right: calc(var(--hit-ab-out) * -1); left: calc(var(--hit-ab-in) * -1); }
+  #joypad .jp-round {
+    position: absolute;
+    left: .52em;
+    top: .51em;
+    width: 3.53em;
+    height: 3.53em;
+    border-radius: 50%;
+    background: radial-gradient(circle at 34% 28%, #e8776d 0%, var(--btn) 45%, #a63229 100%);
+    box-shadow:
+      inset 0 .1em .1em rgba(255,255,255,.4),
+      inset 0 -.25em .3em rgba(0,0,0,.28),
+      0 .28em 0 #7d231c,
+      0 .38em .35em rgba(0,0,0,.45);
+    transition: transform .07s ease-out, box-shadow .07s ease-out, background .07s ease-out;
+  }
+  #joypad.is-run  .jp-housing.b .jp-round,
+  #joypad.is-jump .jp-housing.a .jp-round {
+    transform: translateY(.28em);
+    background: radial-gradient(circle at 41% 37%, #d96056 0%, #c2453d 40%, #942a22 100%);
+    box-shadow:
+      inset 0 .3em .3em rgba(0,0,0,.45),
+      inset 0 -.1em .15em rgba(255,255,255,.12),
+      0 .04em 0 #7d231c;
+  }
+  /* the font-size lives on the inner <i> so the em offsets above stay on the
+     body's grid instead of being scaled by the label's own type size */
+  #joypad .jp-ab-label {
+    position: absolute;
+    top: 16.59em;
+    width: 3em;
+    margin-left: -1.5em;
+    text-align: center;
+    line-height: 1;
+  }
+  #joypad .jp-ab-label i {
+    font-family: ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 1.75em;
+    font-style: normal;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  #joypad .jp-ab-label.b { left: 27.79em; }
+  #joypad .jp-ab-label.a { left: 32.57em; }
+
+  /* ------------------------------------------------------------------
+     Phones. The pad stops being decoration and becomes the only input, so
+     it takes the width and the game screen takes what is left. The bezel is
+     decoration and decoration must not cost playfield.
+     ------------------------------------------------------------------ */
+  @media (max-width: 760px), (max-height: 560px) and (orientation: landscape) {
+    body {
+      padding:
+        env(safe-area-inset-top) env(safe-area-inset-right)
+        env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    #stage { padding: 0; border-radius: 0; background: none; box-shadow: none; }
+    #screen { border-radius: 0; box-shadow: 0 0 0 1px #000; }
+    #overlay { left: 0; top: 0; }
+    #boot { inset: 0; }
+    #hint { display: none; }
+    #joypad { margin-top: .5em; }
+  }
+  /* Portrait: framebuffer fills the width, capped so the pad (0.452 * its own
+     width tall) and the screen both fit the short viewport without scrolling. */
+  @media (max-width: 760px) and (orientation: portrait) {
+    #screen, #overlay {
+      width: min(100vw, calc((100svh - 47vw - 22px) * 1.0667)) !important;
+      height: auto !important;
+    }
+  }
+  /* Landscape: vertical room is the scarce thing, so the pad moves beside the
+     TV instead of under it and both get the full height. */
+  @media (max-height: 560px) and (orientation: landscape) {
+    body { grid-auto-flow: column; }
+    #screen, #overlay {
+      height: min(96svh, calc(60vw * 0.9375)) !important;
+      width: auto !important;
+    }
+    #joypad { margin-top: 0; margin-left: 10px; }
+  }
 </style>
 </head>
 <body>
@@ -120,6 +443,41 @@
     <canvas id="overlay"></canvas>
     <div id="boot">BOOTING<div class="bar"><i></i></div></div>
   </div>
+  <div id="joypad" aria-hidden="true">
+    <div class="jp-body">
+      <div class="jp-face"></div>
+      <div class="jp-dpad">
+        <div class="jp-cross">
+          <div class="jp-rim v"></div>
+          <div class="jp-rim h"></div>
+          <div class="jp-bar v"></div>
+          <div class="jp-bar h"></div>
+          <div class="jp-arm up"></div>
+          <div class="jp-arm left"></div>
+          <div class="jp-arm right"></div>
+          <div class="jp-arm down"></div>
+          <div class="jp-hub"></div>
+        </div>
+        <div class="jp-hits">
+          <span data-btn="up left"></span><span data-btn="up"></span><span data-btn="up right"></span>
+          <span data-btn="left"></span><span></span><span data-btn="right"></span>
+          <span data-btn="down left"></span><span data-btn="down"></span><span data-btn="down right"></span>
+        </div>
+      </div>
+      <div class="jp-ridge r1"></div>
+      <div class="jp-ridge r2"></div>
+      <div class="jp-ridge r3"><span>SELECT</span><span>START</span></div>
+      <div class="jp-ridge r4"></div>
+      <div class="jp-mid">
+        <div class="jp-pill" data-btn="select"></div>
+        <div class="jp-pill" data-btn="start"></div>
+      </div>
+      <div class="jp-housing b" data-btn="run"><div class="jp-round"></div></div>
+      <div class="jp-housing a" data-btn="jump"><div class="jp-round"></div></div>
+      <div class="jp-ab-label b"><i>B</i></div>
+      <div class="jp-ab-label a"><i>A</i></div>
+    </div>
+  </div>
   <div id="hint">
     <b>P1</b> &larr; &rarr; MOVE &nbsp;·&nbsp; <b>SPACE</b> JUMP &nbsp;·&nbsp; <b>.</b> RUN
     &nbsp;&nbsp;|&nbsp;&nbsp;
@@ -127,5 +485,6 @@
     &nbsp;&nbsp;|&nbsp;&nbsp; <b>ENTER</b> PAUSE &nbsp;·&nbsp; <b>F</b>ILTER
   </div>
   <script type="module" src="./src/main.js"></script>
+  <script type="module" src="./src/ui/joypad.js"></script>
 </body>
 </html>

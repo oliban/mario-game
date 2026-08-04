@@ -60,11 +60,13 @@ export class Pad {
     this.state = {};
     this.prev = {};
     this._raw = {};
+    this._virtual = {};
     this._forced = null;
     for (const b of Object.values(BTN)) {
       this.state[b] = false;
       this.prev[b] = false;
       this._raw[b] = false;
+      this._virtual[b] = false;
     }
     this.anyPressedThisFrame = false;
   }
@@ -77,8 +79,33 @@ export class Pad {
     return true;
   }
 
+  // On-screen / touch pad presses. They live in their own layer so a stuck
+  // virtual button can be released without wiping the keyboard, and so nothing
+  // outside this module has to poke at _raw.
+  setVirtual(b, down) {
+    if (!(b in this._virtual)) return false;
+    this._virtual[b] = !!down;
+    return true;
+  }
+
+  clearVirtual() {
+    for (const k in this._virtual) this._virtual[k] = false;
+  }
+
   clear() {
     for (const k in this._raw) this._raw[k] = false;
+    this.clearVirtual();
+  }
+
+  // Instantaneous merged input, independent of the fixed-tick cadence and of
+  // force(): the on-screen pad lights up from this, so it keeps reflecting the
+  // keyboard even while the world is paused, and a scripted run still looks
+  // like whatever the human is really holding.
+  live() {
+    const now = {};
+    for (const b of Object.values(BTN)) now[b] = !!(this._raw[b] || this._virtual[b]);
+    this._pollGamepad(now);
+    return now;
   }
 
   _pollGamepad(into) {
@@ -99,9 +126,7 @@ export class Pad {
 
   // Called once per fixed tick, before systems read input.
   update() {
-    const now = {};
-    for (const b of Object.values(BTN)) now[b] = this._raw[b];
-    this._pollGamepad(now);
+    const now = this.live();
 
     this.anyPressedThisFrame = false;
     for (const b of Object.values(BTN)) {
