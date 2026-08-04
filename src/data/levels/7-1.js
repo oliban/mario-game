@@ -83,8 +83,12 @@ export default {
     {x: 151,y: 2,item: 'power'},
   ],
   entities: [
+    {type: 'koopa',x: 26,y: 12,variant: 'green',winged: true,hard: true},
+    {type: 'koopa',x: 44,y: 12,variant: 'green',winged: true,hard: true},
     {type: 'koopa',x: 53,y: 12,variant: 'green',winged: true},
+    {type: 'koopa',x: 65,y: 12,variant: 'green',winged: true,hard: true},
     {type: 'hammerbro',x: 84,y: 12},
+    {type: 'hammerbro',x: 86,y: 8,hard: true},
     {type: 'koopa',x: 114,y: 12,variant: 'green'},
     {type: 'hammerbro',x: 135,y: 12},
     {type: 'hammerbro',x: 137,y: 8},
