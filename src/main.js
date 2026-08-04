@@ -438,7 +438,23 @@ class Game {
         else resumeMusic();
       }
 
+      // A screen that closes on a button press unblocks the world in the SAME
+      // frame, and that press is still a live edge by the time the player reads
+      // it. With the brick bomb on SELECT — which is also what closes the
+      // options screen — dismissing the menu threw a grenade. Measured, not
+      // theorised: it cost 5 coins every time.
+      //
+      // Only the edge is swallowed, not the frame: world.update() still runs on
+      // exactly the frames it always did, so nothing about the bots' timing
+      // moves. Buttons that are HELD are untouched — this clears `pressed()`
+      // for one frame, not the button itself.
+      const screenWasUp = screens.blocksWorld || screens.paused;
       screens.update();
+      if (screenWasUp) {
+        for (const p of [input, pad2]) {
+          if (p && p.prev && p.state) p.prev[BTN.SELECT] = p.state[BTN.SELECT];
+        }
+      }
 
       if (!screens.blocksWorld && !screens.paused) {
         this.world.update();

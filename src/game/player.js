@@ -15,7 +15,7 @@ import * as EntityMod from './entity.js';
 import * as Phys from './physics.js';
 import * as MarioArt from '../data/sprites/mario.js';
 import * as LuigiArt from '../data/sprites/luigi.js';
-import { BRICKBOMB_COST, brickRowTiles, throwBrickBomb } from './entities/brickbomb.js';
+import { BOMB_UNFUNDED, BRICKBOMB_COST, throwBrickBomb } from './entities/brickbomb.js';
 
 const EntityBase = EntityMod.default || EntityMod.Entity;
 
@@ -356,6 +356,15 @@ export const FLAGPOLE_SCORES = [5000, 2000, 800, 400, 100];
 // correct if a level ever hangs its pole at a different height.
 const FLAGPOLE_Y_OFFSETS = [-8, 2, 48, 72, 112];
 
+// How long the HUD coin counter reacts to a throw refused for want of coins.
+// Two full show-the-price beats — long enough to read, short enough that a
+// player mashing RUN sees it restart rather than sit there.
+const COIN_DENY_FRAMES = 48;
+
+// A RUN press that lands during the grow/shrink animation is remembered this
+// long and spent on the first playable frame. See _updateChangeSize.
+const RUN_LATCH_FRAMES = 40;
+
 // TOOL is the Harry-mode toolbelt: a fourth power that sits alongside FIRE
 // rather than above it. It is big-sized, it takes one hit to lose like FIRE,
 // and it replaces FIRE (and vice versa) — one costume at a time.
@@ -669,6 +678,8 @@ export default class Player extends EntityBase {
 
     this.throwTimer = 0;
     this.fireCooldown = 0;
+    this._runLatch = 0;
+    this._selectLatch = 0;
     this.fireballs = [];
     // Mario stages his OWN death (the hop, then the fall off the bottom of the
     // screen) in _updateDying. Entity's default corpse animation would replace
@@ -790,6 +801,8 @@ export default class Player extends EntityBase {
     this.starChain = 0;
     this.stompTimer = 0;
     this.fireballs.length = 0;
+    this._runLatch = 0;
+    this._selectLatch = 0;
     this.controlsLocked = false;
     this._clip = null;
     this._flag = null;
@@ -819,6 +832,8 @@ export default class Player extends EntityBase {
     if (this._bumpLock > 0) this._bumpLock--;
     if (this.throwTimer > 0) this.throwTimer--;
     if (this.fireCooldown > 0) this.fireCooldown--;
+    if (this._runLatch > 0) this._runLatch--;
+    if (this._selectLatch > 0) this._selectLatch--;
     if (this.landSquash > 0) this.landSquash--;
     if (this.stretch > 0) this.stretch--;
     if (this.invulnFrames > 0) this.invulnFrames--;
@@ -936,6 +951,29 @@ export default class Player extends EntityBase {
   _climbing() {
     return this.state === 'climb' || this.state === 'flagpole' || this.state === 'flagflip';
   }
+  // A button press, edge-triggered, but surviving the grow/shrink animation.
+  //
+  // input.pressed() is `state && !prev`, computed from the pad's own frame
+  // history, which advances every frame whatever the player is doing. The
+  // change-size states do not run _updateNormal, so a RUN pressed during those
+  // 30 frames had its edge occur on a frame nobody was listening — and by the
+  // time play resumed the button was merely HELD, which is not an edge. The
+  // first press after every power-up was therefore eaten, and the player had to
+  // release and press again. That predates the toolbelt and ate fireballs too;
+  // it is only unmissable with the belt, where the first press is the one that
+  // teaches you what the power does.
+  _latched(btn, field) {
+    if (this._pressed(btn)) {
+      this[field] = 0;
+      return true;
+    }
+    if (this[field] > 0) {
+      this[field] = 0;
+      return true;
+    }
+    return false;
+  }
+
   _jumpPressed() {
     return this._pressed(BTN.JUMP) || (!this._climbing() && this._pressed(BTN.UP));
   }
@@ -1031,8 +1069,14 @@ export default class Player extends EntityBase {
     }
 
     // --- fireball -----------------------------------------------------------
-    if (this.power === POWER.FIRE && this._pressed(BTN.RUN)) this._throwFireball();
-    else if (this.power === POWER.TOOL && this._pressed(BTN.RUN)) this._throwBrickBomb();
+    // The flower keeps RUN — that is authentic SMB. The toolbelt cannot: RUN is
+    // HELD to run, so a throw on RUN meant you could not sprint without lobbing
+    // grenades the whole way. SELECT is the one NES button with no job during
+    // play (KeyC / Tab / pad button 8).
+    if (this.power === POWER.FIRE && this._latched(BTN.RUN, '_runLatch')) this._throwFireball();
+    else if (this.power === POWER.TOOL && this._latched(BTN.SELECT, '_selectLatch')) {
+      this._throwBrickBomb();
+    }
 
     // --- integrate ----------------------------------------------------------
     const vyBefore = this.vy;
@@ -1234,43 +1278,68 @@ export default class Player extends EntityBase {
   // throw, out of the same counter the HUD shows. Too poor and nothing leaves
   // his hand — the coins are only spent once the bomb actually exists, so a
   // throw refused for any other reason (two already in flight) is free.
+  // THE BOMB IS ALWAYS THROWN. Pressing RUN with the belt on always lobs a
+  // grenade, whatever the wallet says; what changes is how it goes off. A press
+  // that produces nothing at all is indistinguishable from a broken feature —
+  // that is the bug this fixes — so a throw he cannot pay for still flies the
+  // same arc and DUDS. Nothing is charged up front and nothing is refused here;
+  // the bomb decides at detonation and reports back through onResult.
   _throwBrickBomb() {
     if (this.fireCooldown > 0) return;
     const w = this.world;
     if (!w) return;
-    if (this._coins() < BRICKBOMB_COST) {
-      sfx(w, 'bump');
-      this.fireCooldown = P.fireCooldown;
-      return;
-    }
-    // A bomb only turns AIR into brick, so a row aimed at a wall, a pipe or the
-    // lava row he is standing on lays nothing. Charging 50 coins for that reads
-    // as the game eating your money, so the throw is refused instead.
-    if (!this._rowCanBuild()) {
-      sfx(w, 'bump');
-      this.fireCooldown = P.fireCooldown;
-      return;
-    }
-    const bomb = throwBrickBomb(w, this);
+
+    // Money already promised to bombs still in the air counts as spent. Two
+    // bombs may be in flight at once, so a 60-coin wallet that funded both
+    // would lay the second row for free — the debit happens at detonation and
+    // the wallet is empty by then. The second press duds instead, and duds
+    // flash the counter, which is the honest answer to "why not?".
+    const funded = this._coins() >= BRICKBOMB_COST + this._committedCoins();
+    const bomb = throwBrickBomb(w, this, {
+      funded,
+      cost: 0,
+      onResult: (r) => this._onBombResult(r),
+    });
+    // Only ever null when two bombs are already in the air. That is visible on
+    // screen and needs no explaining.
     if (!bomb) return;
-    this._spendCoins(BRICKBOMB_COST);
+
     this.fireCooldown = P.fireCooldown;
     this.throwTimer = 10;
   }
 
-  // Would this throw place at least one brick? Only the tile test is repeated
-  // here — bodies standing in the way are the bomb's business, and they will
-  // have moved by the time it lands.
-  _rowCanBuild() {
+  // Fires exactly once per bomb, when the row has finished laying or the dud
+  // has puffed. Debiting HERE rather than at the throw is what makes a dud free
+  // without needing a refund path.
+  _onBombResult(r) {
     const w = this.world;
-    if (!w || typeof w.recAt !== 'function') return true;
-    const row = brickRowTiles(w, this, this.facing);
-    for (const { tx, ty } of row) {
-      if (tx < 0 || ty < 0 || tx >= w.w || ty >= w.h) continue;
-      const rec = w.recAt(tx, ty);
-      if (rec && rec.name === 'air') return true;
+    if (!w || !r) return;
+
+    if (!r.dud) {
+      this._spendCoins(BRICKBOMB_COST);
+      return;
     }
-    return false;
+
+    // The puff already said "that did nothing". Only the no-coins dud says WHY,
+    // by pulling the eye to the counter that explains it. A 'no-room' dud must
+    // NOT flash the coins — the player can afford it and teaching them
+    // otherwise would be a lie.
+    if (r.reason === BOMB_UNFUNDED) {
+      sfx(w, 'bump');
+      w.coinDeny = { cost: BRICKBOMB_COST, until: (w.tick | 0) + COIN_DENY_FRAMES };
+    }
+  }
+
+  // What every funded bomb still in flight will charge when it goes off. Read
+  // off the live roster rather than a counter, so a bomb lost to a level change
+  // or a death can never strand a phantom debt.
+  _committedCoins() {
+    const list = (this.world && this.world.entities) || [];
+    let n = 0;
+    for (const e of list) {
+      if (e && e.isBrickBomb === true && e.removed !== true && e.funded === true) n++;
+    }
+    return n * BRICKBOMB_COST;
   }
 
   _coins() {
@@ -1718,6 +1787,12 @@ export default class Player extends EntityBase {
     // No physics integration happens in this state (only _updateNormal moves the
     // player), so Mario is already held in place. vx/vy are left intact so the
     // jump resumes with the same momentum when the animation ends.
+    // Catch the RUN edge the state machine would otherwise drop — see
+    // _runPressed. Only an EDGE latches, so holding RUN to sprint through a
+    // mushroom does not queue a throw for when the animation ends.
+    if (this._pressed(BTN.RUN)) this._runLatch = RUN_LATCH_FRAMES;
+    if (this._pressed(BTN.SELECT)) this._selectLatch = RUN_LATCH_FRAMES;
+
     const g = this._grow;
     const frames = (g && g.frames) || P.growFrames;
     if (this.stateTimer < frames) return;
