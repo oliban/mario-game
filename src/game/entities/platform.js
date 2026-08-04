@@ -81,6 +81,15 @@ export default class Platform extends Entity {
     super(world, x, y, opts);
     this.mode = opts.mode || opts.kind || 'horizontal';
     this.tilesWide = opts.tiles || opts.width || 3;
+    // SPBBox (asm:8930-8940) gives a lift bounding-box control of 5 in a castle
+    // OR in secondary hard mode and 6 otherwise, and DrawPlatform (asm:13343-13350)
+    // pushes the last two of its six sprites offscreen under the same test. Six
+    // sprites is three tiles, four is two: the short lift of the castles and of
+    // the back half of the game. Only the three-tile decks have a shorter form —
+    // the two- and four-tile lifts carry their own widths.
+    if (this.tilesWide === 3 && (world.theme === 'castle' || (world && world.hardMode))) {
+      this.tilesWide = 2;
+    }
     this.w = this.tilesWide * TILE;
     this.h = 8;
     this.t = 0;
