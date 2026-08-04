@@ -258,6 +258,10 @@
     position: relative;
     width: 42em;
     height: 19em;
+    /* No hit zone may reach past the shell and start taking taps on the page
+       behind it: the d-pad grid is taller than the body by design, so the body
+       clips it. Nothing drawn reaches the edges, so this costs no art. */
+    overflow: hidden;
     border-radius: 1.18em;
     background: linear-gradient(180deg, var(--shell) 0%, var(--shell-hi) 100%);
     box-shadow:
@@ -329,30 +333,41 @@
   /* Engraved into the dark arms: a house — triangular head over a narrower
      stem — one shade up from the face, with a light lip along its lower right.
      Width 43% of the arm, length 35% of the half-span, tip 29.5% in. */
+  /* What survives the downscale in the photograph is the emboss SHADOW tracing
+     the glyph, not the fill: at 8px an arm the fill sits within ~10 units of, a
+     light lip on a light arm disappears. So the glyph carries a 1px DARK
+     contour, in px rather than em so it survives at 147px as well as 371px. */
+  /* The contour lives on an UNCLIPPED wrapper: clip-path clips the filter
+     output, so a halo drawn on the clipped element itself is cut away — which
+     is why the first attempt at this measured a 5-unit step. */
   #joypad .jp-glyph {
     position: absolute;
-    filter: drop-shadow(.045em .045em 0 rgba(255,255,255,.24));
+    --edge: #171717;
+    filter:
+      drop-shadow(1px 0 0 var(--edge)) drop-shadow(-1px 0 0 var(--edge))
+      drop-shadow(0 1px 0 var(--edge)) drop-shadow(0 -1px 0 var(--edge));
   }
-  #joypad .jp-glyph.up    { background: #525252; }
-  #joypad .jp-glyph.left  { background: #585858; }
-  #joypad .jp-glyph.right { background: #666667; }
-  #joypad .jp-glyph.down  { background: #707071; }
+  #joypad .jp-glyph i { position: absolute; inset: 0; display: block; }
+  #joypad .jp-glyph.up i { background: #525252; }
+  #joypad .jp-glyph.left i { background: #585858; }
+  #joypad .jp-glyph.right i { background: #666667; }
+  #joypad .jp-glyph.down i { background: #707071; }
   #joypad .jp-glyph.up {
     left: 3.427em; top: 1.221em; width: 1.587em; height: 1.449em;
-    clip-path: polygon(50% 0, 100% 52%, 89.5% 52%, 89.5% 100%, 10.5% 100%, 10.5% 52%, 0 52%);
   }
+  #joypad .jp-glyph.up i { clip-path: polygon(50% 0, 100% 52%, 89.5% 52%, 89.5% 100%, 10.5% 100%, 10.5% 52%, 0 52%); }
   #joypad .jp-glyph.down {
     left: 3.427em; top: 5.61em; width: 1.587em; height: 1.449em;
-    clip-path: polygon(50% 100%, 100% 48%, 89.5% 48%, 89.5% 0, 10.5% 0, 10.5% 48%, 0 48%);
   }
+  #joypad .jp-glyph.down i { clip-path: polygon(50% 100%, 100% 48%, 89.5% 48%, 89.5% 0, 10.5% 0, 10.5% 48%, 0 48%); }
   #joypad .jp-glyph.left {
     left: 1.245em; top: 3.347em; width: 1.477em; height: 1.587em;
-    clip-path: polygon(0 50%, 52% 0, 52% 10.5%, 100% 10.5%, 100% 89.5%, 52% 89.5%, 52% 100%);
   }
+  #joypad .jp-glyph.left i { clip-path: polygon(0 50%, 52% 0, 52% 10.5%, 100% 10.5%, 100% 89.5%, 52% 89.5%, 52% 100%); }
   #joypad .jp-glyph.right {
     left: 5.718em; top: 3.347em; width: 1.477em; height: 1.587em;
-    clip-path: polygon(100% 50%, 48% 0, 48% 10.5%, 0 10.5%, 0 89.5%, 48% 89.5%, 48% 100%);
   }
+  #joypad .jp-glyph.right i { clip-path: polygon(100% 50%, 48% 0, 48% 10.5%, 0 10.5%, 0 89.5%, 48% 89.5%, 48% 100%); }
   /* A near-black glossy ball with one small hot specular below and left of
      centre — that dot is most of what makes it read as a sphere. */
   #joypad .jp-hub {
@@ -628,10 +643,10 @@
             <div class="jp-rim-crown"></div>
             <div class="jp-rim-inner"></div>
             <div class="jp-xface"></div>
-            <div class="jp-glyph up"></div>
-            <div class="jp-glyph left"></div>
-            <div class="jp-glyph right"></div>
-            <div class="jp-glyph down"></div>
+            <div class="jp-glyph up"><i></i></div>
+            <div class="jp-glyph left"><i></i></div>
+            <div class="jp-glyph right"><i></i></div>
+            <div class="jp-glyph down"><i></i></div>
             <div class="jp-hub"></div>
             <div class="jp-arm up"></div>
             <div class="jp-arm left"></div>
