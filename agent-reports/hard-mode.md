@@ -291,3 +291,134 @@ out to x 69.59 over 60 frames, so it frees itself rather than staying stuck.
 It is in **2-2 as well as 7-2** and has nothing to do with the flag or with my
 change. Flagging it rather than fixing it: it is a placement question for whoever
 owns the water areas.
+
+---
+
+# Round 3 — the column-71 blooper in WaterArea2 (investigation only)
+
+**Answer: (c). The ROM really does put a blooper inside that block column, and the
+original never spawns it — the enemy stream is consumed in order against the
+camera, and this one record is always already behind the screen by the time the
+parser reaches it. Our builder instantiates the whole level up front, so we show
+an enemy the original cannot.**
+
+Nothing was changed. This section is evidence and a recommendation only.
+
+## (a) is ruled out — the decode is right
+
+The raw bytes around it, with the ROM's own page arithmetic:
+
+```
+7a 07 -> col  55 row 10 id$7
+d6 c7 -> col  77 row  6 id$7 HARD   (msb page++)
+78 07 -> col  71 row  8 id$7
+38 87 -> col  83 row  8 id$7        (msb page++)
+```
+
+`d6 c7`: second byte `0xc7` has bit 7 set, so the page steps 3 → 4, and
+`0xd6 >> 4` = 13 gives column 4·16+13 = **77**. Bit 6 is set, so it is hard-only.
+`78 07`: page is still 4, `0x78 >> 4` = 7, column 4·16+7 = **71**, row 8.
+
+So the stream genuinely runs **…55, 77, 71, 83…** — out of order. That is not a
+decode artefact: the page bump that produces it lives in `CheckRightBounds`
+(asm:7920-7925), which runs **before** the hard-mode test at asm:7976-7979, so the
+bump happens whether or not the flag is set and column 71 is column 71 in both
+modes.
+
+## (b) is ruled out — our bricks are the ROM's bricks
+
+WaterArea2's object stream carries, at that spot:
+
+```
+x 71 row 6 param 4  ColumnOfSolidBlocks
+```
+
+Objects map with +2 and enemies with +1 (the mapping already documented and
+checked against 1-4's firebars in `smb-build.mjs`), so the ROM's block column is
+our rows **8-12** and the ROM's row-8 enemy is our row **9**. Our tiles:
+
+```
+our column 71: 0:~ 1:~ 2:~ 3:_ … 7:_ 8:B 9:B 10:B 11:B 12:B 13:# 14:#
+our blooper spec at 71: {"type":"blooper","x":71,"y":9}
+```
+
+Exact match. The same verdict holds without our mapping at all: in ROM pixels the
+block column spans Y 128-208 and `InitEnemyObject` (asm:8060-8062) puts the
+blooper at row·16 + 8 = **136**. Inside, either way.
+
+## (c), with the mechanism
+
+`PositionEnemyObj` (asm:7943-7956) compares the record's column against
+`ScreenRight` as a 16-bit quantity:
+
+```
+cmp ScreenRight_X_Pos / lda Enemy_PageLoc,x / sbc ScreenRight_PageLoc
+bcs CheckRightExtBounds          ; at or beyond the boundary -> candidate to spawn
+…                                ; otherwise fall through
+jmp CheckThreeBytes              ; -> Inc2B: step over the record, spawning nothing
+```
+
+A record whose column is **already behind the screen's right edge is discarded**,
+not deferred. And `CheckRightExtBounds` only lets a record through once
+`ScreenRight + 48` reaches it, so the parser sits **blocked** on the col-77 record
+while the camera crosses columns 71 through 74.
+
+Sequence, in either difficulty:
+
+1. Camera scrolls right. The parser's next record is the one at column 77. While
+   `ScreenRight + 48 < 77·16` it branches to `CheckFrenzyBuffer` and does not
+   advance — so it stays parked there as the screen passes column 71.
+2. At `ScreenRight ≈ 74·16` the col-77 record is finally consumed: spawned in hard
+   mode, skipped at `Inc2B` in normal mode. Either way the offset advances.
+3. The parser now reads the col-71 record. `71·16 < ScreenRight ≈ 74·16`, so carry
+   is clear, and it falls through to `Inc2B`. **Never spawned, in either mode.**
+
+The threshold is `column < previousColumn − 3` (the 48 pixels of extended
+boundary). 71 < 77 − 3 = 74, so it is dead by a clear margin, not a borderline case.
+
+## How general is this?
+
+I scanned every area's enemy stream for records that sit below the highest column
+seen before them:
+
+```
+2-2/7-2   WaterArea2   DEAD blooper@71 (after 77)
+certainly-dead records: 1   borderline: 0
+```
+
+**One record in the whole game.** So the eager-instantiation difference the brief
+anticipated is real as a mechanism, and worth writing down — *any* enemy record
+placed behind an earlier record's column is invisible in the original and visible
+in ours — but Nintendo left exactly one such record in the data. There is no
+hidden population of these.
+
+It is also worth noting what the mechanism does *not* cover: it is about stream
+order, not about the camera generally. Enemies whose records are in ascending
+order all spawn in the original too, just later than we spawn them. This is not an
+argument that our eager instantiation is wrong in general.
+
+## Behaviour today
+
+Present in **2-2 and 7-2 both** — the record is not hard-only, so the flag is
+irrelevant to it. Measured: it starts at (71, 8.5) with `solidAt` true and drifts
+out to x 69.59 over 60 frames, so it extracts itself rather than sticking. It is a
+blooper that appears out of a wall in a level where the original has none.
+
+## Recommendation — NOT implemented
+
+Drop it at build time, in `smb-build.mjs`, by reproducing the parser's own rule:
+skip an enemy record whose column is more than three below the highest column seen
+so far in the stream. One condition, one comment citing asm:7943-7956, and it is
+self-limiting — the scan above proves it can only ever match this one record, so
+it cannot quietly delete anything else now or after a future decode change.
+
+Two things to know before doing it:
+
+* It changes **2-2 and 7-2**, removing one blooper from each. Both need
+  regenerating.
+* Do it in the builder, not at spawn time. Modelling the camera-relative parse
+  properly in `World` would be the general fix, but it is a large change to
+  entity lifetime for a single enemy, and it would alter when every enemy in the
+  game comes into existence.
+
+I have not made either change.

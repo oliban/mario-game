@@ -32,6 +32,18 @@
        we are not entitled to take away. #screen and #joypad stay at `none`
        because they must swallow drags as well. */
     touch-action: manipulation;
+    /* iOS raises the Copy / Look Up / Search Web callout on a long press, and
+       a held button IS a long press. It was suppressed on #joypad alone, so a
+       finger resting anywhere else — the television, the bezel, the margins —
+       still summoned it mid-game, and a finger that slid off the pad while
+       holding took the touch with it. Page-wide is the right scope: nothing
+       here is text anyone selects. Pinch-to-zoom is deliberately left alone,
+       for the same reason `touch-action` above stops at `manipulation`. */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    /* and the grey flash iOS paints over a tapped element */
+    -webkit-tap-highlight-color: transparent;
     background: #05060a;
     color: #cdd6f4;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
