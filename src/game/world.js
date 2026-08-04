@@ -1366,11 +1366,21 @@ export class World {
       if (!spec || !spec.type) continue;
       const e = this.spawn(spec.type, spec.x * TILE, spec.y * TILE, spec);
       if (!e) continue;
-      if (typeof e.place === 'function') e.place(spec.x * TILE + TILE * 0.5, (spec.y + 1) * TILE);
-      else if (e.isPlatform) {
-        // A lift spans several tiles and measures its travel from where it was
-        // constructed, so it keeps the tile's top-left exactly like a map
-        // anchor does instead of being centred and re-seated afterwards.
+      // A lift spans several tiles and measures its travel from where it was
+      // constructed, so it keeps the tile's top-left exactly like a map anchor
+      // does instead of being centred and re-seated afterwards. This test has to
+      // come FIRST: `place` is defined on Entity, so `typeof e.place === 'function'`
+      // is true of every entity there is and the platform arm below could never
+      // run. A lift was therefore being bottom-anchored like a goomba, which put
+      // its deck 8 pixels below its own row and 16 pixels left of its own column —
+      // the original's lift deck is at row * 16 exactly. Eight pixels is nothing
+      // on a tree branch and lethal over lava: 8-4's lift deck sat inside the
+      // lava band and killed anyone who rode it, while reach.mjs — which has
+      // always modelled the deck at spec.y * TILE — saw a perfectly good crossing.
+      if (e.isPlatform) {
+        // keep the constructed top-left
+      } else if (typeof e.place === 'function') {
+        e.place(spec.x * TILE + TILE * 0.5, (spec.y + 1) * TILE);
       } else {
         e.x = spec.x * TILE + (TILE - e.w) * 0.5;
         e.y = (spec.y + 1) * TILE - e.h;

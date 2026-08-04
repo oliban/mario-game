@@ -358,8 +358,15 @@ function liftFrom(pos, opts) {
   const x0 = Math.floor(pos.x);
   const lift = { mode, x0, x1: x0 + tiles - 1, y0: standRow(topPx), y1: standRow(topPx) };
   if (mode === 'vertical' || mode === 'pulley') {
-    lift.y0 = standRow(topPx - range);
-    lift.y1 = standRow(topPx + range);
+    // A springing vertical lift (the original's InitVertPlatform, $25 — the ones
+    // that carry no direction of their own) bobs around a centre 64 pixels from
+    // the row it is written at, not around that row. Platform.swingY, same rule.
+    const swing =
+      mode === 'vertical' && opts.dir == null
+        ? topPx + (topPx < 128 ? range : -range)
+        : topPx;
+    lift.y0 = standRow(swing - range);
+    lift.y1 = standRow(swing + range);
     if (mode === 'pulley') lift.y0 = standRow(topPx - (opts.spacing != null ? opts.spacing : 112));
   } else if (mode === 'horizontal') {
     lift.x0 = Math.floor((pos.x * TILE - range) / TILE);

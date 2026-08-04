@@ -102,6 +102,25 @@ export default class Platform extends Entity {
     this.speed = opts.speed != null ? opts.speed : 1.0;
     this.dir = opts.dir === -1 ? -1 : 1;
 
+    // A vertical lift with no direction of its own is the original's
+    // InitVertPlatform ($25) — the one that hangs on a spring and bobs. It does
+    // NOT bob around the row it is written at: InitVertPlatform stores that row
+    // as YPlatformTopYPos, the LIMIT of its travel, and sets YPlatformCenterYPos
+    // 64 pixels away from it — below when the lift is written high on the screen,
+    // above when it is written low (smbdis.asm:8914-8926, and YMovingPlatform at
+    // 10896 springs about the centre). Bobbing around the written row instead put
+    // every one of these lifts half its travel too high; in 4-3 that was the
+    // difference between a lift you can jump onto from the ground and one you
+    // cannot, which reach.mjs sees as a dead end at column 69.
+    //
+    // The lifts that DO carry a direction are $26/$27 and $2b/$2c — LargeLiftUp /
+    // LargeLiftDown and PlatLiftUp / PlatLiftDown — which run continuously rather
+    // than springing, and they keep the written row as their centre.
+    this.swingY =
+      this.mode === 'vertical' && opts.dir == null
+        ? this.originY + (this.originY < 128 ? this.range : -this.range)
+        : this.originY;
+
     this.falling = false;
     this.fallTimer = -1;
 
@@ -185,11 +204,11 @@ export default class Platform extends Entity {
       }
       case 'vertical': {
         this.y += this.vy;
-        if (this.y > this.originY + this.range) {
-          this.y = this.originY + this.range;
+        if (this.y > this.swingY + this.range) {
+          this.y = this.swingY + this.range;
           this.vy = -this.speed;
-        } else if (this.y < this.originY - this.range) {
-          this.y = this.originY - this.range;
+        } else if (this.y < this.swingY - this.range) {
+          this.y = this.swingY - this.range;
           this.vy = this.speed;
         }
         break;
