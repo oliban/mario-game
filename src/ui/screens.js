@@ -1221,7 +1221,11 @@ export class OptionsScreen {
       if (OPT_ROWS[this.index] === 'back') this.close();
       else this._adjust(1);
     }
-    if (input.pressed(BTN.SELECT)) this.close();
+    // SELECT and BACK both leave, from any row. BACK is Escape, which used to be
+    // an alias of START and so ADJUSTED whatever row was highlighted — pressing
+    // Escape on VIDEO cycled the video preset instead of backing out, which is
+    // the opposite of what Escape means everywhere else.
+    if (input.pressed(BTN.SELECT) || input.pressed(BTN.BACK)) this.close();
     return this;
   }
 
@@ -1364,6 +1368,16 @@ export class Screens {
     this.world = null;
     this.renderer = null;
     this.audio = null;
+
+    // The menu row the cursor is ON right now, before anything is confirmed:
+    // 'start1' | 'start2' | 'harry' | 'options', or null when the title menu is
+    // not the screen in front of you. The page chrome outside the canvas reads
+    // this — the key legend reveals the toolbelt controls while HARRY MODE is
+    // highlighted — so it is a deliberate public accessor, not internals anyone
+    // should be reaching past.
+    Object.defineProperty(this, 'menuChoice', {
+      get: () => (this.state === 'title' ? MENU_RESULTS[this.title.index] || null : null),
+    });
 
     /** Fired with 'start1' | 'start2' when the title menu is confirmed. */
     this.onSelect = null;

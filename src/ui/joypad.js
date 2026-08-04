@@ -19,7 +19,7 @@ const PAD_EM_W = 42;
 const MIN_PX = 3;
 // Desktop is played on the keyboard, so the pad is mainly something to look at
 // and stays modest. On a phone it is the only input, so it takes the width.
-const MAX_PX_DESKTOP = 10;
+const MAX_PX_DESKTOP = 3.5;
 const MAX_PX_PHONE = 18;
 const PHONE = '(max-width: 760px)';
 // Landscape phone: vertical room is scarce, so the pad sits BESIDE the TV.
@@ -48,21 +48,17 @@ if (root) {
 
     const beside = window.matchMedia(BESIDE).matches;
     const phone = beside || window.matchMedia(PHONE).matches;
-    const availW = beside ? vw - r.width - 14 : vw - (phone ? 6 : 24);
-    const availH = beside ? vh - 6 : vh - r.height - (phone ? 8 : 10);
+    const availW = beside ? vw - r.width - 20 : vw - (phone ? 20 : 24);
+    const availH = beside ? vh - 6 : vh - r.height - (phone ? 30 : 12);
 
     const max = phone ? MAX_PX_PHONE : MAX_PX_DESKTOP;
     const px = Math.max(MIN_PX, Math.min(max, availH / PAD_EM_H, availW / PAD_EM_W));
     if (Math.abs(px - lastPx) < 0.05) return;
     lastPx = px;
     root.style.fontSize = `${px.toFixed(2)}px`;
-    // On a short window the pad reaches down into the keyboard hint. The pad
-    // is the same information in picture form, so the text gives way.
-    const hint = document.getElementById('hint');
-    if (hint) {
-      const clash = root.getBoundingClientRect().bottom > hint.getBoundingClientRect().top;
-      hint.style.visibility = clash ? 'hidden' : '';
-    }
+    // Below ~200 CSS px the lettering stops being letters and becomes a smear;
+    // the cross, arrows, ridges and buttons all survive down to 135px.
+    root.classList.toggle('jp-tiny', px * PAD_EM_W < 200);
   };
   fit();
   window.addEventListener('resize', fit);
