@@ -34,7 +34,9 @@ const ROWS = [
   { name: 'BACK', btns: [BTN.BACK] },
 ];
 const P2_ROWS = [ROWS[0], ROWS[1], ROWS[2]];
-const TOOLBELT = [{ name: 'THROW', btns: [BTN.SELECT] }];
+// Harry's toolbelt: one more P1 control, named for what it does rather than for
+// the button, revealed in place rather than in a box of its own.
+const TOOLBELT = { name: 'BRICK BOMB', btns: [BTN.SELECT], note: 'COSTS 5 COINS' };
 
 function keysFor(map, btns) {
   const seen = new Set();
@@ -50,26 +52,27 @@ function keysFor(map, btns) {
   return out;
 }
 
-function group(tag, map, rowSet = ROWS, cls = '') {
+const row = (r, cls = '') =>
+  `<div class="lg-row ${cls}"><span class="lg-act">${r.name}</span><span class="lg-keys">${r.keys
+    .map((k) => `<kbd>${k}</kbd>`)
+    .join('')}</span></div>`;
+
+function group(tag, map, rowSet = ROWS, extra = '') {
   const rows = rowSet.map((r) => ({ name: r.name, keys: keysFor(map, r.btns) })).filter((r) => r.keys.length);
   if (!rows.length) return '';
-  return `<div class="lg-group ${cls}"><div class="lg-tag">${tag}</div>${rows
-    .map(
-      (r) =>
-        `<div class="lg-row"><span class="lg-act">${r.name}</span><span class="lg-keys">${r.keys
-          .map((k) => `<kbd>${k}</kbd>`)
-          .join('')}</span></div>`
-    )
-    .join('')}</div>`;
+  return `<div class="lg-group"><div class="lg-tag">${tag}</div>${rows.map((r) => row(r)).join('')}${extra}</div>`;
 }
 
 const el = document.createElement('div');
 el.id = 'legend';
 el.setAttribute('aria-hidden', 'true');
-el.innerHTML =
-  group('P1', KEYMAP_P1) +
-  group('P2', KEYMAP_P2, P2_ROWS) +
-  group('TOOLBELT', KEYMAP_P1, TOOLBELT, 'lg-toolbelt');
+// The toolbelt rows live INSIDE P1 and are always laid out — only their
+// visibility changes — so revealing them cannot make the rows below jump.
+const toolbeltRows =
+  row({ name: TOOLBELT.name, keys: keysFor(KEYMAP_P1, TOOLBELT.btns) }, 'lg-toolbelt') +
+  `<div class="lg-row lg-toolbelt lg-note">${TOOLBELT.note}</div>`;
+
+el.innerHTML = group('P1', KEYMAP_P1, ROWS, toolbeltRows) + group('P2', KEYMAP_P2, P2_ROWS);
 (document.getElementById('deck') || document.body).appendChild(el);
 
 // It shares the row under the TV with the joypad, so it stands down entirely
@@ -97,16 +100,21 @@ place();
 window.addEventListener('resize', place);
 if (stage && window.ResizeObserver) new ResizeObserver(place).observe(stage);
 
-// The toolbelt row appears only while HARRY MODE is the highlighted title row.
+// The toolbelt is revealed while HARRY MODE is the HIGHLIGHTED title row — a
+// preview before it is chosen — and stays revealed while actually playing it.
 // `screens.menuChoice` is the public accessor; never reach into title.index.
+// The group is always laid out and only its visibility changes, so moving the
+// menu cursor up and down cannot make the panel twitch.
 let harry = null;
 const poll = () => {
   const g = window.__GAME;
-  const on = !!(g && g.screens && g.screens.menuChoice === 'harry');
+  const on = !!(
+    g &&
+    ((g.screens && g.screens.menuChoice === 'harry') || (g.world && g.world.harryMode) || g.harryMode)
+  );
   if (on !== harry) {
     harry = on;
     el.classList.toggle('lg-harry', on);
-    place();
   }
   requestAnimationFrame(poll);
 };

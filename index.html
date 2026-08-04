@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>SUPER MARIO</title>
 <meta name="description" content="An original-art homage to the 1985 platformer, built from scratch in vanilla JavaScript — every sprite, tile and note authored in code. Playable in the browser, keyboard or on-screen joypad." />
 <meta property="og:type" content="website" />
@@ -26,6 +26,12 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     height: 100%;
+    /* iOS Safari has ignored user-scalable=no and maximum-scale since iOS 10,
+       deliberately. `manipulation` is what actually kills the double-tap zoom
+       gesture, and it KEEPS pinch-to-zoom, which is an accessibility affordance
+       we are not entitled to take away. #screen and #joypad stay at `none`
+       because they must swallow drags as well. */
+    touch-action: manipulation;
     background: #05060a;
     color: #cdd6f4;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -48,6 +54,7 @@
   }
   #stage {
     position: relative;
+    touch-action: manipulation;
     display: grid;
     place-items: center;
     padding: 18px;
@@ -70,6 +77,7 @@
   }
   #overlay {
     position: absolute;
+    touch-action: manipulation;
     left: 18px;
     top: 18px;
     pointer-events: none;
@@ -79,6 +87,7 @@
   body.headless #overlay { left: 0; top: 0; }
   #boot {
     position: absolute;
+    touch-action: manipulation;
     inset: 18px;
     display: grid;
     place-items: center;
@@ -109,12 +118,14 @@
      and a keyboard legend is noise.
      ------------------------------------------------------------------ */
   #deck {
+    touch-action: manipulation;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 14px;
   }
   #legend {
+    touch-action: manipulation;
     align-self: stretch;
     display: flex;
     gap: 12px;
@@ -175,9 +186,18 @@
   }
   /* The toolbelt only exists in Harry mode, so its key only appears while that
      row is highlighted on the title menu. */
-  #legend .lg-group.lg-toolbelt { display: none; }
-  #legend.lg-harry .lg-group.lg-toolbelt { display: block; }
-  #legend .lg-toolbelt .lg-tag { color: #d9a441; }
+  /* Always laid out, only visibility changes: revealing the toolbelt must not
+     make the rows around it jump. */
+  #legend .lg-row.lg-toolbelt { visibility: hidden; }
+  #legend.lg-harry .lg-row.lg-toolbelt { visibility: visible; }
+  #legend .lg-row.lg-toolbelt .lg-act { color: #d9a441; }
+  #legend .lg-row.lg-note {
+    justify-content: flex-end;
+    color: #6a5a3a;
+    letter-spacing: .12em;
+    font-size: 7px;
+    padding-top: 0;
+  }
   /* Capture mode: strip every page-level decoration so an element screenshot of
      #screen contains the framebuffer and nothing else. The page vignette in
      particular reads as a spotlight in the sky if it is left on. */
@@ -205,12 +225,20 @@
     /* Hit area is deliberately divorced from the art: the drawn face keeps the
        hardware's proportions, these grow the invisible target under a thumb.
        The em caps stop a target on a small pad from swallowing its neighbour. */
-    --hit-dpad: min(180px, 16.6em);
-    --hit-ab-y: min(11px, 1.1em);
-    --hit-ab-out: min(14px, 1.4em);
+    /* +30% on each dimension over the original targets. Width on the d-pad is
+       the one that cannot take it: its grid already abuts the SELECT hit box on
+       one side and the body edge on the other, so the extra room goes into
+       height, and into the four centre wedges below. */
+    --hit-dpad: min(180px, 14.84em);
+    --hit-dpad-h: min(234px, 21.6em);
+    --hit-ab-y: min(19.5px, 2.2em);
+    /* B can only grow left as far as the midline it shares with START; A has
+       the whole right end of the body, so it takes the full 30% and more. */
+    --hit-ab-out: min(18.2px, 1.66em);
+    --hit-ab-out-a: min(36px, 3.3em);
     --hit-ab-in: min(4px, .45em);
-    --hit-pill-w: min(50px, 5.3em);
-    --hit-pill-h: min(52px, 5.8em);
+    --hit-pill-w: min(65px, 4.93em);
+    --hit-pill-h: min(68px, 7.54em);
     font-size: 9px;
     margin-top: 1.6em;
     position: relative;
@@ -248,7 +276,7 @@
     box-shadow:
       inset 0 .1em .25em rgba(255,255,255,.1),
       inset 0 -.15em .3em rgba(0,0,0,.5),
-      0 .08em 0 rgba(255,255,255,.65);
+      0 .04em 0 rgba(255,255,255,.5);
   }
 
   /* --- d-pad: one continuous cross with a light rim --- */
@@ -279,14 +307,14 @@
   }
   #joypad .jp-rim-crown {
     position: absolute;
-    inset: .12em;
-    clip-path: polygon(2.375em 0, 5.825em 0, 5.825em 2.295em, 8.2em 2.295em, 8.2em 5.745em, 5.825em 5.745em, 5.825em 8.04em, 2.375em 8.04em, 2.375em 5.745em, 0 5.745em, 0 2.295em, 2.375em 2.295em);
+    inset: .1em;
+    clip-path: polygon(2.375em 0, 5.865em 0, 5.865em 2.295em, 8.24em 2.295em, 8.24em 5.785em, 5.865em 5.785em, 5.865em 8.08em, 2.375em 8.08em, 2.375em 5.785em, 0 5.785em, 0 2.295em, 2.375em 2.295em);
     background: linear-gradient(170deg, #eaeaeb 0%, #e8e8e9 45%, #dcdcde 100%);
   }
   #joypad .jp-rim-inner {
     position: absolute;
-    inset: .3em;
-    clip-path: polygon(2.375em 0, 5.465em 0, 5.465em 2.295em, 7.84em 2.295em, 7.84em 5.385em, 5.465em 5.385em, 5.465em 7.68em, 2.375em 7.68em, 2.375em 5.385em, 0 5.385em, 0 2.295em, 2.375em 2.295em);
+    inset: .32em;
+    clip-path: polygon(2.375em 0, 5.425em 0, 5.425em 2.295em, 7.8em 2.295em, 7.8em 5.345em, 5.425em 5.345em, 5.425em 7.64em, 2.375em 7.64em, 2.375em 5.345em, 0 5.345em, 0 2.295em, 2.375em 2.295em);
     background: #c7c7c9;
   }
   #joypad .jp-xface {
@@ -294,18 +322,21 @@
     inset: .42em;
     clip-path: polygon(2.375em 0, 5.225em 0, 5.225em 2.295em, 7.6em 2.295em, 7.6em 5.145em, 5.225em 5.145em, 5.225em 7.44em, 2.375em 7.44em, 2.375em 5.145em, 0 5.145em, 0 2.295em, 2.375em 2.295em);
     background:
-      linear-gradient(90deg, rgba(255,255,255,.05) 0%, rgba(255,255,255,0) 55%, rgba(0,0,0,.03) 100%),
-      linear-gradient(180deg, #2d2d2d 0%, #343434 58%, #323232 100%);
-    box-shadow: inset 0 .1em .2em rgba(0,0,0,.45);
+      linear-gradient(90deg, rgba(0,0,0,.07) 0%, rgba(0,0,0,0) 46%, rgba(255,255,255,.07) 100%),
+      linear-gradient(180deg, #484848 0%, #525252 40%, #5d5d5d 74%, #666667 100%);
+    box-shadow: inset 0 .08em .16em rgba(0,0,0,.4);
   }
   /* Engraved into the dark arms: a house — triangular head over a narrower
      stem — one shade up from the face, with a light lip along its lower right.
      Width 43% of the arm, length 35% of the half-span, tip 29.5% in. */
   #joypad .jp-glyph {
     position: absolute;
-    background: linear-gradient(160deg, #4f4f4f 0%, #454545 100%);
-    filter: drop-shadow(.045em .045em 0 rgba(255,255,255,.22));
+    filter: drop-shadow(.045em .045em 0 rgba(255,255,255,.24));
   }
+  #joypad .jp-glyph.up    { background: #525252; }
+  #joypad .jp-glyph.left  { background: #585858; }
+  #joypad .jp-glyph.right { background: #666667; }
+  #joypad .jp-glyph.down  { background: #707071; }
   #joypad .jp-glyph.up {
     left: 3.427em; top: 1.221em; width: 1.587em; height: 1.449em;
     clip-path: polygon(50% 0, 100% 52%, 89.5% 52%, 89.5% 100%, 10.5% 100%, 10.5% 52%, 0 52%);
@@ -330,7 +361,7 @@
     width: 1.77em; height: 1.77em;
     margin: -.885em 0 0 -.885em;
     border-radius: 50%;
-    background: radial-gradient(circle at 62% 70%, #232323 0%, #131313 46%, #0a0a0a 78%, #050505 100%);
+    background: radial-gradient(circle at 62% 70%, #2a2a2a 0%, #1b1b1b 40%, #101010 74%, #0a0a0a 100%);
     box-shadow: inset 0 .1em .18em rgba(0,0,0,.9), 0 .06em .1em rgba(255,255,255,.1);
     transition: transform .07s ease-out;
   }
@@ -372,13 +403,21 @@
     left: calc(50% + max(0px, var(--hit-dpad) / 2 - 7.05em));
     top: 50%;
     width: max(calc(100% + .9em), var(--hit-dpad));
-    height: max(calc(100% + .9em), var(--hit-dpad));
+    height: max(calc(100% + .9em), var(--hit-dpad-h));
     transform: translate(-50%, -50%);
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     grid-template-rows: 1fr 1fr 1fr;
   }
-  #joypad .jp-hits span { display: block; }
+  #joypad .jp-hits > span { display: block; position: relative; }
+  /* The centre cell is not dead space: it is quartered diagonally so a thumb
+     resting on the hub still resolves to whichever arm it leans toward, the way
+     the real cross tilts. The hub never steals a press. */
+  #joypad .jp-wedge { position: absolute; inset: 0; }
+  #joypad .jp-wedge.up    { clip-path: polygon(0 0, 100% 0, 50% 50%); }
+  #joypad .jp-wedge.right { clip-path: polygon(100% 0, 100% 100%, 50% 50%); }
+  #joypad .jp-wedge.down  { clip-path: polygon(100% 100%, 0 100%, 50% 50%); }
+  #joypad .jp-wedge.left  { clip-path: polygon(0 100%, 0 0, 50% 50%); }
 
   #joypad.is-up    .jp-arm.up,
   #joypad.is-down  .jp-arm.down,
@@ -421,8 +460,8 @@
     text-shadow: 0 .08em 0 rgba(255,255,255,.35);
   }
   /* measured spans: SELECT 35.7..47.6%W, START 50.0..61.0%W of the body */
-  #joypad .jp-ridge.r3 .sel   { left: 5.8%; width: 42.0%; }
-  #joypad .jp-ridge.r3 .start { left: 56.2%; width: 38.8%; }
+  #joypad .jp-ridge.r3 .sel   { left: 3.7%;  width: 42.0%; letter-spacing: .08em; text-indent: .08em; }
+  #joypad .jp-ridge.r3 .start { left: 54.1%; width: 38.8%; letter-spacing: .2em;  text-indent: .2em; }
   #joypad .jp-mid {
     position: absolute;
     left: 13.54em;
@@ -430,7 +469,7 @@
     width: 11.7em;
     height: 4.07em;
     border-radius: .55em;
-    background: linear-gradient(180deg, #d5d5da 0%, #d7d7dc 60%, #d9d8de 100%);
+    background: linear-gradient(180deg, #dcdbdf 0%, #dcdbdf 55%, #dcdce0 100%);
     box-shadow: inset 0 .12em 0 rgba(255,255,255,.8), 0 .12em .25em rgba(0,0,0,.5);
   }
   #joypad .jp-pill {
@@ -455,7 +494,7 @@
     height: max(100%, var(--hit-pill-h));
     transform: translateY(-50%);
   }
-  #joypad .jp-pill[data-btn="select"]::before { left: 1.35em; }
+  #joypad .jp-pill[data-btn="select"]::before { left: 0; }
   #joypad .jp-pill[data-btn="select"] { left: 1.5em; }
   #joypad .jp-pill[data-btn="start"]  { left: 6.94em; }
   #joypad.is-select .jp-pill[data-btn="select"],
@@ -484,7 +523,7 @@
     bottom: calc(var(--hit-ab-y) * -1);
   }
   #joypad .jp-housing.b::before { left: calc(var(--hit-ab-out) * -1); right: calc(var(--hit-ab-in) * -1); }
-  #joypad .jp-housing.a::before { right: calc(var(--hit-ab-out) * -1); left: calc(var(--hit-ab-in) * -1); }
+  #joypad .jp-housing.a::before { right: calc(var(--hit-ab-out-a) * -1); left: calc(var(--hit-ab-in) * -1); }
   #joypad .jp-round {
     position: absolute;
     left: .52em;
@@ -493,10 +532,10 @@
     height: 3.53em;
     border-radius: 50%;
     background:
-      radial-gradient(circle at 32% 26%, rgba(255,255,255,.42) 0%, rgba(255,255,255,.1) 26%, rgba(255,255,255,0) 44%),
-      radial-gradient(circle at 50% 60%, #d34f46 0%, #d04b42 55%, #cb473e 100%);
+      radial-gradient(circle at 33% 27%, rgba(255,255,255,.5) 0%, rgba(255,255,255,.16) 30%, rgba(255,255,255,0) 52%),
+      radial-gradient(circle at 50% 58%, #d6534a 0%, #d04b42 52%, #c04038 100%);
     box-shadow:
-      inset 0 -.12em .14em rgba(0,0,0,.2),
+      inset 0 -.3em .3em -.14em rgba(0,0,0,.32),
       0 .14em 0 #8e2b23,
       0 .2em .22em rgba(0,0,0,.4);
     transition: transform .07s ease-out, box-shadow .07s ease-out, background .07s ease-out;
@@ -602,7 +641,7 @@
         </div>
         <div class="jp-hits">
           <span data-btn="up left"></span><span data-btn="up"></span><span data-btn="up right"></span>
-          <span data-btn="left"></span><span></span><span data-btn="right"></span>
+          <span data-btn="left"></span><span><i class="jp-wedge up" data-btn="up"></i><i class="jp-wedge right" data-btn="right"></i><i class="jp-wedge down" data-btn="down"></i><i class="jp-wedge left" data-btn="left"></i></span><span data-btn="right"></span>
           <span data-btn="down left"></span><span data-btn="down"></span><span data-btn="down right"></span>
         </div>
       </div>
@@ -621,6 +660,32 @@
     </div>
   </div>
   </div>
+  <script>
+  // Google Analytics. Paste the G-XXXXXXXXXX measurement ID here to switch it on;
+  // while it is empty NOTHING is injected and no request leaves the page.
+  const GA_ID = 'G-7S6T2SKB1B';
+
+  (() => {
+    if (!GA_ID) return;
+    // Our own screenshot harness and every verification script in this repo load
+    // this page dozens of times a session. None of that is traffic.
+    const params = location.search;
+    const headless = /(?:^|[?&])headless(?:=|&|$)/.test(params) || document.body.classList.contains('headless');
+    const local = ['localhost', '127.0.0.1', '::1', ''].includes(location.hostname) ||
+      location.hostname.endsWith('.local') || location.protocol === 'file:';
+    if (headless || local) return;
+
+    const s = document.createElement('script');
+    s.async = true;
+    s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA_ID)}`;
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { window.dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag('js', new Date());
+    gtag('config', GA_ID);
+  })();
+  </script>
   <script type="module" src="./src/main.js"></script>
   <script type="module" src="./src/ui/joypad.js"></script>
   <script type="module" src="./src/ui/legend.js"></script>
