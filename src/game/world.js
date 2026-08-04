@@ -1838,16 +1838,62 @@ export class World {
     return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   }
 
+  // Enemy_CollisionBits d0 (asm:11347-11351): HandlePECollisions leaves at once
+  // if the bit is already set, and PlayerCollisionCore only clears it on a frame
+  // where the boxes do NOT touch (asm:11304-11307). One unbroken overlap is
+  // therefore worth exactly ONE interaction — a rising edge, not a per-frame
+  // stream. Without it a player who never separates from an enemy re-resolves it
+  // every single frame, which is half of what let the shell wedged in 1-2's
+  // 1-tile slot pay out forever (the other half was shell.onStomp).
+  //
+  // Per PLAYER, because the ROM's bit is per enemy per collision and co-op has
+  // two brothers; a shared latch would make an enemy Luigi is touching invisible
+  // to Mario. Only enemies are latched: the bit lives in PlayerEnemyCollision,
+  // and power-ups divert to HandlePowerUpCollision (asm:11310-11314) before it
+  // is ever read. Springboards, platforms, vines and coins are not enemies and
+  // are deliberately left on per-frame contact — a springboard the player is
+  // standing on has to be told so every frame.
+  //
+  // NOTE the multi-stomp fix (StompTimer, ChkETmrs asm:11388) is untouched: the
+  // latch is per ENEMY, so two goombas straddled in one landing are two separate
+  // rising edges and both still resolve in the same frame.
+  _enemyContactLatched(p, e, tick) {
+    if (!e.isEnemy || e.isItem) return false;
+    let seen = p._enemyContact;
+    if (!seen) {
+      seen = new Map();
+      p._enemyContact = seen;
+    }
+    const prev = seen.get(e);
+    seen.set(e, tick);
+    return prev === tick - 1;
+  }
+
+  // Drop entities the player stopped touching, so the map cannot grow with the
+  // level. An entry older than the previous frame is a cleared bit already, and
+  // `t > tick` catches a leftover from the level before this one — loadLevel
+  // rewinds this.tick to 0 while the player object survives.
+  _pruneEnemyContact(p, tick) {
+    const seen = p._enemyContact;
+    if (!seen || !seen.size) return;
+    for (const [e, t] of seen) {
+      if (t < tick - 1 || t > tick || !e || e.removed) seen.delete(e);
+    }
+  }
+
   // Nothing else walks the entity list against the player: the world owns this.
   _playerEntityCollisions(p) {
     if (!this.resolveEnemyCollisions) return;
     if (p.hidden || p.collidable === false) return;
+    const tick = this.tick | 0;
+    this._pruneEnemyContact(p, tick);
     const list = this.entities;
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
       if (!e || e.removed || e.dead || e.emerging) continue;
       if (e.tangible === false || e.collidable === false || e.noPlayerCollide) continue;
       if (!this._overlap(p, e)) continue;
+      if (this._enemyContactLatched(p, e, tick)) continue;
 
       this._beginMerge(e.x + e.w * 0.5, e.y);
       const feetBefore = p.y + p.h - (p.vy || 0);
