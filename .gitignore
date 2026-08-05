@@ -14,3 +14,6 @@ reference/
 # full copy of the repo dropped in here — never commit it. Scoped to
 # worktrees/ rather than all of .claude/ so real project config stays visible.
 .claude/worktrees/
+
+# The phone input diary (tools/logserve.mjs). A capture, not source.
+input-log.txt
