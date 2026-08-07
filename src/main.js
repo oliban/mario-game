@@ -129,6 +129,10 @@ class Game {
     this.playerCount = 1;
     this.harryMode = false;
     this.turn = 0;
+    // WorldSelectEnableFlag: armed by finishing 8-4, never cleared afterwards.
+    // It is what arms PrimaryHardMode on every start from then on (asm:1045).
+    this.worldSelect = false;
+    this.quest = 1;
     this.slots = [this.newSlot(), this.newSlot()];
     this.audioUnlocked = false;
     this.scripted = false;
@@ -263,17 +267,21 @@ class Game {
       return;
     }
     this.harryMode = choice === 'harry';
-    this.startGame(choice === 'start2' ? 2 : 1);
+    this.startGame(choice === 'start2' ? 2 : 1, screens.selectedWorld);
   }
 
   // SMB two-player is alternating, not co-op: each player keeps their own score,
   // coins, lives and level, and the turn passes when the active one dies.
-  newSlot() {
+  newSlot(startWorld = 1) {
+    const first = firstLevel ? firstLevel() : ORDER[0];
+    // StartWorld1 / GoContinue (asm:1013, 1040): world select only ever starts
+    // you at level 1 of the world you picked, never mid-world.
+    const start = startWorld > 1 && ORDER.includes(`${startWorld}-1`) ? `${startWorld}-1` : first;
     return {
       score: 0,
       coins: 0,
       lives: 3,
-      levelId: firstLevel ? firstLevel() : ORDER[0],
+      levelId: start,
       checkpoint: false,
       over: false,
     };
@@ -306,13 +314,19 @@ class Game {
     else this.world.playerName = null;
   }
 
-  async startGame(players = 1) {
+  async startGame(players = 1, startWorld = 1) {
     this.playerCount = players === 2 ? 2 : 1;
+    // `lda WorldSelectEnableFlag / sta PrimaryHardMode` (asm:1045-1046): the
+    // two flags are the same value. Once you have beaten the game, every run
+    // you start is a second-quest run — there is no way back to the easy game
+    // short of reloading. Set BEFORE the level loads, because loadLevel is
+    // where the secondary flag is derived from it and where enemies are built.
+    this.world.primaryHardMode = !!this.worldSelect;
     // Two-player is SIMULTANEOUS co-op: both brothers are live at once, Luigi on
     // the second pad, rather than SMB's alternating turns.
     this.world.coop = this.playerCount === 2;
     this.world.coopPad = pad2;
-    this.slots = [this.newSlot(), this.newSlot()];
+    this.slots = [this.newSlot(startWorld), this.newSlot(startWorld)];
     this.turn = 0;
     this.started = true;
     this.syncPlayerName();
@@ -445,23 +459,22 @@ class Game {
   // read it — endSession took no arguments at all, so it was silently dropped
   // and beating 8-4 dumped you on the title screen like a game over.
   //
-  // Clearing it starts the SECOND QUEST: the same 32 levels with
-  // PrimaryHardMode armed. startGame() already means fresh slots, three lives,
-  // no score, back to 1-1, keeping the player count — everything the original
-  // does — so the quest only has to set the flag and let it run. A game over
-  // goes to the title and CLEARS the flag, which is the original's rule too:
-  // the only thing that ever arms primary hard mode is finishing 8-4.
+  // Clearing it arms the SECOND QUEST. It does NOT start one: EndChkBButton
+  // (asm:1249-1256) sets WorldSelectEnableFlag, throws the lives away and calls
+  // TerminateGame, which lands on the title screen with the world select
+  // switched on. Auto-starting 1-1 from here was the bug the player hit — the
+  // ending says PUSH BUTTON B TO SELECT A WORLD and then chose for them.
+  //
+  // The flag stays on for the rest of the session, so from now on every game
+  // started off this title is a hard-mode game, whichever world it starts in.
   async endSession(opts = {}) {
     if (opts && opts.cleared === true) {
       this.quest = (this.quest || 1) + 1;
-      this.world.primaryHardMode = true;
-      await this.startGame(this.playerCount);
-      return;
+      this.worldSelect = true;
     }
     this.started = false;
     this.playerCount = 1;
-    this.quest = 1;
-    this.world.primaryHardMode = false;
+    this.world.primaryHardMode = !!this.worldSelect;
     this.harryMode = false;
     this.slots = [this.newSlot(), this.newSlot()];
     this.turn = 0;
@@ -472,7 +485,7 @@ class Game {
     this.world.checkpointReached = false;
     await this.loadLevel(firstLevel ? firstLevel() : ORDER[0], null, { resetPlayer: true });
     this.world.state = 'idle';
-    await screens.showTitle();
+    await screens.showTitle({ worldSelect: this.worldSelect });
   }
 
   update() {

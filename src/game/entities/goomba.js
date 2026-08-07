@@ -41,7 +41,7 @@ export default class Goomba extends Entity {
     this.w = 16;
     this.h = 16;
     this.facing = opts.facing || -1;
-    this.speed = opts.speed == null ? walkSpeed() : opts.speed;
+    this.speed = opts.speed == null ? walkSpeed(world) : opts.speed;
     this.art = setFor(world, opts);
     this.anim = this.art.walk;
     this.isWalker = true;

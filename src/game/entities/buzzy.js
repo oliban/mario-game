@@ -24,7 +24,7 @@ export default class Buzzy extends Entity {
     this.w = 16;
     this.h = 16;
     this.facing = opts.facing || -1;
-    this.speed = opts.speed == null ? walkSpeed() : opts.speed;
+    this.speed = opts.speed == null ? walkSpeed(world) : opts.speed;
     this.anim = WALK;
     this.isWalker = true;
     this.isEnemy = true;

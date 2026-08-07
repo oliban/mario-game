@@ -51,8 +51,16 @@ import './brickbomb.js';
 // would be in its TDZ when an enemy module is the entry point.
 // ---------------------------------------------------------------------------
 
-export function walkSpeed() {
-  return PHYS.enemyWalkSpeed;
+// NormalXSpdData (asm:8163) = $f8, $f4, indexed by PrimaryHardMode: 8/16 px a
+// frame normally, 12/16 in the second quest. Pass the world to get the second
+// quest's speed; the enemies that DON'T run InitNormalEnemy — the jumping
+// paratroopa hardcodes $f8 at asm:8871, the flying one starts at zero — call it
+// with nothing, which is the reason this takes an argument rather than reading
+// a global.
+const HARD_WALK_SCALE = 0x0c / 0x08;
+
+export function walkSpeed(world) {
+  return PHYS.enemyWalkSpeed * (primaryHard(world) ? HARD_WALK_SCALE : 1);
 }
 export function shellSpeed() {
   return PHYS.shellSpeed;
@@ -189,6 +197,20 @@ export function frozen(world) {
 // once per area (see World.loadLevel); everything here just asks.
 export function hardMode(world) {
   return !!(world && world.hardMode);
+}
+
+// PrimaryHardMode ($076a) — a DIFFERENT flag from the one above, and the
+// distinction matters. Secondary comes on by itself from 5-3 (asm:2694-2705);
+// primary is armed only by finishing 8-4 and starting again through world
+// select (asm:1045), and it is what makes the second quest a second quest.
+// The five places the ROM reads it that we honour are:
+//   asm:7992  goombas load as buzzy beetles      -> World._spawnLevelEntities
+//   asm:8764  ...including whole goomba groups   -> same (our groups are data)
+//   asm:8168  ground walkers are 1.5x faster     -> walkSpeed() below
+//   asm:9348  and so are koopas revived from a shell
+//   asm:11508 shells let their koopa back out sooner -> shell.js
+export function primaryHard(world) {
+  return !!(world && world.primaryHardMode);
 }
 
 // Pick between the two entries of one of the original's hard-mode tables.

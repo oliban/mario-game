@@ -577,6 +577,8 @@ const TITLE = {
   // 8px of clear space below that and the TOP line reads as a fifth, broken menu
   // entry rather than a score.
   topY: 220,
+  // Below TOP, inside the same dim panel — the panel is drawn to topY + 12.
+  worldY: 230,
 };
 
 export const menuItems = () => [t('onePlayer'), t('twoPlayer'), t('harryMode'), t('options')];
@@ -596,6 +598,13 @@ export class TitleScreen {
     this.attract = null;
     this.result = null;
     this.top = topScore();
+
+    // WorldSelectEnableFlag / WorldSelectNumber ($07fc / $076b). Off until the
+    // player has beaten 8-4 and pressed B on the ending, and then on for the
+    // rest of the session — the ROM never clears it either. worldIndex is the
+    // ROM's 0-based number; the world it starts is worldIndex + 1.
+    this.worldSelect = !!opts.worldSelect;
+    this.worldIndex = 0;
 
     this._snap = null;
     this._abortFn = null;
@@ -633,6 +642,13 @@ export class TitleScreen {
 
     if (input.pressed(BTN.UP)) this._move(-1);
     if (input.pressed(BTN.DOWN)) this._move(1);
+    // IncWorldSel (asm:1008-1013): B steps the world number and masks it to
+    // three bits, so it wraps 8 -> 1 rather than stopping.
+    if (this.worldSelect && input.pressed(BTN.RUN)) {
+      this.worldIndex = (this.worldIndex + 1) & 7;
+      this.idle = 0;
+      sfx('bump');
+    }
     if (input.pressed(BTN.START) || input.pressed(BTN.JUMP)) {
       sfx('coin');
       this.result = MENU_RESULTS[this.index] || 'start1';
@@ -812,7 +828,8 @@ export class TitleScreen {
     // The panel has to reach past the TOP line too — it sits over the same hills,
     // and backing only the menu left the score stranded on a bush.
     const panelY = TITLE.menuY - 6;
-    const panelH = TITLE.topY + 12 - panelY;
+    const panelBottom = this.worldSelect ? TITLE.worldY + 10 : TITLE.topY + 12;
+    const panelH = panelBottom - panelY;
     ctx.save();
     ctx.globalAlpha = 0.72;
     fillRect(ctx, '#000000', 0, panelY, SCREEN_W, panelH);
@@ -830,6 +847,13 @@ export class TitleScreen {
     GLYPH.cursor.draw(ctx, TITLE.cursorX, cy + bob);
 
     drawTextCentered(ctx, 'TOP- ' + pad(Math.max(this.top, 0), 6), TITLE.topY, 'gold');
+
+    // The world select only exists once it has been earned, and the ending's
+    // "PUSH BUTTON B TO SELECT A WORLD" is a promise that has to be kept HERE —
+    // this row is the other half of that sentence.
+    if (this.worldSelect) {
+      drawTextCentered(ctx, `${t('world')} ${this.worldIndex + 1}-1  B`, TITLE.worldY, 'gold');
+    }
 
     if (this.showHud) hud.draw(ctx, this.world);
     return this;
@@ -1388,6 +1412,7 @@ export class PrincessEndScreen {
   constructor(opts = {}) {
     this.t = 0;
     this.running = false;
+    this.waiting = false;
     this.world = null;
     this.showHud = opts.showHud !== false;
     this._musicAt = -1;
@@ -1397,6 +1422,7 @@ export class PrincessEndScreen {
     this.world = world || null;
     this.t = 0;
     this.running = true;
+    this.waiting = false;
     this._musicAt = VICTORY_MUSIC_STEP * VICTORY_STEP;
     return this;
   }
@@ -1426,7 +1452,17 @@ export class PrincessEndScreen {
     // world end timer has expired, so this card CANNOT be dismissed early. A
     // skippable ending would eat the reveal on the one screen the whole game
     // builds towards.
-    if (this.t >= VICTORY_END) this.running = false;
+    //
+    // And once it HAS expired, the ROM does not move on by itself either: it
+    // sits here polling for B (EndChkBButton, asm:1249-1256), which is what the
+    // last two messages are telling you to press. This card used to expire on
+    // its own timer and drop you straight into 1-1, so the screen asked for a
+    // button that did nothing and offered a world choice that was never made.
+    // START is honoured alongside B because the prompt is the only clue a
+    // keyboard player gets about which key B even is.
+    if (this.t < VICTORY_END) return this;
+    this.waiting = true;
+    if (input.pressed(BTN.RUN) || input.pressed(BTN.START)) this.running = false;
     return this;
   }
 
@@ -1581,9 +1617,15 @@ export class Screens {
   /** Enter the title state. Resolves as soon as the screen is up. */
   showTitle(opts = {}) {
     if (opts.world !== undefined) this.setWorld(opts.world);
+    if (opts.worldSelect !== undefined) this.title.worldSelect = !!opts.worldSelect;
     this.state = 'title';
     this.title.enter();
     return Promise.resolve(this);
+  }
+
+  /** The world the title menu will start, 1-8. Always 1 without world select. */
+  get selectedWorld() {
+    return this.title.worldSelect ? this.title.worldIndex + 1 : 1;
   }
 
   /** The black WORLD n-m card. Resolves when it has faded out. */

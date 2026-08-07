@@ -1407,7 +1407,15 @@ export class World {
       // The original does not spawn-and-hide it, it never parses the object at
       // all (asm:7976-7979), so the cheapest faithful thing is not to make it.
       if (spec.hard && !this.hardMode) continue;
-      const e = this.spawn(spec.type, spec.x * TILE, spec.y * TILE, spec);
+      // BuzzyBeetleMutate (asm:7988-7996): under PRIMARY hard mode every goomba
+      // parsed out of the enemy data loads as a buzzy beetle instead — and the
+      // group records do the same (asm:8760-8766), which needs no separate arm
+      // here because our generators already expanded the groups into goombas.
+      // This is the change you feel first in the second quest: a buzzy beetle
+      // shrugs off fireballs, so a level you cleared by shooting has to be
+      // cleared by jumping.
+      const type = this.primaryHardMode && spec.type === 'goomba' ? 'buzzy' : spec.type;
+      const e = this.spawn(type, spec.x * TILE, spec.y * TILE, spec);
       if (!e) continue;
       // A lift spans several tiles and measures its travel from where it was
       // constructed, so it keeps the tile's top-left exactly like a map anchor

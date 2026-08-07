@@ -14,6 +14,7 @@ import {
   shellSpeed,
   enemyGravity,
   enemyMaxFall,
+  primaryHard,
   fx,
   sfx,
 } from './index.js';
@@ -26,18 +27,17 @@ import {
 // The last WOBBLE_FRAMES of that are the shiver that telegraphs it. The original
 // has no wobble — it is ours — so it is spent out of the 336, not added to it.
 //
-// NOT YET FAITHFUL: RevivalRateData's second entry is $0b (231 frames) under
-// PrimaryHardMode, i.e. worlds 5-8. We have no hard-mode flag at all yet — see
-// the hard-mode item in agent-reports/enemies.md, which covers enemy walk speed,
-// the hammer interval and Bowser's flame timer as well.
-// The ROM's own two numbers, kept separate so the total below can never drift
-// away from them: $10 ticks of a timer that moves once every 21 frames.
-const REVIVE_TICKS = 0x10;
+// RevivalRateData has TWO entries, indexed by PrimaryHardMode — not by the
+// secondary flag, so this is a second-quest difference and nothing else: $10
+// normally, $0b once you have beaten the game, which is 231 frames instead of
+// 336. A shell you were counting on as a step or a weapon hatches a third
+// sooner for the rest of the quest.
+// The ROM's own numbers, kept separate so the totals below can never drift
+// away from them: ticks of a timer that moves once every 21 frames.
+const REVIVE_TICKS = [0x10, 0x0b];
 const INTERVAL_FRAMES = 21;
-const REVIVE_FRAMES = REVIVE_TICKS * INTERVAL_FRAMES; // 336
 
 const WOBBLE_FRAMES = 80;
-const STILL_FRAMES = REVIVE_FRAMES - WOBBLE_FRAMES;
 
 // KickedShellPtsData (smbdis.asm:11325) = $0a, $06, $04, indexed by the shell's
 // revival timer when the player kicks it. Those are FloateyNumTileData indices,
@@ -74,6 +74,12 @@ export default class Shell extends Entity {
     this.art = ART[this.variant];
     this.facing = opts.facing || -1;
     this.speed = opts.speed == null ? shellSpeed() : opts.speed;
+
+    // Fixed when the shell is made, exactly as the ROM sets EnemyIntervalTimer
+    // once at the stomp (asm:11508) and then only counts it down.
+    this.reviveTicks = REVIVE_TICKS[primaryHard(world) ? 1 : 0];
+    this.reviveFrames = this.reviveTicks * INTERVAL_FRAMES;
+    this.stillFrames = this.reviveFrames - WOBBLE_FRAMES;
 
     this.sliding = !!opts.kicked;
     this.vx = this.sliding ? this.speed * this.facing : 0;
@@ -129,19 +135,19 @@ export default class Shell extends Entity {
     this.vx = 0;
     this.moveAndCollide();
     this.stillT++;
-    if (this.stillT >= STILL_FRAMES + WOBBLE_FRAMES) this._revert();
+    if (this.stillT >= this.reviveFrames) this._revert();
   }
 
   get wobbling() {
-    return !this.sliding && this.stillT >= STILL_FRAMES;
+    return !this.sliding && this.stillT >= this.stillFrames;
   }
 
   // The ROM's EnemyIntervalTimer for this shell: it starts at $10 and counts
   // DOWN once every 21 frames, where our stillT counts UP once a frame. Zero
   // means the koopa is climbing back out this instant.
   get revivalTimer() {
-    if (this.sliding) return REVIVE_TICKS;
-    return Math.max(0, REVIVE_TICKS - Math.floor(this.stillT / INTERVAL_FRAMES));
+    if (this.sliding) return this.reviveTicks;
+    return Math.max(0, this.reviveTicks - Math.floor(this.stillT / INTERVAL_FRAMES));
   }
 
   _hitWall(col) {
@@ -216,7 +222,7 @@ export default class Shell extends Entity {
     }
     if (this.wobbling && !this.dead) {
       // Shivering shell — telegraphs the koopa climbing back in.
-      const t = this.stillT - STILL_FRAMES;
+      const t = this.stillT - this.stillFrames;
       this.drawSprite(ctx, cam, this.art.rest, { ox: (t >> 2) & 1 ? 1 : -1 });
       return;
     }

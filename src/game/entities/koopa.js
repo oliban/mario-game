@@ -37,9 +37,13 @@ export default class Koopa extends Entity {
     this.facing = opts.facing || -1;
     this.variant = opts.variant === 'red' ? 'red' : 'green';
     this.art = this.variant === 'red' ? RED : GREEN;
-    this.speed = opts.speed == null ? walkSpeed() : opts.speed;
 
     this.winged = !!(opts.winged || opts.wing || opts.para);
+    // Only the GROUND koopas run InitNormalEnemy (asm:8072-8075) and so only
+    // they get the second quest's faster walk. Both winged ones set their own
+    // speed and never look at PrimaryHardMode — a paratroopa is no quicker in
+    // quest 2, and one that gets de-winged keeps the speed it was born with.
+    this.speed = opts.speed == null ? walkSpeed(this.winged ? null : world) : opts.speed;
     // The original has THREE winged koopas and gives each its own movement sub
     // (EnemyMovementSubs, smbdis.asm:9086-9106):
     //
