@@ -630,6 +630,9 @@ export class World {
 
     this.score = 0;
     this.coins = 0;
+    // Coins collected since the last 1-up. Identical to `coins` in every mode
+    // that never spends them; see addCoin.
+    this.coinsToLife = 0;
     // Set by main.js from the title menu. Gates the toolbelt blocks, the coin
     // wallet and the three-digit HUD counter.
     this.harryMode = false;
@@ -763,6 +766,7 @@ export class World {
   reset() {
     this.score = 0;
     this.coins = 0;
+    this.coinsToLife = 0;
     this.lives = 3;
     this.checkpointReached = false;
     this.state = 'idle';
@@ -1681,11 +1685,21 @@ export class World {
 
   addCoin(n = 1) {
     this.coins += n;
-    // Harry mode spends coins on brick bombs, so they are a wallet: no reset at
-    // 100 and no 1-up. Every other mode keeps SMB's rule exactly.
-    if (this.harryMode === true) return;
-    while (this.coins >= 100) {
-      this.coins -= 100;
+    // The 1-up is owed for coins COLLECTED, which stops being the same thing as
+    // the balance the moment anything can spend them. Harry buys brick bombs out
+    // of the same counter, so reading the balance would have paid him a life for
+    // every single coin picked up while it happened to sit above 100 — and Harry
+    // mode dodged that by paying him nothing at all, which is the bug: a hundred
+    // coins is a hundred coins, whoever is holding them.
+    //
+    // So the tally is its own number and only collecting moves it. What differs
+    // between the modes is the DISPLAY: SMB rolls its coin counter over at 100,
+    // which is the whole reason that counter is two digits, while Harry's is a
+    // wallet and has to keep the balance he has not spent.
+    this.coinsToLife += n;
+    while (this.coinsToLife >= 100) {
+      this.coinsToLife -= 100;
+      if (this.harryMode !== true) this.coins -= 100;
       this.addLife(1);
     }
   }

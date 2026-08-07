@@ -280,6 +280,9 @@ class Game {
     return {
       score: 0,
       coins: 0,
+      // Coins toward the next 1-up. Kept beside the balance because in Harry
+      // mode the two diverge the moment he spends anything (World.addCoin).
+      coinsToLife: 0,
       lives: 3,
       levelId: start,
       checkpoint: false,
@@ -292,6 +295,7 @@ class Game {
     if (!s) return;
     s.score = this.world.score;
     s.coins = this.world.coins;
+    s.coinsToLife = this.world.coinsToLife;
     s.lives = this.world.lives;
     s.levelId = this.levelId;
     s.checkpoint = !!this.world.checkpointReached;
@@ -339,6 +343,7 @@ class Game {
     const s = this.slots[this.turn];
     this.world.score = s.score;
     this.world.coins = s.coins;
+    this.world.coinsToLife = s.coinsToLife | 0;
     this.world.lives = s.lives;
     await this.loadLevel(s.levelId, null, {
       resetPlayer: true,
@@ -482,6 +487,7 @@ class Game {
     this.world.lives = 3;
     this.world.score = 0;
     this.world.coins = 0;
+    this.world.coinsToLife = 0;
     this.world.checkpointReached = false;
     await this.loadLevel(firstLevel ? firstLevel() : ORDER[0], null, { resetPlayer: true });
     this.world.state = 'idle';
