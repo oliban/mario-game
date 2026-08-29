@@ -31,6 +31,25 @@
 //   the square by t.7   -> a brick of coins
 //   the flagged house   -> the flagpole and castle, where he drew them
 //
+// A FOURTH ADDITION, after Fredrik played it: a power-up block over TOWER 1.
+// The first hammer bro is on tower 2 and the painting's own ? block is not until
+// tower 3, so you met him small with nowhere to retreat to — a tower roof is six
+// columns wide and his hammers arc down onto all of it.
+//
+// It is over the tower and not over the opening shore, which is where it went
+// first. A mushroom walks right the moment it leaves the block, and the shore is
+// six columns wide: from a block at column 4 it was in the lava in about forty
+// frames, before the player had finished landing. Tower 1's roof is seven
+// columns and its far edge is a jump the player is making anyway, so the
+// mushroom has somewhere to be.
+//
+// It is on row 3 and not row 2 for a second measured reason: a power-up needs a
+// clear tile ABOVE its block to emerge into, and row 2 is directly under this
+// level's roof. At row 2 the mushroom hatched into the ceiling and stayed there,
+// stuck at row 1 for as long as the probe watched — visible, unreachable, and
+// the level's only power-up. Measured: at row 3 it emerges, lands, and is
+// collected.
+//
 // THREE THINGS HERE ARE NOT IN THE PAINTING and were agreed as additions:
 //
 // 1. STEPPING STONES. The gaps he drew between towers are 8 to 11 columns and
@@ -65,7 +84,7 @@ const TILES = [
   '##############################################################################################################################',
   '##############################################################################################################################',
   '....................................................................................................................^.........',
-  '..................................................M.................................................................|.........',
+  '..................M...............................M.................................................................|.........',
   '..................................................................oooo..............................................|.........',
   '..................................................................BBBB..............................................|.........',
   '...............BBBBBBB............................................BBBB......................=...BBBBB...............|.........',
