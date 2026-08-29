@@ -675,11 +675,23 @@ const GROUND_STICK = 0.5;
 // to 4px below a floor surface still finds that floor underfoot; landing then masks
 // the low nybble off the vertical position and pops Mario back onto it
 // (SMBDIS.ASM DoFootCheck/LandPlyr: `cpy #$05` / `and #$f0`).
-const LEDGE_SNAP = 5;
-
 // SMB samples the sides 8px above the feet (BlockBuffer_Y_Adder $08/$18 against the
 // $20 foot adder), so the bottom of the body never catches on a ledge face.
 const SIDE_FOOT_SKIP = 8;
+
+// How deep a sink _snapUpToLedge lifts a body out of. This is NOT a free number:
+// it must be at least SIDE_FOOT_SKIP, and the two are tied here so that it
+// cannot drift apart again.
+//
+// resolveX ignores the bottom SIDE_FOOT_SKIP pixels of the body, which is what
+// stops a run catching on ledge faces. So a body sunk less than that into a
+// solid tile is horizontally INTANGIBLE — the tile it is standing inside is not
+// there as far as sideways movement is concerned, and the player walks straight
+// out through it. This used to be 5, leaving sinks of 5 to 8 pixels in a band
+// that was too deep for the snap to rescue and too shallow for the wall scan to
+// see. Measured: running at a one-tile block and jumping seven columns out
+// landed him 6.63px inside it, grounded, and he walked through the block.
+const LEDGE_SNAP = SIDE_FOOT_SKIP;
 
 // ImpedePlayerMove moves Mario ONE PIXEL away from a wall he is pressed into
 // every frame the side collision lasts (smbdis.asm:12318-12351), which is what
