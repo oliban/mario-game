@@ -155,4 +155,7 @@ export default {
   areas: { '2-1b': BONUS, '2-1c': SKY },
   flagpole: { x: 200 },
   castle: { x: 204 },
+  // The castle the player came out of, standing where they spawn: the
+  // original's own object at column 0, sized to match the level before.
+  startCastle: { x: 2, tall: true },
 };

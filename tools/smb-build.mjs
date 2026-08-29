@@ -405,7 +405,26 @@ export function buildArea(levelId, opts = {}) {
         break;
       case 'Jumpspring': meta.springs.push({ x, y }); break;
       case 'Flagpole': meta.flagpole = { x }; break;
-      case 'CastleObject': if (x > 8) meta.castle = { x }; break;
+      // CastleObject's parameter is its STARTING ROW, not a size: the
+      // disassembly saves the low nybble as the row (asm:3713-3714) and then
+      // tests it against $00 for "tall castle" (asm:3743). Row 0 renders the
+      // eleven-row keep, row 6 the five-row castle.
+      //
+      // A castle at column 0 is not the level's exit. It is the castle the
+      // player just came OUT of, and the data proves it: its size always
+      // matches the ENDING castle of the level before — every x-1 gets the tall
+      // one because x-4 finishes on it, everything else gets the short one, and
+      // 1-1 is the only ground area in the game with no castle at column 0
+      // because nothing precedes it. `if (x > 8)` threw all twenty on the floor,
+      // which is why every level in the game opened on bare ground.
+      //
+      // The +2 is the door. CastleObject renders five columns starting at its
+      // own, so its arch is two to the right, and castle.x means the arch.
+      case 'CastleObject': {
+        if (x > 8) meta.castle = { x, tall: n === 0 };
+        else meta.startCastle = { x: x + 2, tall: n === 0 };
+        break;
+      }
       // ChainObj/AxeObj/CastleBridgeObj all ignore the row nybble and take
       // their row from C_ObjectRow: axe 6, chain 7, bridge 8. Of their three
       // metatiles only the bridge's ($89) clears its bar, so only it is solid.
@@ -979,6 +998,21 @@ ${warps.join('\n')}
   ],
 };
 `;
+}
+
+// The `startCastle:` field for a level module, or nothing at all when the area
+// has no castle at column 0 (1-1, and every underground, water and castle area).
+// A helper rather than nineteen copies of the same conditional in eight
+// generators — the whole point of the field is that its value comes from the
+// original's data and never from a rule someone typed twice.
+export function startCastleLine(meta) {
+  const sc = meta && meta.startCastle;
+  if (!sc) return '';
+  return (
+    '\n  // The castle the player came out of, standing where they spawn: the' +
+    "\n  // original's own object at column 0, sized to match the level before." +
+    `\n  startCastle: { x: ${sc.x}, tall: ${sc.tall === true} },`
+  );
 }
 
 // --- level module emitter -------------------------------------------------

@@ -11,6 +11,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodePointers } from './smb-decode.mjs';
 import {
+  startCastleLine,
   emitLevel,
   bonusRoomSource,
   skyAreaSource,
@@ -157,7 +158,7 @@ ${entsBlock(L.entities)}
   ],
   areas: { '8-1b': BONUS },
   flagpole: { x: ${L.meta.flagpole.x} },
-  castle: { x: ${L.meta.castle.x} },
+  castle: { x: ${L.meta.castle.x} },${startCastleLine(L.meta)}
 };
 `;
   writeFileSync(
@@ -197,7 +198,7 @@ ${entsBlock(L.entities)}
   ],
   areas: { '8-2b': BONUS },
   flagpole: { x: ${L.meta.flagpole.x} },
-  castle: { x: ${L.meta.castle.x} },
+  castle: { x: ${L.meta.castle.x} },${startCastleLine(L.meta)}
 };
 `;
   writeFileSync(
@@ -230,7 +231,7 @@ ${contentsBlock(L.contents)}
 ${entsBlock(L.entities)}
   ],
   flagpole: { x: ${L.meta.flagpole.x} },
-  castle: { x: ${L.meta.castle.x} },
+  castle: { x: ${L.meta.castle.x} },${startCastleLine(L.meta)}
 };
 `;
   writeFileSync(

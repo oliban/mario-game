@@ -10,6 +10,7 @@ import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  startCastleLine,
   emitLevel,
   bonusRoomSource,
   skyAreaSource,
@@ -126,7 +127,7 @@ ${contentsBlock(L.contents)}
 ${entsBlock(L.entities)}
   ],
   flagpole: { x: ${L.meta.flagpole.x} },
-  castle: { x: ${L.meta.castle.x} },
+  castle: { x: ${L.meta.castle.x} },${startCastleLine(L.meta)}
 };
 `;
   writeFileSync(
@@ -190,7 +191,7 @@ ${entsBlock(L.entities)}
   ],
   areas: { '6-2b': BONUS, '6-2d': BONUS2, '6-2w': WATERROOM, '6-2c': SKY },
   flagpole: { x: ${L.meta.flagpole.x} },
-  castle: { x: ${L.meta.castle.x} },
+  castle: { x: ${L.meta.castle.x} },${startCastleLine(L.meta)}
 };
 `;
   writeFileSync(
@@ -227,7 +228,7 @@ ${contentsBlock(L.contents)}
 ${entsBlock(L.entities)}
   ],
   flagpole: { x: ${L.meta.flagpole.x} },
-  castle: { x: ${L.meta.castle.x} },
+  castle: { x: ${L.meta.castle.x} },${startCastleLine(L.meta)}
 };
 `;
   writeFileSync(

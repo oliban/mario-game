@@ -22,7 +22,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitLevel, bonusRoomSource, skyAreaSource, bonusReturn, skyReturn } from './smb-build.mjs';
+import { startCastleLine, emitLevel, bonusRoomSource, skyAreaSource, bonusReturn, skyReturn } from './smb-build.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src', 'data', 'levels');
@@ -140,7 +140,7 @@ ${entsBlock(L.entities)}
   ],
   areas: { '3-1b': BONUS, '3-1c': SKY },
   flagpole: { x: ${L.meta.flagpole.x} },
-  castle: { x: ${L.meta.castle.x} },
+  castle: { x: ${L.meta.castle.x} },${startCastleLine(L.meta)}
 };
 `;
   writeFileSync(
@@ -190,7 +190,7 @@ ${contentsBlock(L.contents)}
 ${entsBlock(L.entities)}
   ],
   flagpole: { x: ${L.meta.flagpole.x} },
-  castle: { x: ${L.meta.castle.x} },
+  castle: { x: ${L.meta.castle.x} },${startCastleLine(L.meta)}
 };
 `;
   writeFileSync(
@@ -232,7 +232,7 @@ ${contentsBlock(L.contents)}
 ${entsBlock(L.entities)}
   ],
   flagpole: { x: ${L.meta.flagpole.x} },
-  castle: { x: ${L.meta.castle.x} },
+  castle: { x: ${L.meta.castle.x} },${startCastleLine(L.meta)}
 };
 `;
   writeFileSync(

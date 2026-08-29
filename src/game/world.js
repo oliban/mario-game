@@ -2720,15 +2720,27 @@ export class World {
   // planted on the ground column beneath it and its doorway centred on castleX so
   // the walk-in lines up with the arch.
   _drawCastle(ctx, cam) {
-    if (this.castleX == null) return;
-    // x-3 ends with the tall castle; every other level gets the short one. A level
-    // may override with castle.tall.
-    const cs = (this.level && this.level.castle) || (this.rootLevel && this.rootLevel.castle) || null;
-    const wantTall = cs && cs.tall != null ? !!cs.tall : this.levelNum === 3;
+    if (this.castleX != null) {
+      // x-3 ends with the tall castle; every other level gets the short one. A
+      // level may override with castle.tall.
+      const cs = (this.level && this.level.castle) || (this.rootLevel && this.rootLevel.castle) || null;
+      const wantTall = cs && cs.tall != null ? !!cs.tall : this.levelNum === 3;
+      this._castleArt(ctx, cam, this.castleX, wantTall);
+    }
+    // And the one BEHIND the player: the original opens every ground level bar
+    // 1-1 with the castle you just came out of, at column 0, in the size of the
+    // previous level's ending castle (see tools/smb-build.mjs). Only in the root
+    // area — a pipe room is not outdoors and must not inherit it.
+    const inRoot = !this.rootLevel || this.level === this.rootLevel;
+    const sc = inRoot && this.level ? this.level.startCastle : null;
+    if (sc && sc.x != null) this._castleArt(ctx, cam, sc.x * TILE, !!sc.tall);
+  }
+
+  _castleArt(ctx, cam, castleX, wantTall) {
     const art = (wantTall && this.art.castleTall) || this.art.castle;
     const s = artFrame(art, this.tick);
     if (!s) return;
-    const tx = Math.floor(this.castleX / TILE);
+    const tx = Math.floor(castleX / TILE);
     // Find the floor by walking UP from the bottom to the first gap. Scanning down
     // from the top instead lands on whatever solid tile comes first — a brick, a
     // platform, a leftover decorative block — and leaves the castle floating.
@@ -2740,7 +2752,7 @@ export class World {
         break;
       }
     }
-    const x = Math.floor(this.castleX + TILE / 2 - s.w / 2 - cam.x);
+    const x = Math.floor(castleX + TILE / 2 - s.w / 2 - cam.x);
     const y = Math.floor(groundY - s.h - cam.y);
     if (x + s.w < 0 || x > SCREEN_W) return;
     s.draw(ctx, x, y);
