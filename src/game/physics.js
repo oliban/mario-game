@@ -98,27 +98,40 @@ export const PHYS = deepFreeze({
 
   // ---- entities ------------------------------------------------------------
   enemyWalkSpeed: 0.5, // goomba, koopa
-  enemyGravity: 0.1875,
+  // MoveD_EnemyVertically (asm:7599-7607) loads $3d = 61 as the movement amount
+  // and ImposeGravity divides by 256: a walking enemy that steps off a ledge
+  // accelerates at 61/256, not 48/256. Terminal speed was already right, so only
+  // the first ~15 frames of a drop differed -- but that is where an enemy
+  // leaving a staircase decides which step it lands on.
+  enemyGravity: 61 / 256,
   enemyMaxFall: 3.0,
   shellSpeed: 3.0,
   stompBounce: -4.0, // jump button held during the stomp
   stompBounceWeak: -2.5, // jump button not held
-  fireballSpeed: 3.0,
-  fireballGravity: 0.28125,
-  fireballBounce: -2.5,
+  // FireballXSpdData (asm:6324) is $40/$c0, and MoveObjectHorizontally
+  // (asm:7541-7566) reads such a byte as whole pixels in the high nybble and
+  // 1/16ths in the low -- the same scale that already gives the bullet bill its
+  // $18 = 1.5. So $40 is 4.0 px/frame, not 3. FireballObjCore then imposes
+  // gravity with $50 (80/256) and a 3 px/frame cap, and FireballBGCollision
+  // (asm:12726-12744) bounces with $fd = -3.
+  fireballSpeed: 4.0,
+  fireballGravity: 80 / 256,
+  fireballBounce: -3.0,
   playerDeathRise: -4.5, // then normal gravity, collision disabled
 
   enemy: {
     walkSpeed: 0.5,
-    gravity: 0.1875,
+    gravity: 61 / 256,
     maxFall: 3.0,
     shellSpeed: 3.0,
   },
   fireball: {
-    speed: 3.0,
-    gravity: 0.28125,
-    bounce: -2.5,
-    maxFall: 4.5,
+    speed: 4.0,
+    gravity: 80 / 256,
+    bounce: -3.0,
+    // $02 = $03 in FireballObjCore's ImposeGravity call. Ours fell half again
+    // as fast as the original's, which shortened every hop.
+    maxFall: 3.0,
   },
 });
 

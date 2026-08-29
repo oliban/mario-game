@@ -596,6 +596,11 @@ function dedupeAudio(impl) {
 // Enemy ids BELOW Bloober ($07), which are exactly the ground walkers: green
 // koopa $00, buzzy $02, red koopa $03, hammer bro $05, goomba $06. These are
 // the only enemies the ROM will not let you stomp merely by being above them.
+// LakituAndSpinyHandler reloads FrenzyEnemyTimer with $80 and LakituReappearTimer
+// fires at $07 (asm:8280-8291): 7 x 128 frames after the last one died.
+const LAKITU_RETURN_FRAMES = 7 * 128;
+const LAKITU_RETURN_Y = 32;
+
 const GROUND_WALKER_IDS = new Set(['goomba', 'buzzy', 'hammerbro']);
 
 export class World {
@@ -801,6 +806,10 @@ export class World {
     // without any state to leak: warping 1-2 -> 4-1 leaves it off, warping into
     // 8-1 turns it on.
     this.hardMode = secondaryHardMode(levelObj.id, this.primaryHardMode);
+    // Per AREA, like the frenzy buffer it stands in for: leaving the level ends
+    // the debt. Without this, clearing 4-1 would seed a Lakitu into 4-2.
+    this.lakituWanted = false;
+    this._lakituGone = 0;
 
     this._buildTiles(lvl);
     this._buildDecor();
@@ -1754,10 +1763,46 @@ export class World {
 
     this.tick++;
     if (this.state === 'levelend') this._updateLevelEnd();
-    else this._updatePlaying();
+    else {
+      this._updatePlaying();
+      this._updateLakituReturn();
+    }
 
     this.cam.update();
     this._updatePopups();
+  }
+
+  // A defeated Lakitu comes BACK. In the original this falls out of the frenzy
+  // buffer: a live Lakitu re-stamps the Spiny id into it every frame
+  // (MoveLakitu's Fr12S branch, asm:9979-9981), and nothing clears the buffer
+  // when he is stomped — MoveLakitu takes the defeated branch straight to
+  // MoveD_EnemyVertically (asm:9968-9971) and never reaches the "leaving" path
+  // at asm:9974, while EraseEnemyObject does not touch the buffer at all. So
+  // LakituAndSpinyHandler (asm:8275-8306) keeps running on its $80-frame beat,
+  // finds no Lakitu in the five slots, and increments LakituReappearTimer. At
+  // $07 (asm:8288-8291) it writes a fresh one into a free slot and sends it in
+  // from the right edge of the screen.
+  //
+  // We had no such path: a stomp was permanent. 8-2 carries ONE Lakitu record,
+  // so a single stomp disarmed for the rest of the level an enemy the original
+  // never lets you be rid of.
+  _updateLakituReturn() {
+    if (!this.lakituWanted) return;
+    for (const e of this.entities) {
+      if (!e || e.removed) continue;
+      const t = e.type || (e.constructor && e.constructor.type);
+      if (t === 'lakitu' && !e.dead) {
+        this._lakituGone = 0;
+        return;
+      }
+    }
+    // 7 increments of a counter the handler touches once every 128 frames.
+    this._lakituGone = (this._lakituGone | 0) + 1;
+    if (this._lakituGone < LAKITU_RETURN_FRAMES) return;
+    this._lakituGone = 0;
+    // PutAtRightExtent with #$20: he enters at the right edge, 32px down.
+    const e = this.spawn('lakitu', this.cam.x + SCREEN_W, LAKITU_RETURN_Y);
+    if (e) e.facing = -1;
   }
 
   _updatePlaying() {

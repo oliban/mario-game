@@ -220,9 +220,19 @@ const P = {
   flagWalk: pnum(1.0, 'flagWalkSpeed', 'levelEndWalkSpeed', 'walkOffSpeed'),
 
   pipeFrames: pnum(30, 'pipeEnterFrames', 'pipeFrames', 'warpFrames'),
-  growFrames: pnum(30, 'growFrames', 'powerUpFrames', 'changeSizeFrames'),
-  invulnFrames: pnum(90, 'invulnerableFrames', 'invulnFrames', 'hurtInvuln', 'damageInvuln'),
-  starFrames: pnum(660, 'starFrames', 'starDuration', 'invincibleFrames'),
+  // The ROM's clocks here are NOT one unit per frame, which is why all three of
+  // these were short. TimerControl runs the freeze: PlayerChangeSize
+  // (asm:5732-5740) holds from $ff to $c4 for a mushroom and PlayerInjuryBlink
+  // (asm:5744-5751) from $ff to $c8 for a hit -- 59 and 55 frames, not 30.
+  growFrames: pnum(57, 'growFrames', 'powerUpFrames', 'changeSizeFrames'),
+  // InjuryTimer ($079e) and StarInvincibleTimer ($079f) both sit in the INTERVAL
+  // band of the timer block, so DecTimers (asm:786-796) only touches them on the
+  // frame IntervalTimerControl underflows -- once every 21 frames. ForceInjury
+  // (asm:11402-11419) sets InjuryTimer to $08, so protection after a hit is
+  // 8 x 21 = 168 frames ON TOP of the 55-frame freeze, not 90 total. The star is
+  // $23 = 35 units (asm:11248-11249), so 35 x 21 = 735.
+  invulnFrames: pnum(168, 'invulnerableFrames', 'invulnFrames', 'hurtInvuln', 'damageInvuln'),
+  starFrames: pnum(35 * 21, 'starFrames', 'starDuration', 'invincibleFrames'),
 
   jumpBuffer: pnum(4, 'jumpBufferFrames', 'jumpBuffer'),
   coyote: pnum(4, 'coyoteFrames', 'coyoteTime'),

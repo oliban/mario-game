@@ -1,4 +1,5 @@
 import { Entity, registerEntity } from '../entity.js';
+import rng from '../../core/rng.js';
 import { makeSprite, Anim } from '../../core/gfx.js';
 import * as EB from '../../data/sprites/enemies-b.js';
 import { pickAnim, frozen, hurtPlayer, fx, sfx } from './index.js';
@@ -71,11 +72,22 @@ export default class Podoboo extends Entity {
     this.gravity = 0;
 
     this.homeY = y;
-    this.power = opts.power == null ? 6.4 : opts.power;
-    this.leapG = opts.gravity == null ? 0.25 : opts.gravity;
-    this.period = opts.period == null ? 128 : opts.period;
+    // MovePodoboo (asm:9187-9199) relaunches with Enemy_Y_Speed = $f9 = -7, and
+    // MoveJ_EnemyVertically (asm:7642-7648) passes $1c to ImposeGravity, so the
+    // acceleration is 28/256. That gives a rise of 7^2 / (2 * 28/256) = 224 px,
+    // fourteen tiles -- it very nearly reaches the top of the screen. Ours threw
+    // it 79 px, five tiles, which is a hazard you can walk past rather than one
+    // you have to wait out.
+    this.power = opts.power == null ? 7 : opts.power;
+    this.leapG = opts.gravity == null ? 28 / 256 : opts.gravity;
+    // And the interval is re-rolled on EVERY leap: `(LSFR & $0f) | $06` units of
+    // EnemyIntervalTimer, which is an interval timer at 21 frames a unit, so 126
+    // to 315 frames. A fixed period made the original's least predictable hazard
+    // into a metronome you could count.
+    this.period = opts.period == null ? null : opts.period;
     this.leaping = false;
     this.waitT = opts.phase | 0;
+    this.wait = this._rollWait();
     this.y = this.homeY + 24;
     // Nothing in the game can hurt it, so shells must not try.
     this.shellProof = true;
@@ -88,8 +100,7 @@ export default class Podoboo extends Entity {
     if (!this.leaping) {
       this.y = this.homeY + 24;
       this.waitT++;
-      const air = Math.ceil((2 * this.power) / this.leapG);
-      if (this.waitT >= Math.max(24, this.period - air)) this._launch();
+      if (this.waitT >= this.wait) this._launch();
       return;
     }
 
@@ -102,9 +113,20 @@ export default class Podoboo extends Entity {
       this.y = this.homeY + 24;
       this.leaping = false;
       this.waitT = 0;
+      this.wait = this._rollWait();
       this.vy = 0;
       this.flipY = false;
     }
+  }
+
+  // (LSFR & $0f) | $06 -> 6..15 units, 21 frames each. A level may still pin a
+  // fixed `period` if it needs a predictable one.
+  _rollWait() {
+    if (this.period != null) {
+      const air = Math.ceil((2 * this.power) / this.leapG);
+      return Math.max(24, this.period - air);
+    }
+    return (rng.int(0, 15) | 0x06) * 21;
   }
 
   _launch() {

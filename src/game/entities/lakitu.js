@@ -69,6 +69,11 @@ export default class Lakitu extends Entity {
     this.alwaysUpdate = true;
     this.gravity = 0;
 
+    // The frenzy buffer is what keeps the ROM's handler alive, and nothing
+    // clears it when this one dies -- so the AREA remembers it wants a Lakitu.
+    // See World._updateLakituReturn.
+    if (world) world.lakituWanted = true;
+
     this.hoverY = opts.hoverY == null ? 40 : opts.hoverY;
     // World x past which he abandons the chase (SMB hands Lakitu off at a
     // fixed point in the level). Null means he follows until outrun.
