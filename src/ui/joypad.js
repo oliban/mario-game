@@ -21,7 +21,20 @@ const MIN_PX = 3;
 // and stays modest. On a phone it is the only input, so it takes the width.
 const MAX_PX_DESKTOP = 3.5;
 const MAX_PX_PHONE = 18;
+// A WIDTH test cannot tell a tablet from a desktop, and an iPad is 810-1194 CSS
+// px wide, so it fell on the desktop side and got a pad 147px across — about a
+// third of the width of a thumb-driven control. Ask what the POINTER is instead:
+// `pointer: coarse` / `hover: none` is a finger, whatever the screen measures,
+// and it is the actual question being asked here. The width test stays as well,
+// for a narrow desktop window and for anything that reports no pointer at all.
+const TOUCH = '(pointer: coarse), (hover: none)';
 const PHONE = '(max-width: 760px)';
+// A tablet is a touch device with room to spare, and "as much room as there is"
+// turned out to be too much: at full size an iPad's pad is 756px across and the
+// thumbs are nowhere near the ends of it. Three quarters is Fredrik's number,
+// measured on the device, not a guess from a viewport emulator.
+const TABLET = '(pointer: coarse) and (min-width: 761px)';
+const TABLET_SCALE = 0.75;
 // Landscape phone: vertical room is scarce, so the pad sits BESIDE the TV.
 const BESIDE = '(max-height: 560px) and (orientation: landscape)';
 
@@ -47,12 +60,16 @@ if (root) {
     const vh = (el.clientHeight || window.innerHeight || 0) - padY;
 
     const beside = window.matchMedia(BESIDE).matches;
-    const phone = beside || window.matchMedia(PHONE).matches;
+    const phone =
+      beside || window.matchMedia(PHONE).matches || window.matchMedia(TOUCH).matches;
     const availW = beside ? vw - r.width - 20 : vw - (phone ? 20 : 24);
     const availH = beside ? vh - 6 : vh - r.height - (phone ? 30 : 12);
 
     const max = phone ? MAX_PX_PHONE : MAX_PX_DESKTOP;
-    const px = Math.max(MIN_PX, Math.min(max, availH / PAD_EM_H, availW / PAD_EM_W));
+    let px = Math.max(MIN_PX, Math.min(max, availH / PAD_EM_H, availW / PAD_EM_W));
+    if (!beside && window.matchMedia(TABLET).matches) {
+      px = Math.max(MIN_PX, px * TABLET_SCALE);
+    }
     if (Math.abs(px - lastPx) < 0.05) return;
     lastPx = px;
     root.style.fontSize = `${px.toFixed(2)}px`;

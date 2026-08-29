@@ -605,7 +605,10 @@
      it takes the width and the game screen takes what is left. The bezel is
      decoration and decoration must not cost playfield.
      ------------------------------------------------------------------ */
-  @media (max-width: 760px), (max-height: 560px) and (orientation: landscape) {
+  /* `pointer: coarse` is in every one of these because a WIDTH test cannot tell
+     a tablet from a desktop: an iPad is 810-1194 CSS px and was getting the
+     desktop layout, which reserves no room for the pad and leaves it a sliver. */
+  @media (max-width: 760px), (pointer: coarse), (max-height: 560px) and (orientation: landscape) {
     body {
       padding:
         env(safe-area-inset-top) env(safe-area-inset-right)
@@ -623,10 +626,20 @@
   }
   /* Portrait: the framebuffer takes the width it can while leaving room for the
      bezel, the gap and the pad (which is 0.452 of its own width tall). */
-  @media (max-width: 760px) and (orientation: portrait) {
+  @media (max-width: 760px) and (orientation: portrait), (pointer: coarse) and (orientation: portrait) {
     #screen, #overlay {
       width: min(calc(100vw - 40px), calc((100svh - 46vw - 80px) * 1.0667)) !important;
       height: auto !important;
+    }
+  }
+  /* Tablet landscape. Too tall to want the pad BESIDE the TV, but the TV will
+     take the entire height unless told not to and leave the pad a sliver — on
+     an iPad it came out 66px tall. So cap the picture and let the pad have the
+     rest; joypad.js fits itself to whatever is left. */
+  @media (pointer: coarse) and (orientation: landscape) and (min-height: 561px) {
+    #screen, #overlay {
+      height: min(58svh, calc((100vw - 40px) * 0.9375)) !important;
+      width: auto !important;
     }
   }
   /* Landscape: vertical room is the scarce thing, so the pad moves beside the
