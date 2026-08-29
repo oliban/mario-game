@@ -19,4 +19,4 @@ export const ORDER = [
 // Harry's levels, built from his paintings. They are a sequence of their own:
 // deliberately NOT in ORDER, so they never appear in the ordinary progression
 // or in the debug warp zone. You reach them through the second pipe in 1-1.
-export const HARRY = ['h-1'];
+export const HARRY = ['h-1', 'h-2'];

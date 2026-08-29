@@ -45,6 +45,7 @@ import L82 from './8-2.js';
 import L83 from './8-3.js';
 import L84 from './8-4.js';
 import H1 from './h-1.js';
+import H2 from './h-2.js';
 
 export const LEVELS = {
   '1-1': L11,
@@ -80,6 +81,7 @@ export const LEVELS = {
   '8-3': L83,
   '8-4': L84,
   'h-1': H1,
+  'h-2': H2,
 };
 
 export { ORDER, HARRY } from './roster.js';
