@@ -1869,7 +1869,28 @@ export class World {
     }
     if (ty < 2) return;
     const type = CHAOS_TYPES[rng.int(0, CHAOS_TYPES.length - 1)];
-    this.spawn(type, tx * TILE, (ty - 1) * TILE, { variant: 'red' });
+    const e = this.spawn(type, tx * TILE, (ty - 1) * TILE, { variant: 'red' });
+    if (!e) return;
+    // spawn() takes a pixel TOP-LEFT, and these are not all one tile tall -- a
+    // koopa is 24 -- so `(ty - 1) * TILE` buried the taller ones 8px into the
+    // floor, where they cannot move. Level records do not hit this because
+    // _spawnLevelEntities bottom-aligns them afterwards; this call did not.
+    // Stand it ON the surface instead of assuming its height.
+    e.y = ty * TILE - e.h;
+    // And having placed it, check the space it actually occupies is empty. A
+    // column can be clear at the row we probed and solid a row higher -- under
+    // an overhang, inside a pipe mouth, beneath a brick run -- and an enemy
+    // dropped into that is stuck for the rest of the level.
+    const top = Math.floor(e.y / TILE);
+    for (let y = top; y < ty; y++) {
+      for (let x = Math.floor(e.x / TILE); x <= Math.floor((e.x + e.w - 1) / TILE); x++) {
+        const r = this.recAt(x, y);
+        if (r && r.solid) {
+          e.remove();
+          return;
+        }
+      }
+    }
   }
 
   _updatePlaying() {
