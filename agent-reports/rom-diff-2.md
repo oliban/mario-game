@@ -1,6 +1,6 @@
 # ROM diff audit, second pass (rom-diff-2)
 
-**Audit in progress.** Findings are appended as soon as they are proved. Scope is
+**Pass complete. 12 proven findings.** Scope is
 what `rom-diff.md` did not reach: the three unproven suspicions it left, plus
 Bowser, blooper/cheep-cheep swimming, the vine, jumpsprings, and the block/coin
 scoring path.
@@ -560,3 +560,53 @@ literal index) and on both measurements. **Not verified:** whether the extra 8 p
 ever changes whether an enemy standing against a wall gets hit — I did not build
 that case. **Impact: low**; listing it because the suspicion was explicitly left
 open and now is not.
+
+---
+
+## Checked and found already correct — no finding
+
+These were in scope and are listed so nobody re-audits them.
+
+* **Multi-coin bricks.** `ChkBrick`/`StartBTmr` (asm:7249-7257) sets `BrickCoinTimer`
+  to `$0b`; that timer is `$079d`, offset `$1d` off `Timers`, inside the interval
+  band, so the window is 11 x 21 = **231 frames**. `blocks.js:47-48` uses exactly
+  `0x0b` and `INTERVAL_FRAMES` = 21, gated at `blocks.js:428-431`.
+  **Measured** on the 1-1 brick at column 94, struck every 11 frames: the last hit
+  that paid a coin was at **frame 231** (22 coins). Exact match. The comment at
+  `blocks.js:40-46` is also right that keeping the timer per-block rather than
+  global is unobservable in this level set.
+* **Lakitu's spiny throw period.** `LakituAndSpinyHandler` reloads
+  `FrenzyEnemyTimer` with `$80` (asm:8280-8281) — a frame timer at `$078f` — so one
+  spiny attempt every 128 frames. `lakitu.js:86` is `period` = 128. Measured: 3
+  spinies in 400 frames. Only the ceiling guard (Finding 11) is missing.
+* **Jumpsprings.** `springboard.js` is already derived line by line from
+  `ChkForLandJumpSpring` (asm:12248-12258) and `JumpspringHandler`
+  (asm:6628-6673): `$f9` = -7 and `$f4` = -12 launch speeds, `VerticalForce` =
+  `$70` meaning full gravity on the rise, four frames per animation step, and the
+  boost keyed to a *fresh* A press. The one deviation — the boost window running
+  from contact rather than from the second animation step — is documented at
+  `springboard.js:182-198` as a deliberate, user-approved change. The only thing I
+  found unaccounted for is cosmetic: `Jumpspring_Y_PosData` (asm:6625-6626) dips the
+  plate 8 px on the first step and 16 on the second, where `HEIGHTS`
+  (`springboard.js:64`) drops it the full 16 immediately. Four frames, 8 px, no
+  gameplay consequence — not worth a finding.
+* **Frenzy-spawned cheep-cheep horizontal speeds.** Already the ROM's 0.25/0.5
+  (see Finding 8); only the class defaults used by hand-placed records are wrong.
+
+## Not reached
+
+* **The stomp chain and stomp timer.** `entities/index.js:77-90` and
+  `player.js:328-341, 1744-1761` are already annotated against `EnemyStomped`
+  (asm:11439-11463), `HandleStompedShellE` (asm:11499-11513) and
+  `FloateyNumTileData` (asm:1261-1272), and the `stompchain` and `stomptimer`
+  agents were working this exact area in the same session. I stopped rather than
+  produce a conflicting second opinion. For whoever picks it up, the two ROM facts
+  that decide it are: the floatey index is `StompChainCounter + StompTimer`
+  (asm:11502-11505), and `StompTimer` is a **frame** timer at `$0791`, offset `$11`,
+  so it is back to zero one frame after each stomp — which is what makes the chain
+  run 1, 2, 3, ... rather than 1, 3, 5, ... and what gives an enemy contact within
+  one frame of a stomp the stomp outcome instead of an injury (asm:11388-11389).
+  `StompChainCounter` is cleared on landing (asm:12023).
+* **Group spawns.** Left to the `groupspawn` agent for the same reason.
+* **Bowser's `B_FaceP` chase branch** (described in Finding 4) — read, not measured.
+* Whether the ROM Bowser's y ever interacts with the bridge tiles (Finding 5).

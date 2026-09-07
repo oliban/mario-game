@@ -15,6 +15,7 @@
 //     the camera.
 
 import { SCREEN_W, SCREEN_H, TILE, LAYER } from '../core/constants.js';
+import rng from '../core/rng.js';
 import { Camera } from './camera.js';
 import { BlockSystem, tileKey } from './blocks.js';
 
@@ -598,6 +599,22 @@ function dedupeAudio(impl) {
 // the only enemies the ROM will not let you stomp merely by being above them.
 // LakituAndSpinyHandler reloads FrenzyEnemyTimer with $80 and LakituReappearTimer
 // fires at $07 (asm:8280-8291): 7 x 128 frames after the last one died.
+// One load in ten.
+const PIPE_CANNON_CHANCE = 0.1;
+
+function rollPipeCannon() {
+  try {
+    const q = typeof location !== 'undefined' && location.search;
+    if (q) {
+      const m = /[?&]cannon=([01])\b/.exec(q);
+      if (m) return m[1] === '1';
+    }
+  } catch (e) {
+    /* no location (headless import): fall through to the roll */
+  }
+  return rng.chance(PIPE_CANNON_CHANCE);
+}
+
 const LAKITU_RETURN_FRAMES = 7 * 128;
 const LAKITU_RETURN_Y = 32;
 
@@ -810,6 +827,32 @@ export class World {
     // the debt. Without this, clearing 4-1 would seed a Lakitu into 4-2.
     this.lakituWanted = false;
     this._lakituGone = 0;
+
+    // The cannon. Rolled fresh on every load, so dying and coming back gives you
+    // another go at it rather than locking the level into one shape. A warp only
+    // takes part if its own record opts in with `cannon: true`.
+    //
+    // ?cannon=1 / ?cannon=0 force it either way. That override is not decoration:
+    // the pipe this hangs off is the debug warp zone, the door a tester uses to
+    // reach any level in two seconds, and a one-in-ten chance of that door being
+    // a cannon instead would make testing a coin flip.
+    this.pipeCannon = rollPipeCannon();
+    this.cannonPipe = null;
+    this.cannonAngle = 0;
+    if (this.pipeCannon) {
+      const list = (levelObj && levelObj.warps) || [];
+      const hit = list.find((wp) => wp && wp.cannon && wp.from);
+      // The pipe body: two columns wide, from its lip down to the row above the
+      // ground it stands on.
+      if (hit) {
+        // Follow the PIPE down, not "down until something solid" -- pipe tiles
+        // are themselves solid, so that test stopped on the lip every time and
+        // left the shaft behind when the thing swung round.
+        let y1 = hit.from.y;
+        while (y1 + 1 < this.h && (this.recAt(hit.from.x, y1 + 1) || {}).pipe) y1++;
+        this.cannonPipe = { x0: hit.from.x, x1: hit.from.x + 1, y0: hit.from.y, y1 };
+      }
+    }
 
     this._buildTiles(lvl);
     this._buildDecor();
@@ -2856,6 +2899,12 @@ export class World {
         const code = this.map[row + tx];
         const rec = this.recByCode[code];
         if (!rec) continue;
+        // The cannon pipe is drawn separately once it has begun to turn, under a
+        // rotation this axis-aligned loop cannot express.
+        const cp = this.cannonPipe;
+        if (cp && this.cannonAngle > 0 && tx >= cp.x0 && tx <= cp.x1 && ty >= cp.y0 && ty <= cp.y1) {
+          continue;
+        }
         // A tile that does not fill its cell with something opaque gets the sea
         // painted behind it first, on the same beat and from the same world x as
         // the body tiles either side of it. Solid and liquid tiles cover their own
@@ -2897,7 +2946,41 @@ export class World {
         );
       }
     }
+    this._drawCannonPipe(ctx, cam);
     this._drawFlag(ctx, cam);
+  }
+
+  // The pipe, turned. It is the SAME pipe art -- there is no cannon sprite and
+  // there should not be one: the whole joke is that it looks like an ordinary
+  // warp pipe right up until you press down on it, and then it swings round and
+  // fires you the length of the level.
+  //
+  // It pivots on the centre of its own base, where the pipe meets the ground, so
+  // it turns like something bolted down rather than sliding sideways.
+  _drawCannonPipe(ctx, cam) {
+    const cp = this.cannonPipe;
+    if (!cp || !(this.cannonAngle > 0)) return;
+    const pivotX = ((cp.x0 + cp.x1 + 1) / 2) * TILE - cam.x;
+    const pivotY = (cp.y1 + 1) * TILE - cam.y;
+    ctx.save();
+    ctx.translate(pivotX, pivotY);
+    ctx.rotate((this.cannonAngle * Math.PI) / 180);
+    for (let ty = cp.y0; ty <= cp.y1; ty++) {
+      for (let tx = cp.x0; tx <= cp.x1; tx++) {
+        const rec = this.recAt(tx, ty);
+        if (!rec || rec.name === 'air') continue;
+        const s = rec.variants
+          ? rec.variants[(tx * rec.va + ty * rec.vb + (rec.vt ? this.tick >> rec.vt : 0)) & rec.vmask]
+          : this.tileSprite(rec, this.tick);
+        if (!s) continue;
+        s.draw(
+          ctx,
+          Math.round((tx - (cp.x0 + cp.x1 + 1) / 2) * TILE),
+          Math.round((ty - cp.y1 - 1) * TILE + (TILE - s.h))
+        );
+      }
+    }
+    ctx.restore();
   }
 
   // The flag hangs on the left of the pole, its mast column on the pole centre.

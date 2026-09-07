@@ -277,8 +277,11 @@ export default {
   ],
   warps: [
     { from: { x: 57, y: 9 }, dir: 'down', to: { area: '1-1b', x: 2.5, y: 3, exit: 'down' } },
-    // The first pipe in the game is the tester's door into every other level.
-    { from: { x: 28, y: 11 }, dir: 'down', to: { area: '1-1w', x: 2.5, y: 3, exit: 'down' } },
+    // The first pipe in the game is the tester's door into every other level —
+    // except one load in ten, when `cannon` lets the world roll it into a cannon
+    // instead and it fires you at the flagpole. See World.loadLevel and
+    // Player.launchCannon. It still LOOKS like an ordinary pipe; that is the joke.
+    { from: { x: 28, y: 11 }, dir: 'down', cannon: true, to: { area: '1-1w', x: 2.5, y: 3, exit: 'down' } },
     // The second pipe is the door into Harry's levels.
     { from: { x: 38, y: 10 }, dir: 'down', to: { area: '1-1h', x: 2.5, y: 3, exit: 'down' } },
   ],

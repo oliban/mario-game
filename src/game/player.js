@@ -699,6 +699,19 @@ const LEDGE_SNAP = SIDE_FOOT_SKIP;
 // the ROM routine is, and resolveX is shared with every enemy.
 const SIDE_EJECT = 1;
 
+// The flight. Long enough to read as a journey across the whole level rather
+// than a hop, short enough that nobody puts the controller down.
+const CANNON_FRAMES = 170;
+// The swing. He climbs in, the pipe turns to 45 degrees, and only then does it
+// fire -- the turn is the moment you realise what you have pressed down on.
+const CANNON_SPIN_FRAMES = 26;
+const CANNON_ANGLE = 45;
+// Above the HIGHER of the two ends. The flagpole top is already near the top of
+// the screen and the camera does not follow vertically, so a bigger number just
+// posts him off-screen for half the flight.
+const CANNON_APEX_RISE = 40;
+const CANNON_SHOUT_EVERY = 45;
+
 // ---------------------------------------------------------------------------
 
 export default class Player extends EntityBase {
@@ -972,6 +985,9 @@ export default class Player extends EntityBase {
       case 'pipe':
         this._updatePipe();
         break;
+      case 'cannon':
+        this._updateCannon();
+        break;
       case 'pipeexit':
         this._updatePipeExit();
         break;
@@ -997,6 +1013,7 @@ export default class Player extends EntityBase {
     this._clip = null;
     this._pipe = null;
     this._flag = null;
+    this._cannon = null;
     this._walkOff = null;
     this._grow = null;
   }
@@ -2098,6 +2115,7 @@ export default class Player extends EntityBase {
     if (typeof this.world.warpAt === 'function' && this.grounded && this._down(BTN.DOWN)) {
       const w = this.world.warpAt(cTx, feetTy, 'down');
       if (w) {
+        if (w.cannon && this.world.pipeCannon && this.launchCannon()) return true;
         this.enterPipe(w, 'down');
         return true;
       }
@@ -2135,6 +2153,119 @@ export default class Player extends EntityBase {
       if (dir === 'up') continue;
     }
     return false;
+  }
+
+  // THE CANNON. One load of 1-1 in ten, the first pipe is not a pipe. It looks
+  // exactly like one -- no rotated art, nothing to see -- and the only tell is
+  // what happens when you press down on it: instead of the descent it fires you
+  // the length of the level and drops you on the very top of the flagpole.
+  //
+  // The arc is SOLVED, not simulated. "Landing perfectly at the top" is the
+  // whole joke, and a real ballistic launch would land wherever the numbers said
+  // -- a pixel of drift over 170 tiles and he clips the pole or sails past it.
+  // So the flight time is fixed and the launch velocity is derived backwards
+  // from where he has to end up.
+  launchCannon() {
+    if (this.state === 'cannon') return;
+    // world.flag is resolved at level load and carries the pole's real top, so
+    // the shot aims at the actual geometry rather than at the level record's
+    // nominal column.
+    const flag = this.world && this.world.flag;
+    if (!flag) return false;
+    const target = { x: flag.x + 8 - this.w + 2, y: flag.top };
+    this.state = 'cannon';
+    this.stateTimer = 0;
+    this.controlsLocked = true;
+    this.grounded = false;
+    this.ducking = false;
+    this._unduck(true);
+    this.facing = 1;
+    this._clip = null;
+
+    // Down the pipe first, exactly as if it were a warp, so the reveal is the
+    // pipe turning with him already inside it.
+    this.hidden = true;
+    this.x = (this.world.cannonPipe ? this.world.cannonPipe.x0 : Math.floor(this.x / TILE)) * TILE + TILE - this.w / 2;
+
+    const sx = this.x;
+    const sy = this.y;
+    const T = CANNON_FRAMES;
+    // Apex is placed above BOTH ends so the shot reads as a shot rather than a
+    // long flat throw, then gravity and the launch speed follow from it.
+    //
+    // Solving y(t) = sy + v0.t + g.t^2/2 for THREE conditions at once -- starts
+    // at sy, ends at target.y on frame T, and peaks at `apex` -- gives
+    //   g  = ((2A)^0.5 + (2A + 2D)^0.5)^2 / T^2
+    //   v0 = -(2gA)^0.5
+    // with A the rise above the start and D the net drop. Getting this wrong is
+    // not subtle: the first version sagged seven rows below the pipe before it
+    // climbed, which is a shot that starts by burying him.
+    const apex = Math.min(sy, target.y) - CANNON_APEX_RISE;
+    const A = sy - apex;
+    const D = target.y - sy;
+    const u = (Math.sqrt(2 * A) + Math.sqrt(Math.max(0, 2 * A + 2 * D))) / T;
+    const g = u * u;
+    const v0 = -Math.sqrt(2 * g * A);
+    this._cannon = {
+      spin: 0,
+      t: 0,
+      T,
+      g,
+      vx: (target.x - sx) / T,
+      vy: v0,
+      target,
+    };
+    this.vx = this._cannon.vx;
+    this.vy = v0;
+    sfx(this.world, 'pipe', 'warp', 'powerdown');
+    return true;
+  }
+
+  _updateCannon() {
+    const c = this._cannon;
+    if (!c) return this._toNormal();
+
+    // Phase one: the pipe swings to 45 degrees with him out of sight inside it.
+    if (c.spin < CANNON_SPIN_FRAMES) {
+      c.spin++;
+      this.world.cannonAngle = CANNON_ANGLE * (c.spin / CANNON_SPIN_FRAMES);
+      if (c.spin === CANNON_SPIN_FRAMES) {
+        this.hidden = false;
+        sfx(this.world, 'cannon', 'firework', 'bump');
+        callAny(this.world, ['popup', '_popup'], 'YAHOOOO!', this.x, this.y - 12);
+      }
+      return;
+    }
+
+    c.t++;
+    // No collision at all for the length of the flight: he is fired OVER the
+    // level, and every block, brick and enemy between here and the pole would
+    // otherwise stop the shot dead.
+    this.x += c.vx;
+    c.vy += c.g;
+    this.y += c.vy;
+    this.vx = c.vx;
+    this.vy = c.vy;
+
+    if (c.t % CANNON_SHOUT_EVERY === 0 && c.t < c.T - 30) {
+      callAny(this.world, ['popup', '_popup'], 'YAHOOOO!', this.x, this.y - 12);
+    }
+
+    if (c.t < c.T) return;
+
+    // Put him exactly where the arc was solved for, so a frame of float error
+    // cannot cost the top band, then hand over to the ordinary flagpole grab --
+    // which reads his height to decide the score and therefore pays 5000.
+    this.x = c.target.x;
+    this.y = c.target.y;
+    this.vx = 0;
+    this.vy = 0;
+    this._cannon = null;
+    this.hidden = false;
+    this._cannon = null;
+    const fp = this.world.level && this.world.level.flagpole;
+    if (fp) this.startFlagpole(fp);
+    else this._toNormal();
   }
 
   enterPipe(wdef, dir) {
