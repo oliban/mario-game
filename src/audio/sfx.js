@@ -54,6 +54,48 @@ function run(E, t, opts) {
 }
 
 const EFFECTS = {
+  // The cannon pipe turning. Not a tone -- a ratchet: eight short, dry noise
+  // clicks stepping DOWN in pitch, so the mechanism sounds like it is under load
+  // and getting harder to crank as the pipe comes round. A little wooden groan
+  // rides underneath and slides down with them.
+  crank(E, t, tag) {
+    const CLICKS = 12;
+    // 12 clicks x 0.15s = 1.8s, which is CANNON_SPIN_FRAMES (108) at 60Hz. The
+    // ratchet has to last exactly as long as the pipe takes to come round or it
+    // stops turning to silence, so when the swing is retuned this gets more
+    // CLICKS rather than a wider GAP -- the click RATE is the mechanism's speed
+    // and should not change with the length of the turn.
+    const GAP = 0.15;
+    for (let i = 0; i < CLICKS; i++) {
+      const k = i / (CLICKS - 1);
+      E.noise({
+        time: t + i * GAP,
+        dur: 0.035,
+        clock: 5400 - 2600 * k,
+        clockTo: 1500 - 700 * k,
+        vol: 0.2,
+        attack: 0.001,
+        decay: 0.03,
+        sustain: 0.1,
+        release: 0.015,
+        filter: { type: 'bandpass', freq: 2600 - 1200 * k, freqTo: 900, time: 0.04 },
+        tag,
+      });
+    }
+    E.triangle({
+      time: t,
+      dur: CLICKS * GAP,
+      freq: 128,
+      vol: 0.1,
+      attack: 0.02,
+      decay: 0.2,
+      sustain: 0.45,
+      release: 0.12,
+      sweep: { to: 74, time: CLICKS * GAP, mode: 'step', steps: CLICKS },
+      tag,
+    });
+  },
+
   'jump-small'(E, t, tag) {
     E.pulse({
       time: t,

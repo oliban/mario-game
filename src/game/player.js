@@ -701,10 +701,10 @@ const SIDE_EJECT = 1;
 
 // The flight. Long enough to read as a journey across the whole level rather
 // than a hop, short enough that nobody puts the controller down.
-const CANNON_FRAMES = 170;
+const CANNON_FRAMES = 205;
 // The swing. He climbs in, the pipe turns to 45 degrees, and only then does it
 // fire -- the turn is the moment you realise what you have pressed down on.
-const CANNON_SPIN_FRAMES = 26;
+const CANNON_SPIN_FRAMES = 108;
 const CANNON_ANGLE = 45;
 // Above the HIGHER of the two ends. The flagpole top is already near the top of
 // the screen and the camera does not follow vertically, so a bigger number just
@@ -2218,6 +2218,7 @@ export default class Player extends EntityBase {
     this.vx = this._cannon.vx;
     this.vy = v0;
     sfx(this.world, 'pipe', 'warp', 'powerdown');
+    sfx(this.world, 'crank', 'bump');
     return true;
   }
 

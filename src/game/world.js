@@ -599,21 +599,16 @@ function dedupeAudio(impl) {
 // the only enemies the ROM will not let you stomp merely by being above them.
 // LakituAndSpinyHandler reloads FrenzyEnemyTimer with $80 and LakituReappearTimer
 // fires at $07 (asm:8280-8291): 7 x 128 frames after the last one died.
-// One load in ten.
+// One load in ten, unless CANNON MODE is on, in which case every one.
 const PIPE_CANNON_CHANCE = 0.1;
 
-function rollPipeCannon() {
-  try {
-    const q = typeof location !== 'undefined' && location.search;
-    if (q) {
-      const m = /[?&]cannon=([01])\b/.exec(q);
-      if (m) return m[1] === '1';
-    }
-  } catch (e) {
-    /* no location (headless import): fall through to the roll */
-  }
-  return rng.chance(PIPE_CANNON_CHANCE);
-}
+// Cannon mode also seeds enemies into levels that never had them. This wants to
+// be a surprise, not a difficulty setting, and the first value was firmly the
+// latter -- so it is now about one arrival every fifteen seconds of play rather
+// than every four. Only ever walkers, arriving just off the right of the screen
+// and standing on whatever the first solid thing under them is.
+const CHAOS_CHANCE = 0.0011;
+const CHAOS_TYPES = ['goomba', 'koopa', 'buzzy', 'spiny'];
 
 const LAKITU_RETURN_FRAMES = 7 * 128;
 const LAKITU_RETURN_Y = 32;
@@ -836,23 +831,11 @@ export class World {
     // the pipe this hangs off is the debug warp zone, the door a tester uses to
     // reach any level in two seconds, and a one-in-ten chance of that door being
     // a cannon instead would make testing a coin flip.
-    this.pipeCannon = rollPipeCannon();
-    this.cannonPipe = null;
+    // cannonForced is deliberately NOT reset here: it is a session toggle that
+    // has to survive every level load, which is the whole point of it.
+    this.pipeCannon = this.cannonForced === true || rng.chance(PIPE_CANNON_CHANCE);
     this.cannonAngle = 0;
-    if (this.pipeCannon) {
-      const list = (levelObj && levelObj.warps) || [];
-      const hit = list.find((wp) => wp && wp.cannon && wp.from);
-      // The pipe body: two columns wide, from its lip down to the row above the
-      // ground it stands on.
-      if (hit) {
-        // Follow the PIPE down, not "down until something solid" -- pipe tiles
-        // are themselves solid, so that test stopped on the lip every time and
-        // left the shaft behind when the thing swung round.
-        let y1 = hit.from.y;
-        while (y1 + 1 < this.h && (this.recAt(hit.from.x, y1 + 1) || {}).pipe) y1++;
-        this.cannonPipe = { x0: hit.from.x, x1: hit.from.x + 1, y0: hit.from.y, y1 };
-      }
-    }
+    this.resolveCannonPipe();
 
     this._buildTiles(lvl);
     this._buildDecor();
@@ -1809,6 +1792,7 @@ export class World {
     else {
       this._updatePlaying();
       this._updateLakituReturn();
+      this._updateChaosSpawns();
     }
 
     this.cam.update();
@@ -1846,6 +1830,46 @@ export class World {
     // PutAtRightExtent with #$20: he enters at the right edge, 32px down.
     const e = this.spawn('lakitu', this.cam.x + SCREEN_W, LAKITU_RETURN_Y);
     if (e) e.facing = -1;
+  }
+
+  // Which pipe the rotation draws. Called from loadLevel AND from the runtime
+  // toggle: it used to live inline in loadLevel, so pressing the toggle key set
+  // pipeCannon without ever working out the geometry, _drawCannonPipe found
+  // nothing to draw, and the pipe fired without turning.
+  resolveCannonPipe() {
+    this.cannonPipe = null;
+    if (!this.pipeCannon) return null;
+    const list = (this.level && this.level.warps) || (this.rootLevel && this.rootLevel.warps) || [];
+    const hit = list.find((wp) => wp && wp.cannon && wp.from);
+    if (!hit) return null;
+    // Follow the PIPE down, not "down until something solid" -- pipe tiles are
+    // themselves solid, so that test stopped on the lip every time and would
+    // have left the shaft standing while the top swung away.
+    let y1 = hit.from.y;
+    while (y1 + 1 < this.h && (this.recAt(hit.from.x, y1 + 1) || {}).pipe) y1++;
+    this.cannonPipe = { x0: hit.from.x, x1: hit.from.x + 1, y0: hit.from.y, y1 };
+    return this.cannonPipe;
+  }
+
+  // Cannon mode's other half: enemies wandering in from off-screen right, in
+  // levels that never asked for them. Anything that cannot be stood on a solid
+  // tile is simply not spawned, so this can never wedge one inside geometry.
+  _updateChaosSpawns() {
+    if (this.cannonForced !== true) return;
+    if (!rng.chance(CHAOS_CHANCE)) return;
+    const tx = Math.floor((this.cam.x + SCREEN_W) / TILE) + 1;
+    if (tx < 0 || tx >= this.w) return;
+    let ty = -1;
+    for (let y = 2; y < this.h; y++) {
+      const r = this.recAt(tx, y);
+      if (r && r.solid) {
+        ty = y;
+        break;
+      }
+    }
+    if (ty < 2) return;
+    const type = CHAOS_TYPES[rng.int(0, CHAOS_TYPES.length - 1)];
+    this.spawn(type, tx * TILE, (ty - 1) * TILE, { variant: 'red' });
   }
 
   _updatePlaying() {

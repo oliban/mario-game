@@ -167,6 +167,12 @@ class Game {
 
     progress(0.85, 'INPUT');
     input.attach(window);
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'IntlBackslash' || e.key === '\u00a7' || e.key === '\u00b0') {
+        e.preventDefault();
+        this.toggleCannonMode();
+      }
+    });
     this._bindGestures();
 
     progress(1, 'READY');
@@ -259,6 +265,35 @@ class Game {
       audioFacade.music(this.world.theme || 'overworld');
     }
     return true;
+  }
+
+  // CANNON MODE's only visible sign: two pixels in the very top-left corner of
+  // the screen, in the HUD's own gold. Deliberately not a badge, not text and
+  // not in the layout -- Fredrik asked for something he would only notice if he
+  // already knew to look, and the corner above MARIO is dead space nothing else
+  // ever draws into.
+  drawCannonTell(ctx) {
+    if (!this.world || this.world.cannonForced !== true) return;
+    ctx.save();
+    ctx.fillStyle = '#e8b038';
+    ctx.fillRect(1, 1, 2, 2);
+    ctx.restore();
+  }
+
+  // The § key (left of 1 on a Swedish layout) forces the cannon on for the rest
+  // of the session and turns the stray-enemy spawns on with it. Read by CODE as
+  // well as by key: `IntlBackslash` is that physical key whatever the layout
+  // calls it, and the character it produces differs between machines.
+  toggleCannonMode() {
+    if (!this.world) return false;
+    const on = this.world.cannonForced !== true;
+    this.world.cannonForced = on;
+    // Take effect on the level already loaded rather than only the next one --
+    // including the pipe GEOMETRY, without which the thing fires but never turns.
+    if (on) this.world.pipeCannon = true;
+    if (typeof this.world.resolveCannonPipe === 'function') this.world.resolveCannonPipe();
+    audioFacade.sfx(on ? 'coin' : 'bump');
+    return on;
   }
 
   onMenuSelect(choice) {
@@ -547,7 +582,10 @@ class Game {
       renderer.beginFrame(sky);
       if (this.world && this.world.level) this.world.submit(renderer);
       if (this.started && !screens.hudOwned) {
-        renderer.draw(LAYER.HUD, (ctx) => drawHud(ctx, this.world));
+        renderer.draw(LAYER.HUD, (ctx) => {
+          drawHud(ctx, this.world);
+          this.drawCannonTell(ctx);
+        });
       }
       screens.submit(renderer);
       renderer.flush();
